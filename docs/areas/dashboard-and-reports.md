@@ -13,7 +13,7 @@ The dashboard is the home page after sign-in. It shows a fixed set of live widge
 | Route (app) | Prototype page id | Purpose |
 |---|---|---|
 | `/dashboard` | `dashboard` (`DashboardPage`) | Greeting top bar and a fixed widget grid |
-| `/reports` | `reports` (`ReportsPage`, to be repurposed) | Activity Feed: My Activity / Team, newest first, "Load more" |
+| `/reports` | `reports` (`ReportsPage`) | Activity Feed: My Activity / Team, newest first, "Load more" |
 
 ## Behaviour and rules
 - **Grid** (`features/dashboard/components/DashboardDefaultGrid.tsx`). Dense CSS grid: 1 column on mobile, 2 at `md`, 3 at `lg`. Rows are at least 140px. Max width is 1480px. Spans: S = 1×1, M = 2×1.
@@ -21,16 +21,17 @@ The dashboard is the home page after sign-in. It shows a fixed set of live widge
   1. **Pipeline Value** (S). Open pipeline value in the forecast currency (default USD). Sub-line: "N open deals", or "Open deal count unavailable".
   2. **Win Rate** (S). `win_rate` as a %. Sub-line: "W won / N closed", or "No closed deals yet" with the value shown as "—".
   3. **Weighted Forecast** (S). Sub-line: "Open value × probability".
-  4. **Deals by Stage** (M). The default pipeline's stages, each with total value, deal count and a share bar. Won is green and lost is red.
+  4. **Deals by Stage** (M). The default pipeline's stages, each with total value, deal count and a bar scaled to the largest stage (not a share of the total). The header sub-line is "{total} · pipeline", and there is no link to the board. Won is green and lost is red.
   5. **Recent Activity** (M). The workspace's 5 newest activities: a type chip, the summary (or the type label if there is none), and "actor · channel" with a relative time. A "View all" footer goes to `/reports`. Rows do not link anywhere because the activity carries no entity link. **Only owners and admins can see it.** For members it is not rendered and not fetched.
+- The three KPI tiles are not clickable; their only control is Retry on error.
 - All three KPIs share one `GET /deals/forecast` query. Every live widget has loading, error-with-Retry and empty states.
 - **The widgets do not show period-over-period deltas.** The prototype's "+12%" style trend chips do not exist.
 - **Placeholders that are cut.** The app renders five "Coming soon" tiles from `widgetCatalog.ts` `DEFERRED_WIDGETS`: Needs Follow-up, New Leads, Lead Funnel, Top Contacts and Top Accounts. They have no data source, so they are not built and are removed from the design.
-- **Top bar** (`components/layout/top-nav.tsx`). The greeting plus the date, then "New Contact" (opens the quick-add contact sheet, and is disabled when the record cap blocks it). The Customize button has no handler and is cut.
+- **Top bar** (`components/layout/top-nav.tsx`). The greeting plus the date, then "New Contact" (opens the quick-add contact sheet). It shows for every role and is disabled, with the reason as a tooltip, when the contacts cap blocks creation (`useCapGate("contacts")`, including a read-only workspace). The Customize button has no handler and is cut.
 - **Activity Feed** (`/reports`, `features/activity/components/GlobalActivityFeed.tsx`):
   - Title "Activity Feed", subtitle "Real-time activity across your CRM".
   - A toggle switches between **My Activity** (`actor_id` = me) and **Team** (whole workspace).
-  - It loads 50 rows at a time, and "Load more" adds 50 until the 100-row ceiling. The backend clamps `page_size` to 100.
+  - It loads 50 rows at a time, and "Load more" adds 50 until the 100-row ceiling. A "Load more" button shows while more rows exist; at the ceiling the footer reads "Showing the first 100 activities." On the backend, a `page_size` outside 1–100 falls back to 20 (it is not clamped).
   - On Team, a member sees "Owner or Admin access required" and nothing is fetched.
   - There is no link to this page from the rail, search or flyout. The rail's "Reports" entry is a disabled "Soon" item, which is cut.
 
@@ -43,7 +44,7 @@ The dashboard is the home page after sign-in. It shows a fixed set of live widge
 - `GET /deals/forecast`
 - `GET /pipelines` (default pipeline)
 - `GET /deals` (stage rows for the default pipeline)
-- `GET /activities` (`page_size`, `actor_id`; it also accepts `type`, `entity_type` and paging)
+- `GET /activities` (`page_size`, `actor_id`; it also accepts `type`, `entity_type`, `since`, `until` and paging)
 
 ## API only (no UI yet)
 - `GET /activity-feed`: the dashboard global/team feed with subject descriptors for deep-linking and a server-side `scope=me|team`. The frontend uses `GET /activities` instead.
@@ -54,7 +55,7 @@ The dashboard is the home page after sign-in. It shows a fixed set of live widge
 - Role-based starting layouts (`DASH_ROLE_PRESETS`, `DASH_ARCHETYPES`, `DASH_TEMPLATES`) and role-restricted widgets (`WIDGET_ROLE_RULES`).
 - Every widget except the five live ones (around 40 definitions in `WIDGET_DEFS`), including the five placeholders.
 - Delta and trend chips on stat widgets.
-- The Reports analytics page: per-role report presets, the widget engine and charts (`ReportsPage`, `REPORT_*`).
+- A Reports analytics page: per-role report presets, the widget engine and charts. In the design, `ReportsPage` is already the Activity Feed.
 - Settings › Appearance › Dashboards (`settings-dash-customize`).
 - The dashboard footer ("N widgets · hidden for your role").
 

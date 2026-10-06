@@ -2733,7 +2733,7 @@ function GlobalSearchOverlay({close,goTo}){
   // Keyboard nav: the highlighted row responds to Enter (and arrows move it).
   const flat=sections.flatMap(s=>s.items);
   const secOffsets=[];{let _o=0;sections.forEach(s=>{secOffsets.push(_o);_o+=s.items.length;});}
-  const remember=()=>{if(!query.trim())return;const next=[query.trim(),...recent.filter(r=>r!==query.trim())].slice(0,5);setRecent(next);searchRecentWrite(next);};
+  const remember=()=>{if(!query.trim())return;const next=[query.trim(),...recent.filter(r=>r!==query.trim())].slice(0,6);setRecent(next);searchRecentWrite(next);};
   const openIt=(it)=>{if(!it)return;remember();goTo(it.page,it.id);close();};
   const openItem=(i)=>openIt(flat[i]);
   const clearRecent=()=>{setRecent([]);searchRecentWrite([]);};
@@ -2816,20 +2816,20 @@ function notifMarkAllRead(){_liveNotifs=_liveNotifs.map(x=>({...x,unread:false})
 function notifLiveUnread(){return _liveNotifs.filter(x=>x.unread).length;}
 function notifAgo(at){const m=Math.round((Date.now()-at)/60000);return m<1?'Just now':m<60?(m+'m ago'):(Math.round(m/60)+'h ago');}
 try{window.__nrturNotify=nrturNotify;}catch(e){}
-// Popup cards: top-right under the strip, newest on top, max 3, ~7s each (hover holds). Click Open → the record.
+// Popup cards: top-right under the strip, newest on top, max 3, ~7s each (hover or keyboard focus holds; leaving restarts at 3s). None while the drawer is open. Click Open → the record.
 function NotifPopupHost({goTo}){
   const [items,setItems]=React.useState([]);
   const timers=React.useRef({});
   const drop=(id)=>{setItems(l=>l.filter(x=>x.id!==id));clearTimeout(timers.current[id]);delete timers.current[id];};
   const arm=(id,ms)=>{clearTimeout(timers.current[id]);timers.current[id]=setTimeout(()=>drop(id),ms);};
   React.useEffect(()=>{
-    const fn=(e)=>{const d=e.detail||{};if(!d.rec||!d.popup)return;setItems(l=>[d.rec,...l.filter(x=>x.id!==d.rec.id)].slice(0,3));arm(d.rec.id,7000);};
+    const fn=(e)=>{const d=e.detail||{};if(!d.rec||!d.popup||window.__nrturNotifDrawerOpen)return;setItems(l=>[d.rec,...l.filter(x=>x.id!==d.rec.id)].slice(0,3));arm(d.rec.id,7000);};
     window.addEventListener('nrtur:notif',fn);return()=>{window.removeEventListener('nrtur:notif',fn);Object.keys(timers.current).forEach(k=>clearTimeout(timers.current[k]));};
   },[]);
   if(!items.length)return null;
   return(<div className="fixed right-5 z-[140] flex flex-col gap-2 w-[360px] max-w-[calc(100vw-40px)]" style={{top:56}} aria-live="polite">
     {items.map(n=>{const tm=NOTIF_TYPE_META[n.type]||NOTIF_TYPE_META.system;return(
-      <div key={n.id} role="status" onMouseEnter={()=>clearTimeout(timers.current[n.id])} onMouseLeave={()=>arm(n.id,3000)} className="rounded-2xl border p-3.5 flex items-start gap-3" style={{background:'var(--pop2)',borderColor:'var(--line)',backdropFilter:'blur(16px)',boxShadow:'0 16px 50px rgba(0,0,0,0.45)',animation:'arIn .22s ease both'}}>
+      <div key={n.id} role="status" onMouseEnter={()=>clearTimeout(timers.current[n.id])} onMouseLeave={()=>arm(n.id,3000)} onFocus={()=>clearTimeout(timers.current[n.id])} onBlur={e=>{if(!e.currentTarget.contains(e.relatedTarget))arm(n.id,3000);}} className="rounded-2xl border p-3.5 flex items-start gap-3" style={{background:'var(--pop2)',borderColor:'var(--line)',backdropFilter:'blur(16px)',boxShadow:'0 16px 50px rgba(0,0,0,0.45)',animation:'arIn .22s ease both'}}>
         <span className="relative shrink-0">
           <span className="w-9 h-9 rounded-full flex items-center justify-center text-[11px] font-bold text-white" style={{background:n.color||tm.color}}>{n.avatar||'•'}</span>
           <span className="absolute -bottom-1 -right-1 w-5 h-5 rounded-full flex items-center justify-center" style={{background:'var(--pop2)',boxShadow:'0 0 0 1px rgba(255,255,255,0.08)'}}><span style={{color:tm.color}}><tm.Icon size={11}/></span></span>
@@ -2851,9 +2851,9 @@ const NOTIF_SEED=[
   {id:'n1',type:'mention',text:'Jamie Kim mentioned you',sub:'“@Alex can you review the Q3 proposal before the call?”',time:'8m ago',group:'today',unread:true,mention:true,assigned:false,avatar:'JK',color:'#855ED7',page:'contacts'},
   {id:'n2',type:'assignment',text:'Sarah Chen assigned you a task',sub:'Follow up on Meridian renewal · due today',time:'25m ago',group:'today',unread:true,mention:false,assigned:true,avatar:'SC',color:'#3475CE',page:'tasks'},
   {id:'n3',type:'lead',text:'New lead assigned to you',sub:'Olivia Bennett · Brightwave Studio',time:'1h ago',group:'today',unread:true,mention:false,assigned:true,avatar:'OB',color:'#25855E',page:'leads'},
-  {id:'n4',type:'task',text:'Task overdue',sub:'Send pricing sheet to Nova Growth',time:'2h ago',group:'today',unread:true,mention:false,assigned:false,avatar:'AM',color:'#F0947F',page:'tasks'},
+  {id:'n4',type:'task',text:'Task overdue',sub:'Send pricing sheet to Nova Growth',time:'2h ago',group:'today',unread:true,mention:false,assigned:true,avatar:'AM',color:'#F0947F',page:'tasks'},
   {id:'n5',type:'call',text:'Missed call',sub:'Priya Nair · +1 (415) 555-0142',time:'3h ago',group:'today',unread:true,mention:false,assigned:false,avatar:'PN',color:'#3475CE',page:'inbox'},
-  {id:'n6',type:'sequence',text:'Reply to sequence',sub:'Luca Bianchi replied to “Welcome Sequence”',time:'4h ago',group:'today',unread:false,mention:false,assigned:false,avatar:'LB',color:'#25855E',page:'inbox',secondary:{label:'View sequence',page:'settings-sequences'}},
+  {id:'n6',type:'sequence',text:'Reply to sequence',sub:'Luca Bianchi replied to “Welcome Sequence”',time:'4h ago',group:'today',unread:false,mention:false,assigned:false,avatar:'LB',color:'#25855E',page:'inbox',secondary:{label:'View sequence',page:'email-sequence-builder'}},
   {id:'n7',type:'system',text:'Automation failed',sub:'“New lead follow-up” · a step errored',time:'Yesterday',group:'earlier',unread:false,mention:false,assigned:false,avatar:'⚡',color:'#9D6C20',page:'settings-automations'},
   {id:'n8',type:'import',text:'Import finished',sub:'contacts.csv · 284 rows imported',time:'Yesterday',group:'earlier',unread:false,mention:false,assigned:false,avatar:'⚡',color:'#9D6C20',page:'contacts'},
   {id:'n9',type:'mention',text:'Ravi Lee mentioned you',sub:'“@Alex flagged this account as a top expansion target.”',time:'2d ago',group:'earlier',unread:false,mention:true,assigned:false,avatar:'RL',color:'#25855E',page:'contacts'},
@@ -2866,7 +2866,7 @@ function NotifDrawer({close,goTo,initialTab}){
   const [tab,setTab]=React.useState(initialTab&&initialTab!=='new'?initialTab:'all');
   const [,liveBump]=React.useState(0);
   React.useEffect(()=>{const fn=()=>liveBump(n=>n+1);window.addEventListener('nrtur:notif',fn);return()=>window.removeEventListener('nrtur:notif',fn);},[]);
-  const liveRows=_liveNotifs.map(n=>({id:n.id,type:n.type,text:n.text,sub:n.sub,time:notifAgo(n.at),group:'today',unread:n.unread,mention:n.type==='mention',assigned:n.type==='assignment'||n.type==='lead',avatar:n.avatar||'•',color:n.color||(NOTIF_TYPE_META[n.type]||NOTIF_TYPE_META.system).color,page:n.page,payload:n.payload,live:true}));
+  const liveRows=_liveNotifs.map(n=>({id:n.id,type:n.type,text:n.text,sub:n.sub,time:notifAgo(n.at),group:'today',unread:n.unread,mention:n.type==='mention',assigned:n.type==='assignment'||n.type==='lead'||n.type==='task',avatar:n.avatar||'•',color:n.color||(NOTIF_TYPE_META[n.type]||NOTIF_TYPE_META.system).color,page:n.page,payload:n.payload,live:true}));
   const [notifs,setNotifs]=React.useState(()=>NOTIF_SEED.map(n=>({...n,unread:n.unread&&!_notifSeedRead.has(n.id)})));
   const allRows=[...liveRows,...notifs];
   const markAll=()=>{setNotifs(a=>a.map(n=>({...n,unread:false})));notifSeedMarkRead(NOTIF_SEED.map(n=>n.id));notifMarkAllRead();};
@@ -2881,14 +2881,15 @@ function NotifDrawer({close,goTo,initialTab}){
   const groups=[['today','Today'],['earlier','Earlier']];
   const unreadCount=allRows.filter(n=>n.unread).length;
   useEscKey(close);
+  // No popup card shows while the drawer is open (NotifPopupHost reads this flag).
+  React.useEffect(()=>{window.__nrturNotifDrawerOpen=true;return()=>{window.__nrturNotifDrawerOpen=false;};},[]);
   return(<React.Fragment>
     <div className="fixed inset-0 z-[179] bg-black/30" onClick={close}/>
     <div role="dialog" aria-modal="true" aria-label="Notifications" className="notif-drawer fixed top-0 bottom-0 z-[180] w-[400px] max-w-full flex flex-col border-r border-white/[0.08]" style={{left:56,background:'var(--panel98)',backdropFilter:'blur(16px)',boxShadow:'8px 0 40px rgba(0,0,0,0.5)',animation:'drawerInL .24s ease both'}}>
       <div className="shrink-0 px-5 py-4 border-b border-white/[0.07] flex items-center justify-between gap-3">
-        <p className="text-[15px] font-semibold text-white flex items-center gap-2"><I.Bell size={15} className="text-brand-300"/>Notifications{unreadCount>0&&<span className="px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-brand-500 text-white">{unreadCount>99?'99+':unreadCount}</span>}</p>
+        <p className="text-[15px] font-semibold text-white flex items-center gap-2"><I.Bell size={15} className="text-brand-300"/>Notifications{unreadCount>0&&<span className="px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-brand-500 text-white">{unreadCount}</span>}</p>
         <div className="flex items-center gap-3">
-          <button onClick={markAll} className="text-[11.5px] font-medium text-brand-300 hover:text-brand-200 transition-colors">Mark all read</button>
-          <button onClick={close} aria-label="Close" className="text-white/40 hover:text-white transition-colors"><I.X size={16}/></button>
+          <button onClick={markAll} disabled={unreadCount===0} className="text-[11.5px] font-medium text-brand-300 hover:text-brand-200 transition-colors disabled:opacity-40 disabled:pointer-events-none">Mark all read</button>
         </div>
       </div>
       <div className="shrink-0 px-3 pt-3 border-b border-white/[0.05]">
@@ -2904,10 +2905,7 @@ function NotifDrawer({close,goTo,initialTab}){
               <p className="px-5 pt-4 pb-1.5 text-[10px] font-semibold text-white/50 uppercase tracking-[0.14em]">{gl}</p>
               {rows.map(n=>{const tm=NOTIF_TYPE_META[n.type]||NOTIF_TYPE_META.system;return(
                 <div key={n.id} role="button" tabIndex={0} onClick={()=>open(n)} onKeyDown={e=>{if(e.key==='Enter')open(n);}} className="w-full cursor-pointer text-left px-5 py-3 hover:bg-white/[0.04] border-b border-white/[0.03] transition-colors flex items-start gap-3">
-                  <span className="relative shrink-0">
-                    <span className="w-9 h-9 rounded-full flex items-center justify-center text-[11px] font-bold text-white" style={{background:n.color}}>{n.avatar}</span>
-                    <span className="absolute -bottom-1 -right-1 w-5 h-5 rounded-full flex items-center justify-center ring-2" style={{background:'var(--panel98)',boxShadow:'0 0 0 1px rgba(255,255,255,0.08)'}}><span style={{color:tm.color}}><tm.Icon size={11}/></span></span>
-                  </span>
+                  <span className="w-9 h-9 shrink-0 rounded-xl flex items-center justify-center bg-white/[0.04] border border-white/[0.06]" style={{color:tm.color}}><tm.Icon size={15}/></span>
                   <div className="min-w-0 flex-1">
                     <p className={['text-[12.5px] leading-snug',n.unread?'text-white font-medium':'text-white/60'].join(' ')}>{n.text}</p>
                     <p className="text-[11.5px] text-white/45 mt-0.5 leading-relaxed">{n.sub}</p>
@@ -2976,8 +2974,11 @@ function sheetTypeCfg(type){
     cols:[{key:'first',label:'First name',ph:'Sarah'},{key:'last',label:'Last name',ph:'Chen'},{key:'email',label:'Email',ph:'sarah@meridian.co'},{key:'phone',label:'Phone (E.164)',ph:'+15550000000'}]};
 }
 // ── RecordSheet ── Excel-style grid for entering / pasting many records of one type at once ──
+// Onboarding's contacts grid (features/onboarding/components/ContactSheet.tsx): First / Last / Email / Phone /
+// Job title / Status, no Company column.
+function onbSheetCfg(){const b=sheetTypeCfg('contact');return{...b,minW:900,cols:[{key:'first',label:'First name',ph:'Sarah'},{key:'last',label:'Last name',ph:'Chen'},{key:'email',label:'Email',ph:'sarah@meridian.co'},{key:'phone',label:'Phone',ph:'+1 555 000 0000'},{key:'title',label:'Job title',ph:'CEO'},{key:'status',label:'Status',type:'select',opts:CONTACT_STATUSES}]};}
 function RecordSheet({type='contact',variant='page',onToast,onCreate,onCreateRows,onboarding}){
-  const cfg=sheetTypeCfg(type);
+  const cfg=onboarding?onbSheetCfg():sheetTypeCfg(type);
   // Onboarding's contacts step: a row is ready with a first name OR a valid email.
   const COLS=cfg.cols;
   const compact=variant==='panel';
@@ -3054,7 +3055,7 @@ function RecordSheet({type='contact',variant='page',onToast,onCreate,onCreateRow
       <span className="inline-flex items-center gap-1.5 text-[11px] text-white/50 pl-1"><I.Copy size={11}/>Paste rows straight from Excel or Google Sheets</span>
       <div className="ml-auto flex items-center gap-3">
         <span className="text-[12px] text-white/45 tabular-nums">{ready.length} of {rows.length} ready</span>
-        <button disabled={!ready.length} onClick={()=>{onCreateRows&&onCreateRows(ready);onCreate&&onCreate(ready.length);}} className={['inline-flex items-center gap-2 px-4 py-2 rounded-xl text-[13px] font-semibold transition-all',ready.length?'text-white bg-brand-500 hover:bg-brand-400 shadow-brand':'text-white/30 bg-white/[0.06] cursor-not-allowed'].join(' ')}>{ready.length?`Create ${ready.length} ${ready.length===1?cfg.one:cfg.noun}`:`Create ${cfg.noun}`}</button>
+        <button disabled={!ready.length} onClick={()=>{const res=onCreateRows&&onCreateRows(ready);if(onboarding){const failedIds=new Set((res&&res.failed)||[]);const sent=new Set(ready.map(r=>r._id));setRows(rs=>{const keep=rs.filter(r=>!sent.has(r._id)||failedIds.has(r._id));return keep.length?keep:Array.from({length:compact?4:6},newRow);});}onCreate&&onCreate(ready.length);}} className={['inline-flex items-center gap-2 px-4 py-2 rounded-xl text-[13px] font-semibold transition-all',ready.length?'text-white bg-brand-500 hover:bg-brand-400 shadow-brand':'text-white/30 bg-white/[0.06] cursor-not-allowed'].join(' ')}>{ready.length?`Create ${ready.length} ${ready.length===1?cfg.one:cfg.noun}`:`Create ${cfg.noun}`}</button>
       </div>
     </div>
   </div>);
@@ -3708,7 +3709,7 @@ function sevStyle(k){
 // ── Global banners ── ONE slim row under the role-preview banner, never a stack. Two kinds:
 //   dismissible — workspace notices (maintenance, trial countdown, a finished export); × hides it for this user.
 //   persistent  — "needs fix": derived from live state, no ×; it leaves only when the condition clears.
-// RULE: the strip is for conditions that affect the WHOLE workspace / everyone — a failed payment, an ended
+// RULE: the strip is for conditions that affect the WHOLE workspace / everyone — a read-only workspace, an ended
 // trial, a rejected SMS registration. One feature's problem (a failing automation, a registration that is merely
 // pending review) is a page-wise notice + nav dot + bell item, never a strip. Product news is never a strip either.
 // So the default state is NO strip: when one appears it means something.
@@ -3716,9 +3717,9 @@ function sevStyle(k){
 // than one row. A persistent notice is hidden on the page that owns the fix (Billing shows its own status block).
 // Runtime push mirrors __nrturToast: window.__nrturBanner({id,sev,title,body,cta,go|onCta}).
 const BANNER_PRESETS={
-  billingFailed:{id:'billing-failed',sev:'critical',Icon:I.CreditCard,persistent:true,title:'Your payment is past due',body:'Update your card in the Stripe customer portal so the payment can go through.',cta:'Manage Subscription',go:'settings-billing'},
-  trialExpired:{id:'trial-expired',sev:'critical',Icon:I.Lock,persistent:true,title:'Your trial ended on {date} — this workspace is read-only',body:'Your data is kept.',cta:'Choose a plan',go:'settings-billing'},
-  cancelled:{id:'billing-cancelled',sev:'warning',Icon:I.Lock,persistent:true,title:'Your subscription was canceled — this workspace is read-only',body:'Your data is kept.',cta:'Choose a plan',go:'settings-billing'},
+  // One critical read-only row, as in the app's ReadOnlyBanner: the clause before the dash depends on the payment
+  // state (trial ended / subscription canceled). A past-due workspace that is not yet read-only gets NO strip.
+  readOnly:{id:'read-only',sev:'critical',Icon:I.Lock,persistent:true,title:'{clause} — this workspace is read-only',body:'Your data is kept.',cta:'Choose a plan',go:'settings-billing'},
 };
 const BANNER_LS='nrtur.bannersDismissed';
 function bannerDismissedRead(){try{const v=JSON.parse(localStorage.getItem(BANNER_LS)||'[]');return Array.isArray(v)?v:[];}catch(e){return[];}}
@@ -3755,9 +3756,7 @@ function GlobalBannerHost({goTo,page}){
     // fact and who to ask — not a CTA that lands on a "Billing is restricted" page.
     const canBill=(function(){try{return effCanManageBilling();}catch(e){return true;}})();
     const forOwner=(b,ask)=>canBill?b:{...b,body:ask,cta:undefined,go:undefined};
-    if(bs==='payment-failed')fixes.push(forOwner(BANNER_PRESETS.billingFailed,'Ask your workspace owner to update the payment method.'));
-    else if(bs==='trial-expired'){const p=BANNER_PRESETS.trialExpired;fixes.push(forOwner({...p,title:p.title.replace('{date}',((bc.trial&&bc.trial.endLabel)||'June 11')+', 2026')},'Your data is kept. Ask your workspace owner to choose a plan.'));}
-    else if(bs==='cancelled')fixes.push(forOwner(BANNER_PRESETS.cancelled,'Your data is kept. Ask your workspace owner to choose a plan.'));
+    if(bs==='trial-expired'||bs==='cancelled'){const p=BANNER_PRESETS.readOnly;const clause=bs==='trial-expired'?'Your trial ended on '+((bc.trial&&bc.trial.endLabel)||'June 11')+', 2026':'Your subscription was canceled';fixes.push(forOwner({...p,title:p.title.replace('{clause}',clause)},'Your data is kept. Ask your workspace owner to choose a plan.'));}
     else if(bs==='trial'){const tb=trialBanner((bc&&bc.trial)||null,canBill);if(tb)fixes.push(tb);}
     const owned=(b)=>Array.isArray(b.owner)?b.owner.indexOf(page)>=0:b.owner===page;
     all=[...fixes,...pushed].filter(b=>!owned(b)&&(b.persistent||dismissed.indexOf(b.id)<0));
@@ -3864,7 +3863,7 @@ const NAV_MORE_ORDER=['Overview','Daily work','Records & sales','Marketing & ins
 // Per-destination accent color + one-line description for the "All destinations" card grid,
 // so a new user understands what each feature does at a glance. Keyed by NAV_CATALOG id.
 const NAV_DEST_META={
-  engage:     {color:'#855ED7', desc:'Sequences, automations, rules & templates'},
+  engage:     {color:'#855ED7', desc:'Sequences, automations & rules'},
   dashboard:  {color:'#3475CE', desc:'Your home overview & key metrics'},
   contacts:   {color:'#3475CE', desc:'People & customer records'},
   companies:  {color:'#54CD95', desc:'Organizations & accounts'},
@@ -4038,10 +4037,9 @@ function AppSidebar({active,goTo}){
   const morePinned=React.useRef(false);
   const [quickModal,setQuickModal]=React.useState(null);
   // "More destinations": hover reveals (120ms in / 200ms out); click pins it open; click-outside or Esc closes.
-  // Hover intent: a 320ms hold before the drawer opens, so brushing past the icon never throws a 560px panel over the page. Click opens instantly and pins.
-  const openMoreHover=()=>{clearTimeout(moreHoverT.current);if(moreOpen)return;moreHoverT.current=setTimeout(()=>setMoreOpen(true),320);};
+  const openMoreHover=()=>{clearTimeout(moreHoverT.current);if(moreOpen)return;moreHoverT.current=setTimeout(()=>setMoreOpen(true),120);};
   const cancelMoreClose=()=>clearTimeout(moreHoverT.current);
-  const closeMoreHover=()=>{clearTimeout(moreHoverT.current);moreHoverT.current=setTimeout(()=>{if(!morePinned.current)setMoreOpen(false);},260);};
+  const closeMoreHover=()=>{clearTimeout(moreHoverT.current);moreHoverT.current=setTimeout(()=>{if(!morePinned.current)setMoreOpen(false);},200);};
   const closeMoreNow=()=>{clearTimeout(moreHoverT.current);morePinned.current=false;setMoreOpen(false);};
   const toggleMorePin=()=>{clearTimeout(moreHoverT.current);if(moreOpen){morePinned.current=false;setMoreOpen(false);}else{morePinned.current=true;setMoreOpen(true);}};
   const [sideToast,setSideToast]=React.useState('');
@@ -4087,7 +4085,7 @@ function AppSidebar({active,goTo}){
       {pinned.map((it,idx)=>{
         const a=navIsActive(it,active);const Ic=navIco(it.icon);
         return(<React.Fragment key={navKey(it)}>
-        <button data-nav={it.type==='page'?it.page:it.id} onClick={()=>navGo(it,goTo)} title={it.label+(it.type==='link'?' (opens in new tab)':'')} aria-label={it.label} aria-current={a?'page':undefined} className={['nav-pin relative',idx>=4?'nav-overflow':'',rowCls(a?'nav-sel':'nav-idle')].join(' ')}><Ic size={16}/>{lbl(it.label)}{it.id==='tasks'&&<NavCount n={__taskN}/>}</button>
+        <button data-nav={it.type==='page'?it.page:it.id} onClick={()=>navGo(it,goTo)} title={it.label+(it.type==='link'?' (opens in new tab)':'')} aria-label={it.label} aria-current={a?'page':undefined} className={['nav-pin relative',rowCls(a?'nav-sel':'nav-idle')].join(' ')}><Ic size={16}/>{lbl(it.label)}{it.id==='tasks'&&<NavCount n={__taskN}/>}</button>
         </React.Fragment>);
       })}
       </div>
@@ -4326,9 +4324,9 @@ function SignUpPage({goTo}){
   const [fv,setFv]=React.useState({name:'',email:'',pw:'',pw2:''});
   const [fe,setFe]=React.useState({});
   const [loading,setLoading]=React.useState(false);
+  const [showPw,setShowPw]=React.useState(false);
   const setF=(k,v)=>{setFv(s=>({...s,[k]:v}));if(fe[k])setFe(e=>({...e,[k]:null}));};
-  const validate=()=>{const e={};const nm=fv.name.trim();if(!nm)e.name='Full name is required.';else if(nm.length<2)e.name='Enter at least 2 characters.';else if(nm.length>100)e.name='Use 100 characters or fewer.';if(!fv.email.trim())e.email='Work email is required.';else if(!AUTH_EMAIL_RE.test(fv.email.trim()))e.email='Enter a valid email address.';if(!fv.pw)e.pw='Password is required.';else if(fv.pw.length<8)e.pw='Password must be at least 8 characters.';if(!fv.pw2)e.pw2='Please confirm your password.';else if(fv.pw!==fv.pw2)e.pw2="Passwords don't match.";return e;};
-  const allValid=fv.name.trim().length>=2&&fv.name.trim().length<=100&&AUTH_EMAIL_RE.test(fv.email.trim())&&fv.pw.length>=8&&fv.pw2&&fv.pw===fv.pw2;
+  const validate=()=>{const e={};const nm=fv.name.trim();if(!nm)e.name='Full name is required.';else if(nm.length<2)e.name='Enter at least 2 characters.';else if(nm.length>100)e.name='Use 100 characters or fewer.';if(!fv.email.trim())e.email='Work email is required.';else if(!AUTH_EMAIL_RE.test(fv.email.trim()))e.email='Enter a valid email address.';if(!fv.pw)e.pw='Password is required.';else if(fv.pw.length<8)e.pw='Password must be at least 8 characters.';else if(fv.pw.length>100)e.pw='Password is too long.';if(!fv.pw2)e.pw2='Please confirm your password.';else if(fv.pw!==fv.pw2)e.pw2="Passwords don't match.";return e;};
   const submit=()=>{const e=validate();setFe(e);if(Object.keys(e).length){window.__nrturToast&&window.__nrturToast('Please fix the highlighted fields.','error');return;}setLoading(true);setTimeout(()=>{setLoading(false);const em=fv.email.trim();window.__nrturToast&&window.__nrturToast('Verification code sent to '+em+'.','success');goTo('verify-email',{email:em});},1500);};
   const FieldErr=({k})=>fe[k]?<p className="text-[11.5px] text-red-300 mt-1 flex items-center gap-1"><I.AlertTriangle size={11}/>{fe[k]}</p>:null;
   const ecls=(k)=>fe[k]?'border-red-500/50 focus:border-red-500/60':'border-white/[0.10] focus:border-brand-500/40';
@@ -4410,16 +4408,16 @@ function SignUpPage({goTo}){
               <div><input value={fv.name} onChange={e=>setF('name',e.target.value.slice(0,100))} type="text" placeholder="Full name" className={'w-full px-3 py-2.5 rounded-xl bg-white/[0.04] border text-[13px] text-white placeholder:text-white/30 outline-none transition-colors '+ecls('name')}/><FieldErr k="name"/></div>
               <div><input value={fv.email} onChange={e=>setF('email',e.target.value)} type="email" placeholder="Work email" className={'w-full px-3 py-2.5 rounded-xl bg-white/[0.04] border text-[13px] text-white placeholder:text-white/30 outline-none transition-colors '+ecls('email')}/><FieldErr k="email"/></div>
               <div>
-                <input value={fv.pw} onChange={e=>setF('pw',e.target.value)} type="password" placeholder="Password (min 8 chars)" className={'w-full px-3 py-2.5 rounded-xl bg-white/[0.04] border text-[13px] text-white placeholder:text-white/30 outline-none transition-colors '+ecls('pw')}/>
+                <div className="relative"><input value={fv.pw} onChange={e=>setF('pw',e.target.value)} type={showPw?'text':'password'} placeholder="Password (min 8 chars)" className={'w-full pl-3 pr-10 py-2.5 rounded-xl bg-white/[0.04] border text-[13px] text-white placeholder:text-white/30 outline-none transition-colors '+ecls('pw')}/><button type="button" onClick={()=>setShowPw(v=>!v)} aria-label={showPw?"Hide password":"Show password"} aria-pressed={showPw} className={"absolute right-2.5 top-1/2 -translate-y-1/2 w-7 h-7 rounded-md flex items-center justify-center transition-colors "+(showPw?"text-brand-300":"text-white/40 hover:text-white/70")}><I.Eye size={15}/></button></div>
                 <FieldErr k="pw"/>
                 <PasswordStrength pw={fv.pw}/>
               </div>
               <div>
-                <input value={fv.pw2} onChange={e=>setF('pw2',e.target.value)} onBlur={()=>{if(fv.pw2&&fv.pw!==fv.pw2)setFe(er=>({...er,pw2:"Passwords don't match."}));}} onKeyDown={e=>{if(e.key==='Enter')submit();}} type="password" placeholder="Confirm password" className={'w-full px-3 py-2.5 rounded-xl bg-white/[0.04] border text-[13px] text-white placeholder:text-white/30 outline-none transition-colors '+ecls('pw2')}/>
+                <input value={fv.pw2} onChange={e=>setF('pw2',e.target.value)} onBlur={()=>{if(fv.pw2&&fv.pw!==fv.pw2)setFe(er=>({...er,pw2:"Passwords don't match."}));}} onKeyDown={e=>{if(e.key==='Enter')submit();}} type={showPw?'text':'password'} placeholder="Confirm password" className={'w-full px-3 py-2.5 rounded-xl bg-white/[0.04] border text-[13px] text-white placeholder:text-white/30 outline-none transition-colors '+ecls('pw2')}/>
                 <FieldErr k="pw2"/>
               </div>
             </div>
-            <button onClick={submit} disabled={!allValid||loading} className={['w-full py-3 rounded-xl text-[14px] font-semibold transition-all mb-4 flex items-center justify-center gap-2',(allValid&&!loading)?'text-white bg-brand-500 hover:bg-brand-400 shadow-brand hover:-translate-y-0.5':'text-white/40 bg-white/[0.06] cursor-not-allowed'].join(' ')}>{loading?<><BtnSpinner/>Creating account…</>:'Create account - free'}</button>
+            <button onClick={submit} disabled={loading} className={['w-full py-3 rounded-xl text-[14px] font-semibold transition-all mb-4 flex items-center justify-center gap-2',!loading?'text-white bg-brand-500 hover:bg-brand-400 shadow-brand hover:-translate-y-0.5':'text-white/70 bg-brand-500/70 cursor-wait'].join(' ')}>{loading?<><BtnSpinner/>Creating account…</>:'Create account - free'}</button>
             <p className="text-[12px] text-white/45 text-center">Already have an account? <button onClick={()=>goTo('signin')} className="text-brand-300 hover:text-brand-200">Sign in</button></p>
           </div>
         </div>
@@ -4428,11 +4426,13 @@ function SignUpPage({goTo}){
   );
 }
 // ?? SignInPage ????????????????????????????????????????????????????????????????
-function SignInPage({goTo}){
+function SignInPage({goTo,nav}){
+  const _redirect=nav&&typeof nav==='object'&&nav.redirect;
   const [fv,setFv]=React.useState({email:'',pw:''});
   const [fe,setFe]=React.useState({});
   const [loading,setLoading]=React.useState(false);
   const [banner,setBanner]=React.useState(false);
+  const [showPw,setShowPw]=React.useState(false);
   const setF=(k,v)=>{setFv(s=>({...s,[k]:v}));if(fe[k])setFe(e=>({...e,[k]:null}));if(banner)setBanner(false);};
   const firstName=()=>{const lp=((fv.email.split('@')[0])||'').split(/[._+-]/)[0];return lp?lp.charAt(0).toUpperCase()+lp.slice(1):'there';};
   const emailBlur=()=>{if(fv.email.trim()&&!AUTH_EMAIL_RE.test(fv.email.trim()))setFe(e=>({...e,email:'Enter a valid email address.'}));};
@@ -4446,7 +4446,8 @@ function SignInPage({goTo}){
     setTimeout(()=>{
       setLoading(false);
       if(/^unverified/i.test(fv.email.trim())){setBanner('unverified');return;}
-      /* demo prototype: accept any password so sign-in is frictionless */
+      if(fv.pw!=='demo'){setBanner('invalid');return;}
+      if(_redirect){goTo(_redirect.page,{..._redirect.nav,signedInAs:fv.email.trim()});return;}
       window.__nrturToast&&window.__nrturToast('Welcome back, '+firstName()+' 👋','success');
       goTo('dashboard');
     },1200);
@@ -4460,14 +4461,15 @@ function SignInPage({goTo}){
         <div className="rounded-2xl border border-white/[0.06] backdrop-blur-md p-8" style={{background:'var(--auth-card)'}}>
           <h1 className="text-white text-[28px] font-bold mb-2">Welcome back</h1>
           <p className="text-white/55 text-[13px] mb-7">Sign in to your workspace.</p>
-          {banner&&<AuthErrBanner>{banner==='unverified'?'Email verification is required before sign in.':'Incorrect email or password.'}</AuthErrBanner>}
           <div className="flex flex-col gap-3 mb-5">
             <button onClick={()=>{if(loading)return;setLoading(true);setTimeout(()=>{setLoading(false);window.__nrturToast&&window.__nrturToast('Signed in with Google 👋','success');goTo('dashboard');},1100);}} className="w-full px-4 py-2.5 rounded-xl border border-white/[0.10] text-[13px] font-medium text-white/75 hover:text-white hover:bg-white/[0.04] transition-all flex items-center justify-center gap-2">Continue with Google</button>
           </div>
           <div className="relative mb-5"><div className="absolute inset-0 flex items-center"><div className="w-full border-t border-white/[0.08]"/></div><div className="relative flex justify-center"><span className="px-2 text-[11px] text-white/50" style={{background:'var(--auth-card)'}}>or</span></div></div>
           <div className="flex flex-col gap-3 mb-2">
             <div><input value={fv.email} onChange={e=>setF('email',e.target.value)} onBlur={emailBlur} type="email" placeholder="Work email" className={'w-full px-3 py-2.5 rounded-xl bg-white/[0.04] border text-[13px] text-white placeholder:text-white/30 outline-none transition-colors '+ecls('email')}/><FieldErr k="email"/></div>
-            <div><input value={fv.pw} onChange={e=>setF('pw',e.target.value)} type="password" placeholder="Password" className={'w-full px-3 py-2.5 rounded-xl bg-white/[0.04] border text-[13px] text-white placeholder:text-white/30 outline-none transition-colors '+ecls('pw')} onKeyDown={e=>{if(e.key==='Enter')submit();}}/><FieldErr k="pw"/></div>
+            <div><div className="relative"><input value={fv.pw} onChange={e=>setF('pw',e.target.value)} type={showPw?'text':'password'} placeholder="Password" className={'w-full pl-3 pr-10 py-2.5 rounded-xl bg-white/[0.04] border text-[13px] text-white placeholder:text-white/30 outline-none transition-colors '+ecls('pw')} onKeyDown={e=>{if(e.key==='Enter')submit();}}/><button type="button" onClick={()=>setShowPw(v=>!v)} aria-label={showPw?"Hide password":"Show password"} aria-pressed={showPw} className={"absolute right-2.5 top-1/2 -translate-y-1/2 w-7 h-7 rounded-md flex items-center justify-center transition-colors "+(showPw?"text-brand-300":"text-white/40 hover:text-white/70")}><I.Eye size={15}/></button></div><FieldErr k="pw"/>
+              {/* Auth error: an always-mounted one-line slot under the password, so a failed sign-in never shifts the layout. */}
+              <div role="alert" className="mt-1 min-h-[18px] text-[11.5px]">{banner&&<p className="flex items-start gap-1 text-red-300"><I.AlertTriangle size={11} className="mt-0.5 shrink-0"/><span>{banner==='unverified'?'Email verification is required before sign in.':'Invalid email or password.'}</span></p>}</div></div>
           </div>
           <div className="text-right mb-6"><button onClick={()=>goTo('forgot-password')} className="text-[12px] text-white/45 hover:text-brand-300 transition-colors">Forgot password?</button></div>
           <button onClick={submit} disabled={loading} className={['w-full py-3 rounded-xl text-[14px] font-semibold transition-all mb-3 flex items-center justify-center gap-2',loading?'text-white/70 bg-brand-500/70 cursor-wait':'text-white bg-brand-500 hover:bg-brand-400 shadow-brand hover:-translate-y-0.5'].join(' ')}>{loading?<><BtnSpinner/>Signing in…</>:'Sign in'}</button>
@@ -4494,10 +4496,12 @@ function ForgotPasswordPage({goTo}){
   const stepNo=step==='email'?1:step==='otp'?2:3;
   const emailOk=AUTH_EMAIL_RE.test(email.trim());
   const pwValid=pw.length>=8&&pw2&&pw===pw2;
-  const sendCode=()=>{const e=email.trim();if(!e){setEmailErr('Email is required.');return;}if(!AUTH_EMAIL_RE.test(e)){setEmailErr('Enter a valid email address.');return;}setEmailErr(null);setLoading(true);setTimeout(()=>{setLoading(false);setOtp('');setStep('otp');setResendIn(60);window.__nrturToast&&window.__nrturToast('Code sent to '+e+'.','success');},1200);};
-  const verify=()=>{setLoading(true);setTimeout(()=>{setLoading(false);if(otp==='000000'){setOtpErr('Incorrect code. Try again.');return;}setOtpErr(null);setStep('reset');},1200);};
-  const resend=()=>{if(resendIn>0)return;setResendIn(60);setOtp('');setOtpErr(null);window.__nrturToast&&window.__nrturToast('New code sent.','success');};
-  const updatePw=()=>{if(pw.length<8){setPwErr('Password must be at least 8 characters.');return;}if(pw!==pw2){setPwErr("Passwords don't match.");return;}setPwErr(null);setLoading(true);setTimeout(()=>{setLoading(false);window.__nrturToast&&window.__nrturToast('Password updated.','success');goTo('signin');},1200);};
+  const sendCode=()=>{const e=email.trim();if(!e){setEmailErr('Email is required.');return;}if(!AUTH_EMAIL_RE.test(e)){setEmailErr('Enter a valid email address.');return;}setEmailErr(null);setLoading(true);setTimeout(()=>{setLoading(false);setOtp('');setStep('otp');setResendIn(60);},1200);};
+  // The reset token (httpOnly cookie, 15 min) is minted when the code verifies; a reset-password 401 after it lapses lands on the expired state.
+  const verifiedAt=React.useRef(0);const [forceExpired,setForceExpired]=React.useState(false);
+  const verify=()=>{setLoading(true);setTimeout(()=>{setLoading(false);if(otp==='000000'){setOtpErr('Incorrect code. Try again.');return;}setOtpErr(null);verifiedAt.current=Date.now();setStep('reset');},1200);};
+  const resend=()=>{if(resendIn>0)return;setResendIn(60);setOtp('');setOtpErr(null);};
+  const updatePw=()=>{if(pw.length<8){setPwErr('Password must be at least 8 characters.');return;}if(pw.length>100){setPwErr('Password is too long.');return;}if(pw!==pw2){setPwErr("Passwords don't match.");return;}setPwErr(null);setLoading(true);setTimeout(()=>{setLoading(false);if(forceExpired||Date.now()-verifiedAt.current>15*60*1000){goTo('reset-expired');return;}window.__nrturToast&&window.__nrturToast('Password updated.','success');goTo('signin');},1200);};
   const back=()=>{if(step==='email')goTo('signin');else if(step==='otp')setStep('email');else setStep('otp');};
   const inputCls=(bad)=>'w-full px-3 py-2.5 rounded-xl bg-white/[0.04] border text-[13px] text-white placeholder:text-white/30 outline-none transition-colors '+(bad?'border-red-500/50 focus:border-red-500/60':'border-white/[0.10] focus:border-brand-500/40');
   const primaryBtn=(ok)=>['w-full mt-4 py-3 rounded-xl text-[13px] font-semibold transition-all flex items-center justify-center gap-2',(ok&&!loading)?'text-white bg-brand-500 hover:bg-brand-400 shadow-brand':'text-white/40 bg-white/[0.06] cursor-not-allowed'].join(' ');
@@ -4532,11 +4536,12 @@ function ForgotPasswordPage({goTo}){
                 <PasswordStrength pw={pw}/>
               </div>
               <div>
-                <input value={pw2} onChange={e=>{setPw2(e.target.value);if(pwErr)setPwErr(null);}} onBlur={()=>{if(pw2&&pw!==pw2)setPwErr("Passwords don't match.");}} onKeyDown={e=>{if(e.key==='Enter'&&pwValid)updatePw();}} type="password" placeholder="Confirm password" className={inputCls(!!pwErr)}/>
+                <input value={pw2} onChange={e=>{setPw2(e.target.value);if(pwErr)setPwErr(null);}} onBlur={()=>{if(pw2&&pw!==pw2)setPwErr("Passwords don't match.");}} onKeyDown={e=>{if(e.key==='Enter')updatePw();}} type="password" placeholder="Confirm password" className={inputCls(!!pwErr)}/>
                 {pwErr&&<p className="text-[11.5px] text-red-300 mt-1 flex items-center gap-1"><I.AlertTriangle size={11}/>{pwErr}</p>}
               </div>
             </div>
-            <button onClick={updatePw} disabled={!pwValid||loading} className={primaryBtn(pwValid)}>{loading?<><BtnSpinner/>Updating…</>:'Update password'}</button>
+            <button onClick={updatePw} disabled={loading} className={primaryBtn(true)}>{loading?<><BtnSpinner/>Updating…</>:'Update password'}</button>
+            <button onClick={()=>setForceExpired(v=>!v)} className="block mx-auto mt-5 text-[11px] text-white/20 hover:text-white/40 transition-colors">{forceExpired?'Reset token will be expired (demo) ✓':'Simulate an expired reset token (demo)'}</button>
           </>}
         </div>
       </div>
@@ -4551,7 +4556,8 @@ function EmailVerificationPendingPage({goTo,nav}){
   const [loading,setLoading]=React.useState(false);
   const [resendIn,setResendIn]=React.useState(60); // disabled for 60s on page load
   React.useEffect(()=>{if(resendIn<=0)return;const t=setTimeout(()=>setResendIn(resendIn-1),1000);return()=>clearTimeout(t);},[resendIn]);
-  const verify=()=>{if(otp.length<6||loading)return;setLoading(true);setTimeout(()=>{setLoading(false);setOtpErr(null);window.__nrturToast&&window.__nrturToast('Email verified ✓','success');goTo('onboarding-1');},1200);};
+  const _at=email.indexOf('@');const maskedEmail=_at>2?email.slice(0,2)+'***'+email.slice(_at):email;
+  const verify=(code)=>{if((code||otp).length<6||loading)return;setLoading(true);setTimeout(()=>{setLoading(false);setOtpErr(null);window.__nrturToast&&window.__nrturToast('Email verified ✓','success');goTo('onboarding-1');},1200);};
   const resend=()=>{if(resendIn>0)return;setResendIn(60);setOtp('');setOtpErr(null);window.__nrturToast&&window.__nrturToast('New code sent.','success');};
   const primaryBtn=(ok)=>['w-full mt-4 py-3 rounded-xl text-[13px] font-semibold transition-all flex items-center justify-center gap-2',(ok&&!loading)?'text-white bg-brand-500 hover:bg-brand-400 shadow-brand':'text-white/40 bg-white/[0.06] cursor-not-allowed'].join(' ');
   return(
@@ -4559,13 +4565,15 @@ function EmailVerificationPendingPage({goTo,nav}){
       <GlowBg/>
       <div className="relative z-10 w-full max-w-md px-6">
         <div className="rounded-2xl border border-white/[0.06] backdrop-blur-md p-8" style={{background:'var(--auth-card)'}}>
+          <button onClick={()=>goTo('signup')} className="inline-flex items-center gap-1.5 text-[12px] text-white/45 hover:text-white mb-6 transition-colors"><I.ChevronLeft size={12}/> Back</button>
           <h1 className="text-white text-[24px] font-bold mb-2">Verify your email</h1>
-          <p className="text-white/55 text-[13px] mb-6">We sent a 6-digit code to <span className="text-white/80 font-medium">{email}</span>. <button onClick={()=>goTo('signup')} className="text-brand-300 hover:text-brand-200">Change email</button></p>
+          <p className="text-white/55 text-[13px] mb-6">We sent a 6-digit code to <span className="text-white/80 font-medium">{maskedEmail}</span>.</p>
           {otpErr&&<AuthErrBanner>{otpErr}</AuthErrBanner>}
-          <OtpInput value={otp} onChange={(v)=>{setOtp(v);if(otpErr)setOtpErr(null);}} autoFocus/>
-          <button onClick={verify} disabled={otp.length<6||loading} className={primaryBtn(otp.length===6)}>{loading?<><BtnSpinner/>Verifying…</>:'Verify'}</button>
-          <button onClick={resend} disabled={resendIn>0} className={['w-full mt-3 text-[12px] font-medium transition-colors',resendIn>0?'text-white/40 opacity-50 cursor-not-allowed':'text-brand-300 hover:text-brand-200'].join(' ')}>{resendIn>0?('Resend in '+resendIn+'s'):'Resend code'}</button>
-          <button onClick={()=>setOtp('123456')} className="block mx-auto mt-5 text-[11px] text-white/20 hover:text-white/40 transition-colors">Use code 123456 (demo)</button>
+          {/* Auto-submits on the 6th digit; there is no Verify button. */}
+          <OtpInput value={otp} onChange={(v)=>{if(loading)return;setOtp(v);if(otpErr)setOtpErr(null);if(v.length===6)verify(v);}} autoFocus/>
+          {loading&&<p className="mt-4 flex items-center justify-center gap-2 text-[13px] text-white/55"><BtnSpinner/>Verifying…</p>}
+          <p className="text-[12px] text-white/45 text-center mt-4">Didn't get a code? {resendIn>0?<span className="text-white/35">Resend in {resendIn}s</span>:<button onClick={resend} className="text-brand-300 hover:text-brand-200 font-medium">Resend</button>}</p>
+          <button onClick={()=>{setOtp('123456');verify('123456');}} className="block mx-auto mt-5 text-[11px] text-white/20 hover:text-white/40 transition-colors">Use code 123456 (demo)</button>
         </div>
       </div>
     </div>
@@ -4579,7 +4587,7 @@ function ResetExpiredPage({goTo}){
       <div className="relative z-10 w-full max-w-md px-6">
         <div className="rounded-2xl border border-white/[0.06] backdrop-blur-md p-8 text-center" style={{background:'var(--auth-card)'}}>
           <div className="w-20 h-20 rounded-2xl bg-red-500/10 ring-2 ring-red-500/30 text-red-300 flex items-center justify-center mx-auto mb-6"><I.AlertTriangle size={34}/></div>
-          <h1 className="text-white text-[24px] font-bold mb-2">Your reset code has expired</h1>
+          <h1 className="text-white text-[24px] font-bold mb-2">This code has expired</h1>
           <p className="text-white/55 text-[13px] mb-7 leading-relaxed">For your security, password reset codes expire after a short time. Request a new one to continue.</p>
           <button onClick={()=>goTo('forgot-password')} className="w-full py-3 rounded-xl text-[13px] font-semibold text-white bg-brand-500 hover:bg-brand-400 shadow-brand transition-all">Request a new code</button>
           <button onClick={()=>goTo('signin')} className="w-full mt-3 text-[12px] text-white/45 hover:text-brand-300 transition-colors">Back to sign in</button>
@@ -4589,108 +4597,137 @@ function ResetExpiredPage({goTo}){
   );
 }
 // ── AcceptInvitePage ──────────────────────────────────────────────────────────
-// Public (unauthenticated) page a teammate lands on from an invite link. The link's token is passed via
-// nav {email, role, ws, exp, hasWorkspace}. State resolves against the LIVE workspace, not the token alone —
-// mirroring how a real server validates an invite: already a member? already in another workspace? expired?
-// still pending (valid)? else revoked/used. Accepting consumes the invite (teamInvites → members, shared via CrmDataContext) so the
-// Settings › Team page reflects it immediately.
+// Page a teammate lands on from an invite link (features/auth/components/InvitationLanding.tsx).
+// nav {email, role, ws, exp, hasWorkspace, signedInAs, outcome}. With no nav, the first pending invite (or a demo one) is used.
+// On load, validate only says valid / not valid: an expired, used or revoked invite is the generic "no longer valid"
+// card. Already-a-member, already-has-a-workspace, no seat and workspace-removed are only learned when Accept or
+// Decline is attempted. Accept is token-only first; the name + password form appears only after NAME_REQUIRED
+// (a new user). Someone who already has an account joins with no credentials. A signed-in user whose email
+// differs from the invite gets a blocking card. `outcome` (or the small demo menu) picks what the server answers.
+const INVITE_DEMO_OUTCOMES=[['new','New user (asks for name)'],['existing','Existing account'],['member','Already a member'],['hasWorkspace','Has a workspace'],['noSeat','No seat yet'],['wsGone','Workspace removed'],['expired','Expired after load'],['loadError','Load error']];
 function AcceptInvitePage({goTo,nav}){
   const {teamInvites,setTeamInvites,members,setMembers}=React.useContext(CrmDataContext);
-  const inv=(nav&&typeof nav==='object')?nav:{};
+  const _first=(teamInvites||[])[0];
+  const inv=(nav&&typeof nav==='object')?nav:(_first?{email:_first.email,role:_first.role,ws:'Bloom Co'}:{email:'casey.lee@bloom.co',role:'Member',ws:'Bloom Co',demo:true});
   const _norm=(e)=>String(e||'').trim().toLowerCase();
   const email=String(inv.email||'').trim();
-  const role=inv.role||'Member';
+  const roleLabel=inv.role==='Admin'||inv.role==='admin'?'Admin':inv.role==='Member'||inv.role==='member'||!inv.role?'Member':null; // a legacy manager invite shows no role
   const ws=inv.ws||'Bloom Co';
-  const isMember=!!email&&(members||[]).some(m=>_norm(m.email)===_norm(email));
   const isExpired=inv.exp!=null&&inv.exp<Date.now();
-  const isPending=!!email&&(teamInvites||[]).some(x=>_norm(x.email)===_norm(email));
-  // Priority: malformed → already-a-member (friendliest) → already has a workspace → expired → valid (a pending invite exists) → revoked/used.
-  const state=!email?'invalid':isMember?'member':inv.hasWorkspace?'hasWorkspace':isExpired?'expired':isPending?'valid':'revoked';
+  const isPending=!!email&&(!!inv.demo||(teamInvites||[]).some(x=>_norm(x.email)===_norm(email)));
+  const loading=useSkeleton(700);
+  const [outcome,setOutcome]=React.useState(inv.outcome||(inv.hasWorkspace?'hasWorkspace':(!!email&&(members||[]).some(m=>_norm(m.email)===_norm(email)))?'member':'new'));
+  const [loadFailed,setLoadFailed]=React.useState(outcome==='loadError');
+  const [result,setResult]=React.useState(null); // null | 'accepted' | 'declined' | terminal code
+  const [busy,setBusy]=React.useState(false);
+  const [needsCreds,setNeedsCreds]=React.useState(false);
   const [nameV,setNameV]=React.useState('');
   const [pwV,setPwV]=React.useState('');
   const [tried,setTried]=React.useState(false);
+  const signedInAs=inv.signedInAs?String(inv.signedInAs).trim():'';
   const nameOk=nameV.trim().length>=2&&nameV.trim().length<=100;
   const pwOk=pwV.length>=8&&pwV.length<=100;
-  const firstName=email?(email.split('@')[0].split(/[._\-]/)[0]||email).replace(/^./,c=>c.toUpperCase()):'there';
   const AV_COLORS=['#3475CE','#855ED7','#25855E','#9D6C20','#BF4C85','#3475CE'];
-  const accept=()=>{
-    setTried(true);if(!nameOk||!pwOk)return;
-    const nm=nameV.trim();
-    const avatar=((nm.split(' ').map(w=>w[0]).join('')||email.slice(0,2)).slice(0,2)).toUpperCase();
+  const join=(nm)=>{
+    const name=nm||email.split('@')[0];
+    const avatar=((name.split(' ').map(w=>w[0]).join('')||email.slice(0,2)).slice(0,2)).toUpperCase();
     const color=AV_COLORS[(email.charCodeAt(0)||0)%AV_COLORS.length];
-    setMembers(ms=>(ms||[]).some(m=>_norm(m.email)===_norm(email))?ms:[...ms,{name:nm,email,role,avatar,color,status:'Active'}]);
+    setMembers(ms=>(ms||[]).some(m=>_norm(m.email)===_norm(email))?ms:[...ms,{name,email,role:roleLabel||'Admin',avatar,color,status:'Active'}]);
     setTeamInvites(a=>(a||[]).filter(x=>_norm(x.email)!==_norm(email)));
-    window.__nrturToast&&window.__nrturToast('Welcome to '+ws+', '+firstName+'! 🎉','success');
-    goTo('dashboard');
+    setResult('accepted');setTimeout(()=>goTo('dashboard'),1400);
   };
-  const decline=()=>{window.__nrturToast&&window.__nrturToast('Invitation declined.','info');goTo('signin');};
-  // Branded "valid" invite card.
-  if(state==='valid')return(
+  // What the server answers to POST /auth/accept-invite (token-only first; then token + name + password).
+  const requestAccept=(withCreds)=>{
+    if(withCreds){setTried(true);if(!nameOk||!pwOk)return;}
+    setBusy(true);
+    setTimeout(()=>{setBusy(false);
+      if(outcome==='member'||outcome==='hasWorkspace'||outcome==='noSeat'||outcome==='wsGone'||outcome==='expired'){setResult(outcome);return;}
+      if(outcome==='new'&&!signedInAs&&!withCreds){setNeedsCreds(true);return;} // 400 NAME_REQUIRED
+      join(withCreds?nameV.trim():null);
+    },900);
+  };
+  const requestDecline=()=>{setBusy(true);setTimeout(()=>{setBusy(false);if(outcome==='wsGone'||outcome==='expired'){setResult(outcome);return;}setTeamInvites(a=>(a||[]).filter(x=>_norm(x.email)!==_norm(email)));setResult('declined');},700);};
+  const signInBack=()=>goTo('signin',{redirect:{page:'accept-invite',nav:{...inv,outcome}}});
+  const shell=(children,center)=>(
     <div className="h-full overflow-y-auto scroll-area flex items-center justify-center py-10" style={{background:'var(--s950)'}}>
       <GlowBg/>
       <div className="relative z-10 w-full max-w-md px-6">
-        <div className="rounded-2xl border border-white/[0.06] backdrop-blur-md p-8" style={{background:'var(--auth-card)'}}>
-          <div className="flex flex-col items-center text-center">
-            <div className="w-16 h-16 rounded-2xl overflow-hidden shadow-brand mb-5"><NrturMark size={64} r={16}/></div>
-            <span className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-brand-500/10 text-brand-300 text-[11px] font-medium ring-1 ring-brand-500/25 mb-4"><I.Mail size={12}/>You've been invited</span>
-            <h1 className="text-white text-[24px] font-bold mb-2 leading-tight">Join {ws} on nrtur</h1>
-            <p className="text-white/55 text-[13px] mb-6 leading-relaxed">You've been invited to join {ws} as {role}.</p>
-          </div>
-          <div className="rounded-xl border border-white/[0.07] bg-white/[0.03] p-4 mb-6 space-y-3">
-            <div className="flex items-center justify-between"><span className="text-[11px] uppercase tracking-wide text-white/50">Your email</span><span className="text-[12.5px] text-white/85 font-medium truncate ml-3">{email}</span></div>
-            <div className="flex items-center justify-between"><span className="text-[11px] uppercase tracking-wide text-white/50">Role</span><span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-medium bg-brand-500/12 text-brand-200 ring-1 ring-brand-500/25"><I.ShieldCheck size={11}/>{role}</span></div>
-          </div>
-          <div className="flex flex-col gap-3 mb-5">
-            <div><input value={nameV} onChange={e=>setNameV(e.target.value.slice(0,100))} type="text" placeholder="Full name" className={'w-full px-3 py-2.5 rounded-xl bg-white/[0.04] border text-[13px] text-white placeholder:text-white/30 outline-none transition-colors '+(tried&&!nameOk?'border-red-500/50':'border-white/[0.10] focus:border-brand-500/40')}/>{tried&&!nameOk&&<p className="text-[11.5px] text-red-300 mt-1">Enter your name (2–100 characters).</p>}</div>
-            <div><input value={pwV} onChange={e=>setPwV(e.target.value.slice(0,100))} onKeyDown={e=>{if(e.key==='Enter')accept();}} type="password" placeholder="Password (min 8 chars)" className={'w-full px-3 py-2.5 rounded-xl bg-white/[0.04] border text-[13px] text-white placeholder:text-white/30 outline-none transition-colors '+(tried&&!pwOk?'border-red-500/50':'border-white/[0.10] focus:border-brand-500/40')}/>{tried&&!pwOk&&<p className="text-[11.5px] text-red-300 mt-1">Use 8–100 characters.</p>}<PasswordStrength pw={pwV}/></div>
-          </div>
-          <button onClick={accept} className="w-full py-3 rounded-xl text-[13px] font-semibold text-white bg-brand-500 hover:bg-brand-400 shadow-brand transition-all">Accept invitation</button>
-          <p className="text-[12px] text-white/45 text-center mt-3">Already have an account? <button onClick={()=>goTo('signin')} className="text-brand-300 hover:text-brand-200">Sign in to accept</button></p>
-          <button onClick={decline} className="w-full mt-2 text-[12px] text-white/45 hover:text-white/70 transition-colors">Not joining? Decline</button>
-        </div>
+        <div className={'rounded-2xl border border-white/[0.06] backdrop-blur-md p-8'+(center?' text-center':'')} style={{background:'var(--auth-card)'}}>{children}</div>
+        {email&&!result&&(<div className="mt-3 flex items-center justify-center gap-2 text-[11px] text-white/25"><span>Demo server answer:</span><select value={outcome} onChange={e=>{const v=e.target.value;setOutcome(v);setNeedsCreds(false);setLoadFailed(v==='loadError');}} className="bg-transparent text-white/40 outline-none" style={{colorScheme:'dark'}}>{INVITE_DEMO_OUTCOMES.map(([k,l])=>(<option key={k} value={k}>{l}</option>))}</select></div>)}
       </div>
     </div>
   );
-  // Status variants (already-member / already-has-workspace / expired / revoked / invalid) — centered card, icon medallion.
-  const V={
-    member:{icon:I.Check,ring:'ring-emerald-500/30',bg:'bg-emerald-500/10',fg:'text-emerald-300',title:"You're already on this team",body:'This invitation was already accepted — '+(email||'your email')+' is a member of '+ws+'. Just sign in to jump back in.',cta:'Go to workspace',act:()=>goTo('dashboard'),alt:'Sign in',altAct:()=>goTo('signin')},
-    expired:{icon:I.Clock,ring:'ring-amber-500/30',bg:'bg-amber-500/10',fg:'text-amber-300',title:'This invitation has expired',body:'Invite links expire after 7 days for security. Ask a workspace admin to send you a fresh invitation.',cta:'Back to sign in',act:()=>goTo('signin'),alt:null},
-    hasWorkspace:{icon:I.Building,ring:'ring-amber-500/30',bg:'bg-amber-500/10',fg:'text-amber-300',title:'You already belong to a workspace',body:'You already belong to a workspace. nrtur supports one workspace per account.',cta:'Back to sign in',act:()=>goTo('signin'),alt:null},
-    revoked:{icon:I.Ban,ring:'ring-red-500/30',bg:'bg-red-500/10',fg:'text-red-300',title:'This invitation is no longer valid',body:'It may have been revoked or already used. Ask your workspace admin at '+ws+' for a new invitation.',cta:'Back to sign in',act:()=>goTo('signin'),alt:null},
-    invalid:{icon:I.AlertTriangle,ring:'ring-red-500/30',bg:'bg-red-500/10',fg:'text-red-300',title:'This invite link looks broken',body:'We couldn’t read this invitation. Check that you opened the full link from your email, or ask for a new one.',cta:'Back to sign in',act:()=>goTo('signin'),alt:null},
-  }[state]||{};
-  const Ic=V.icon||I.AlertTriangle;
-  return(
-    <div className="h-full overflow-y-auto scroll-area flex items-center justify-center py-10" style={{background:'var(--s950)'}}>
-      <GlowBg/>
-      <div className="relative z-10 w-full max-w-md px-6">
-        <div className="rounded-2xl border border-white/[0.06] backdrop-blur-md p-8 text-center" style={{background:'var(--auth-card)'}}>
-          <div className={['w-20 h-20 rounded-2xl flex items-center justify-center mx-auto mb-6 ring-2',V.bg,V.ring,V.fg].join(' ')}><Ic size={34}/></div>
-          <h1 className="text-white text-[23px] font-bold mb-2 leading-tight">{V.title}</h1>
-          <p className="text-white/55 text-[13px] mb-7 leading-relaxed">{V.body}</p>
-          <button onClick={V.act} className="w-full py-3 rounded-xl text-[13px] font-semibold text-white bg-brand-500 hover:bg-brand-400 shadow-brand transition-all">{V.cta}</button>
-          {V.alt&&<button onClick={V.altAct} className="w-full mt-3 text-[12px] text-white/45 hover:text-brand-300 transition-colors">{V.alt}</button>}
-        </div>
-      </div>
+  const SIGN_IN={label:'Back to sign in',act:()=>goTo('signin')};
+  const card=(v)=>{
+    const tone={success:['bg-emerald-500/10','ring-emerald-500/30','text-emerald-300',I.Check],declined:['bg-white/[0.04]','ring-white/[0.10]','text-white/60',I.X],expired:['bg-amber-500/10','ring-amber-500/30','text-amber-300',I.Clock],waiting:['bg-amber-500/10','ring-amber-500/30','text-amber-300',I.Clock],revoked:['bg-red-500/10','ring-red-500/30','text-red-300',I.Ban],invalid:['bg-red-500/10','ring-red-500/30','text-red-300',I.AlertTriangle],error:['bg-red-500/10','ring-red-500/30','text-red-300',I.AlertTriangle],loading:['bg-brand-500/10','ring-brand-500/30','text-brand-300',null]}[v.variant]||[];
+    const Ic=tone[3];
+    return shell(<React.Fragment>
+      <div className={['w-20 h-20 rounded-2xl flex items-center justify-center mx-auto mb-6 ring-2',tone[0],tone[1],tone[2]].join(' ')}>{Ic?<Ic size={34}/>:<span className="inline-block w-7 h-7 rounded-full border-2 border-brand-300/40 border-t-brand-300 animate-spin"/>}</div>
+      <h1 className="text-white text-[23px] font-bold mb-2 leading-tight">{v.title}</h1>
+      {v.body&&<p className="text-white/55 text-[13px] mb-7 leading-relaxed">{v.body}</p>}
+      {v.action&&<button onClick={v.action.act} disabled={busy} className="w-full py-3 rounded-xl text-[13px] font-semibold text-white bg-brand-500 hover:bg-brand-400 shadow-brand transition-all">{v.action.label}</button>}
+      {v.secondary&&<button onClick={v.secondary.act} disabled={busy} className="w-full mt-3 text-[12px] text-white/45 hover:text-brand-300 transition-colors">{v.secondary.label}</button>}
+    </React.Fragment>,true);
+  };
+  if(!email)return card({variant:'invalid',title:'This invite link looks broken',body:'We couldn’t read this invitation. Check that you opened the full link from your email, or ask for a new one.',action:SIGN_IN});
+  if(result==='accepted')return card({variant:'success',title:"You're in",body:'Taking you to your workspace…'});
+  if(result==='declined')return card({variant:'declined',title:'Invitation declined',body:'No problem — if you change your mind, ask your teammate to invite you again.'});
+  if(loading)return card({variant:'loading',title:'Checking your invitation…'});
+  if(loadFailed)return card({variant:'error',title:"We couldn't load this invitation",body:'Please try again in a moment.',action:{label:'Try again',act:()=>{setLoadFailed(false);setOutcome('new');}}});
+  if(isExpired||!isPending)return card({variant:'revoked',title:'This invitation is no longer valid',body:"Invite links are time-limited, and they stop working once they've been used or revoked. Ask a workspace admin to send you a fresh one.",action:SIGN_IN});
+  const TERMINAL={
+    expired:{variant:'expired',title:'This invitation has expired',body:'Invite links are time-limited for security. Ask a workspace admin to send you a fresh invitation.',action:SIGN_IN},
+    member:{variant:'success',title:"You're already on this team",body:email+' is already a member of '+ws+', so there is nothing to accept. Just sign in to jump back in.',action:{label:'Go to sign in',act:()=>goTo('signin')}},
+    wsGone:{variant:'invalid',title:'This workspace is no longer available',body:ws+" has been removed, so this invitation can't be accepted. Ask whoever invited you to set one up again.",action:SIGN_IN},
+    hasWorkspace:{variant:'invalid',title:'You already belong to a workspace',body:"Nrtur supports one workspace per account right now, so this invitation can't be accepted from your current account.",action:SIGN_IN},
+    noSeat:{variant:'waiting',title:'No seat at '+ws+' yet',body:'This workspace has no seat for you yet — ask whoever invited you. Your invitation still stands: this same link will work once a seat is free.'},
+  };
+  if(result&&TERMINAL[result])return card(TERMINAL[result]);
+  if(signedInAs&&_norm(signedInAs)!==_norm(email))return card({variant:'invalid',title:'This invitation is for someone else',body:"You're signed in as "+signedInAs+', but this invitation was sent to '+email+'. Sign out, then open the link from your email again to accept it as '+email+'.',action:{label:'Sign out',act:()=>goTo('accept-invite',{...inv,signedInAs:undefined,outcome})},secondary:{label:'Decline invitation',act:requestDecline}});
+  return shell(<React.Fragment>
+    <div className="flex flex-col items-center text-center">
+      <div className="w-16 h-16 rounded-2xl overflow-hidden shadow-brand mb-5"><NrturMark size={64} r={16}/></div>
+      <span className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-brand-500/10 text-brand-300 text-[11px] font-medium ring-1 ring-brand-500/25 mb-4"><I.Mail size={12}/>You've been invited</span>
+      <h1 className="text-white text-[24px] font-bold mb-2 leading-tight">Join {ws} on nrtur</h1>
+      <p className="text-white/55 text-[13px] mb-6 leading-relaxed">You've been invited to collaborate with the team.</p>
     </div>
-  );
+    <div className="rounded-xl border border-white/[0.07] bg-white/[0.03] p-4 mb-6 space-y-3">
+      <div className="flex items-center justify-between"><span className="text-[11px] uppercase tracking-wide text-white/50">Your email</span><span className="text-[12.5px] text-white/85 font-medium truncate ml-3">{email}</span></div>
+      {roleLabel&&<div className="flex items-center justify-between"><span className="text-[11px] uppercase tracking-wide text-white/50">Role</span><span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-medium bg-brand-500/12 text-brand-200 ring-1 ring-brand-500/25"><I.ShieldCheck size={11}/>{roleLabel}</span></div>}
+    </div>
+    <div className="flex flex-col gap-3">
+      {needsCreds?(<React.Fragment>
+        <p className="text-[12.5px] text-white/60">You're new to Nrtur — pick a name and password to finish joining.</p>
+        <div><input value={nameV} onChange={e=>setNameV(e.target.value.slice(0,100))} type="text" placeholder="Full name" className={'w-full px-3 py-2.5 rounded-xl bg-white/[0.04] border text-[13px] text-white placeholder:text-white/30 outline-none transition-colors '+(tried&&!nameOk?'border-red-500/50':'border-white/[0.10] focus:border-brand-500/40')}/>{tried&&!nameOk&&<p className="text-[11.5px] text-red-300 mt-1">Enter your name (2–100 characters).</p>}</div>
+        <div><input value={pwV} onChange={e=>setPwV(e.target.value.slice(0,100))} onKeyDown={e=>{if(e.key==='Enter')requestAccept(true);}} type="password" placeholder="Password (min 8 chars)" className={'w-full px-3 py-2.5 rounded-xl bg-white/[0.04] border text-[13px] text-white placeholder:text-white/30 outline-none transition-colors '+(tried&&!pwOk?'border-red-500/50':'border-white/[0.10] focus:border-brand-500/40')}/>{tried&&!pwOk&&<p className="text-[11.5px] text-red-300 mt-1">Use 8–100 characters.</p>}<PasswordStrength pw={pwV}/></div>
+        <button onClick={()=>requestAccept(true)} disabled={busy} className="w-full py-3 rounded-xl text-[13px] font-semibold text-white bg-brand-500 hover:bg-brand-400 shadow-brand transition-all flex items-center justify-center gap-2">{busy&&<BtnSpinner/>}Create account & join</button>
+      </React.Fragment>):(<React.Fragment>
+        <button onClick={()=>requestAccept(false)} disabled={busy} className={['w-full py-3 rounded-xl text-[13px] font-semibold transition-all flex items-center justify-center gap-2',busy?'text-white/70 bg-brand-500/70 cursor-wait':'text-white bg-brand-500 hover:bg-brand-400 shadow-brand hover:-translate-y-0.5'].join(' ')}>{busy&&<BtnSpinner/>}Accept invitation</button>
+        {!signedInAs&&(<React.Fragment>
+          <div className="flex items-center gap-3"><span className="h-px flex-1 bg-white/[0.08]"/><span className="text-[11px] text-white/35">already have an account?</span><span className="h-px flex-1 bg-white/[0.08]"/></div>
+          <button onClick={signInBack} className="w-full py-2.5 rounded-xl border border-white/[0.10] text-[13px] font-medium text-white/75 hover:text-white hover:bg-white/[0.04] transition-all">Sign in to accept</button>
+        </React.Fragment>)}
+      </React.Fragment>)}
+      <button onClick={requestDecline} disabled={busy} className="w-full text-[12px] text-white/45 hover:text-white/70 transition-colors">Not joining? Decline</button>
+    </div>
+  </React.Fragment>);
 }
 // ── UnsubscribePage ───────────────────────────────────────────────────────────
 // Public page behind the per-recipient unsubscribe link in automation emails. Never submits on load;
 // shows no workspace branding and no email address. States: confirm, submitting, done, invalid,
-// rate-limited, error and incomplete link. `nav.state` previews a resolved state.
+// rate-limited and error. `nav.state` previews a resolved state. (The app's "incomplete link" card cannot be reached:
+// the route always carries a token.)
 function UnsubscribePage({goTo,nav}){
   const init=(nav&&typeof nav==='object'&&nav.state)||'confirm';
   const [st,setSt]=React.useState(init);
   const submit=()=>{setSt('submitting');setTimeout(()=>setSt('done'),1100);};
   const V={
-    confirm:{Icon:I.Mail,tone:'brand',title:'Unsubscribe from these emails?',body:'You will stop receiving automated emails from this sender.',cta:'Unsubscribe',act:submit},
+    confirm:{Icon:I.Mail,tone:'brand',title:'Unsubscribe from these emails',body:"You're receiving these because you opted in or have an account with this sender. Confirm below to stop receiving them.",note:"This can't be undone from this page.",cta:'Confirm unsubscribe',act:submit},
     submitting:{Icon:I.Mail,tone:'brand',title:'Unsubscribing…',body:'This only takes a moment.'},
-    done:{Icon:I.Check,tone:'ok',title:"You've been unsubscribed",body:'You won’t receive these emails any more.'},
-    invalid:{Icon:I.Ban,tone:'bad',title:"This link isn't valid",body:'It may have been mistyped or has already been used.'},
+    done:{Icon:I.Check,tone:'ok',title:"You've been unsubscribed",body:"You won't receive further marketing emails from this sender. You can close this page."},
+    invalid:{Icon:I.Ban,tone:'bad',title:"This unsubscribe link isn't valid",body:'It may have expired or been altered on the way here. Open the link again from the most recent email you received.'},
     limited:{Icon:I.Clock,tone:'warn',title:'Too many attempts',body:'Please wait a moment, then try again.',cta:'Try again',act:submit},
-    error:{Icon:I.AlertTriangle,tone:'bad',title:"We couldn't complete that",body:'Something went wrong on our side. Please try again.',cta:'Try again',act:submit},
-    incomplete:{Icon:I.AlertTriangle,tone:'warn',title:'This link is incomplete',body:'Open the full link from your email. Some email apps break long links across lines.'},
+    error:{Icon:I.AlertTriangle,tone:'bad',title:"We couldn't complete that",body:'Something went wrong on our end. Please try again in a moment.',cta:'Try again',act:submit},
   }[st]||{};
   const TONE={brand:'bg-brand-500/10 ring-brand-500/30 text-brand-300',ok:'bg-emerald-500/10 ring-emerald-500/30 text-emerald-300',bad:'bg-red-500/10 ring-red-500/30 text-red-300',warn:'bg-amber-500/10 ring-amber-500/30 text-amber-300'}[V.tone||'brand'];
   const Ic=V.Icon||I.Mail;
@@ -4702,6 +4739,7 @@ function UnsubscribePage({goTo,nav}){
           <div className={['w-20 h-20 rounded-2xl flex items-center justify-center mx-auto mb-6 ring-2',TONE].join(' ')}>{st==='submitting'?<BtnSpinner/>:<Ic size={34}/>}</div>
           <h1 className="text-white text-[23px] font-bold mb-2 leading-tight">{V.title}</h1>
           <p className="text-white/55 text-[13px] leading-relaxed">{V.body}</p>
+          {V.note&&<p className="text-white/35 text-[11.5px] mt-3">{V.note}</p>}
           {V.cta&&<button onClick={V.act} className="w-full mt-7 py-3 rounded-xl text-[13px] font-semibold text-white bg-brand-500 hover:bg-brand-400 shadow-brand transition-all">{V.cta}</button>}
         </div>
         <div className="mt-6 flex items-center justify-center gap-2 text-[11.5px] text-white/40"><NrturMark size={16} r={4}/><span>Sent with nrtur</span></div>
@@ -4713,8 +4751,8 @@ function UnsubscribePage({goTo,nav}){
 // Four steps. Integrations and team invites were removed from the wizard on purpose — they live in Settings,
 // and the wizard should get someone to a working pipeline in under three minutes.
 const ONB_STEPS=[
-  {label:'Workspace',eyebrow:'Workspace',title:['Set up','your workspace'],desc:'This takes about 3 minutes. You can always change any of this later.'},
-  {label:'Pipeline',eyebrow:'Pipeline',title:['Your sales','pipeline'],desc:'We start you with a B2B sales pipeline — drag, rename, and add stages anytime.'},
+  {label:'Workspace',eyebrow:'Workspace',title:['Set up','your workspace'],desc:'This takes about 5 minutes. You can always change any of this later.'},
+  {label:'Pipeline',eyebrow:'Pipeline',title:['Your sales','pipeline'],desc:"We've set up a B2B Sales pipeline — rename or add stages anytime."},
   {label:'Contacts',eyebrow:'Contacts',title:['Bring in your','contacts'],desc:'Add a few people now to get started, or import a spreadsheet anytime.'},
   {label:'Done',eyebrow:'All set',title:["You're",'all set'],desc:"Your workspace is ready. Here's what you can do next."},
 ];
@@ -4735,13 +4773,36 @@ function OnboardingPage({step,goTo}){
   const [nameCheck,setNameCheck]=React.useState('idle'); // idle | checking | ok | taken
   React.useEffect(()=>{const v=company.trim();if(!v){setNameCheck('idle');return;}setNameCheck('checking');const t=setTimeout(()=>setNameCheck(['bloom co','bloom creative'].indexOf(v.toLowerCase())>=0?'taken':'ok'),450);return()=>clearTimeout(t);},[company]);
   const [csvOpen,setCsvOpen]=React.useState(false);
+  // Step 1 validates on Continue and saves with POST /workspaces/{id}/setup; it advances only on success.
+  const [wsErr,setWsErr]=React.useState({});
+  const [saving,setSaving]=React.useState(false);
+  // Step 3: creates run one at a time (≥750ms apart in the app); the step stays put, failed rows stay in the grid.
+  const [addedCount,setAddedCount]=React.useState(0);
+  const [failNote,setFailNote]=React.useState(null);
+  const onbCreateRows=(rows)=>{
+    const bad=rows.filter(r=>String(r.email||'').trim()&&!/^\S+@\S+\.\S+$/.test(String(r.email).trim()));
+    const good=rows.filter(r=>bad.indexOf(r)<0);
+    const recs=good.map(r=>arBuildFromSheet('contact',r));if(recs.length)crm.setContacts(a=>[...recs,...a]);
+    setAddedCount(n=>n+good.length);
+    if(good.length)window.__nrturToast&&window.__nrturToast(good.length+' contact'+(good.length===1?'':'s')+' added to your workspace','success');
+    setFailNote(bad.length?(bad.length+' row'+(bad.length===1?'':'s')+" couldn't be added — Enter a valid email address."):null);
+    return {failed:bad.map(r=>r._id)};
+  };
+  const saveWorkspace=()=>{
+    const e={};const nm=company.trim();
+    if(nm.length<2)e.company='Company name must be at least 2 characters';else if(nm.length>100)e.company='Company name must be under 100 characters';else if(!/^[a-zA-Z0-9 -]+$/.test(nm))e.company='Use letters, numbers, spaces and hyphens only.';else if(nameCheck==='taken')e.company='That name is already taken — try another.';
+    if(!industry)e.industry='Please select an industry';
+    if(!teamSize)e.teamSize='Please select a team size';
+    setWsErr(e);if(Object.keys(e).length)return;
+    setSaving(true);setTimeout(()=>{setSaving(false);_onb.workspace=nm;_onb.industry=industry;_onb.teamSize=teamSize;goTo(next);},700);
+  };
   const cid=ONB_ORDER[step-1]||6;
   const meta=ONB_STEPS[step-1]||ONB_STEPS[ONB_STEPS.length-1];
   const prev=step>1?`onboarding-${step-1}`:null;
   const next=step<ONB_ORDER.length?`onboarding-${step+1}`:'dashboard';
   const pct=Math.round((step/4)*100);
   const PIPES=[
-    {key:'sales',name:'B2B Sales',desc:'Prospect → Qualified → Proposal → Negotiation → Won',Icon:I.GitBranch},
+    {key:'sales',name:'B2B Sales',desc:'Prospecting → Qualified → Proposal → Negotiation → Won',Icon:I.GitBranch},
   ];
   const grid={backgroundImage:'linear-gradient(rgba(255,255,255,0.035) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,0.035) 1px,transparent 1px)',backgroundSize:'42px 42px',WebkitMaskImage:'radial-gradient(ellipse 80% 60% at 50% 25%,black,transparent 85%)',maskImage:'radial-gradient(ellipse 80% 60% at 50% 25%,black,transparent 85%)'};
   return(
@@ -4773,15 +4834,17 @@ function OnboardingPage({step,goTo}){
                   <p className="mt-3 text-[14px] text-white/50 leading-relaxed">{meta.desc}</p>
                   <div className="mt-8">
                     {cid===1&&(<div className="flex flex-col gap-5">
-                      <div><label className="text-[12px] font-medium text-white/70 block mb-2">Company name</label><div className="flex items-center bg-white/[0.04] border border-white/[0.08] rounded-xl focus-within:border-brand-500/50 focus-within:shadow-[0_0_0_3px_rgba(47,168,119,0.12)] transition-all"><span className="pl-3.5 text-white/40"><I.Building size={15}/></span><input value={company} onChange={e=>setCompany(e.target.value)} placeholder="Bloom Creative" className="flex-1 min-w-0 bg-transparent outline-none px-3.5 py-3 text-[14px] text-white placeholder:text-white/30"/>{nameCheck==='checking'&&<span className="pr-3.5 text-[11px] text-white/40">Checking…</span>}{nameCheck==='ok'&&<span className="pr-3.5 text-emerald-300" title="Name available"><I.Check size={15} stroke={2.6}/></span>}{nameCheck==='taken'&&<span className="pr-3.5 text-red-300" title="Name already taken"><I.X size={15} stroke={2.6}/></span>}</div>{nameCheck==='taken'&&<p className="text-[11.5px] text-red-300 mt-1.5">That workspace name is already taken.</p>}</div>
-                      <div><label className="text-[12px] font-medium text-white/70 block mb-2">Industry</label><OnboardingDropdown options={['Agency / Consulting','SaaS / Technology','E-commerce / Retail','Real Estate','Finance / Insurance','Healthcare','Education','Manufacturing','Nonprofit','Other']} value={industry} onChange={setIndustry} placeholder="Choose your industry"/></div>
-                      <div><div className="flex items-center justify-between mb-2"><label className="text-[12px] font-medium text-white/70">Team size</label><span className="text-[11px] text-white/40">Pick what’s closest</span></div><div className="grid grid-cols-4 gap-2">{['Just me','2–3','4–5','5+'].map(o=>{const s=teamSize===o;return(<button key={o} onClick={()=>setTeamSize(o)} className={['px-3 py-2.5 rounded-xl text-[13px] font-medium border transition-all',s?'bg-brand-500/15 border-brand-500/40 text-brand-200 shadow-[0_0_0_3px_rgba(47,168,119,0.10)]':'bg-white/[0.03] border-white/[0.08] text-white/60 hover:text-white hover:border-white/[0.16]'].join(' ')}>{o}</button>);})}</div></div>
+                      <div><label className="text-[12px] font-medium text-white/70 block mb-2">Company name</label><div className="flex items-center bg-white/[0.04] border border-white/[0.08] rounded-xl focus-within:border-brand-500/50 focus-within:shadow-[0_0_0_3px_rgba(47,168,119,0.12)] transition-all"><span className="pl-3.5 text-white/40"><I.Building size={15}/></span><input value={company} onChange={e=>setCompany(e.target.value)} placeholder="Bloom Creative" className="flex-1 min-w-0 bg-transparent outline-none px-3.5 py-3 text-[14px] text-white placeholder:text-white/30"/>{nameCheck==='checking'&&<span className="pr-3.5 text-[11px] text-white/40">Checking…</span>}{nameCheck==='ok'&&<span className="pr-3.5 text-emerald-300" title="Name available"><I.Check size={15} stroke={2.6}/></span>}{nameCheck==='taken'&&<span className="pr-3.5 text-red-300" title="Name already taken"><I.X size={15} stroke={2.6}/></span>}</div>{wsErr.company?<p className="text-[11.5px] text-red-300 mt-1.5">{wsErr.company}</p>:nameCheck==='taken'&&<p className="text-[11.5px] text-red-300 mt-1.5">That name is already taken — try another.</p>}</div>
+                      <div><label className="text-[12px] font-medium text-white/70 block mb-2">Industry</label><OnboardingDropdown options={['Agency / Consulting','SaaS / Technology','E-commerce / Retail','Real Estate','Finance / Insurance','Healthcare','Education','Manufacturing','Nonprofit','Other']} value={industry} onChange={(v)=>{setIndustry(v);if(wsErr.industry)setWsErr(x=>({...x,industry:null}));}} placeholder="Choose your industry"/>{wsErr.industry&&<p className="text-[11.5px] text-red-300 mt-1.5">{wsErr.industry}</p>}</div>
+                      <div><div className="flex items-center justify-between mb-2"><label className="text-[12px] font-medium text-white/70">Team size</label><span className="text-[11px] text-white/40">Pick what’s closest</span></div><div className="grid grid-cols-4 gap-2">{['Just me','2–3','4–5','5+'].map(o=>{const s=teamSize===o;return(<button key={o} onClick={()=>{setTeamSize(o);if(wsErr.teamSize)setWsErr(x=>({...x,teamSize:null}));}} className={['px-3 py-2.5 rounded-xl text-[13px] font-medium border transition-all',s?'bg-brand-500/15 border-brand-500/40 text-brand-200 shadow-[0_0_0_3px_rgba(47,168,119,0.10)]':'bg-white/[0.03] border-white/[0.08] text-white/60 hover:text-white hover:border-white/[0.16]'].join(' ')}>{o}</button>);})}</div>{wsErr.teamSize&&<p className="text-[11.5px] text-red-300 mt-1.5">{wsErr.teamSize}</p>}</div>
                     </div>)}
                     {cid===2&&(<div className="flex flex-col gap-3">{PIPES.map(p=>{const s=pipeline===p.key;return(<div key={p.key} className={['flex items-center gap-4 p-4 rounded-2xl border text-left',s?'bg-brand-500/10 border-brand-500/40 shadow-[0_0_0_3px_rgba(47,168,119,0.10)]':'bg-white/[0.03] border-white/[0.08]'].join(' ')}><div className={['w-11 h-11 rounded-xl flex items-center justify-center shrink-0',s?'bg-brand-500/20 text-brand-300 ring-1 ring-brand-500/30':'bg-white/[0.05] text-white/50'].join(' ')}><p.Icon size={18}/></div><div className="min-w-0 flex-1"><p className="text-[14px] font-medium text-white">{p.name}</p><p className="text-[12px] text-white/50 mt-0.5 leading-relaxed">{p.desc}</p></div><span className={['w-5 h-5 rounded-full border flex items-center justify-center shrink-0',s?'bg-brand-500 border-brand-500':'border-white/20'].join(' ')}>{s&&<I.Check size={11} stroke={3} style={{color:'white'}}/>}</span></div>);})}</div>)}
                     {cid===4&&(<div className="flex flex-col gap-4">
                       <div>
                         <p className="text-[11px] font-medium text-white/40 uppercase tracking-[0.14em] mb-2.5">Add contacts manually</p>
-                        <RecordSheet variant="panel" type="contact" onboarding onToast={(m)=>window.__nrturToast&&window.__nrturToast(m,'success')} onCreateRows={(rows)=>{const recs=rows.map(r=>arBuildFromSheet('contact',r));if(recs.length)crm.setContacts(a=>[...recs,...a]);}} onCreate={()=>goTo(next)}/>
+                        {failNote&&<div role="alert" className="mb-3 rounded-xl border border-red-500/25 bg-red-500/[0.06] px-3 py-2 text-[12px] text-red-200 flex items-start gap-2"><I.AlertTriangle size={13} className="mt-0.5 shrink-0"/>{failNote}</div>}
+                        <RecordSheet variant="panel" type="contact" onboarding onToast={(m)=>window.__nrturToast&&window.__nrturToast(m,'success')} onCreateRows={onbCreateRows}/>
+                        {addedCount>0&&<p aria-live="polite" className="mt-2 text-[12px] font-medium text-brand-300">{addedCount} contact{addedCount===1?'':'s'} added</p>}
                       </div>
                       <div className="flex items-center gap-3"><div className="flex-1 h-px bg-white/[0.06]"/><span className="text-[11px] text-white/50">or bring them in</span><div className="flex-1 h-px bg-white/[0.06]"/></div>
                       <div className="grid grid-cols-2 gap-3">
@@ -4793,10 +4856,10 @@ function OnboardingPage({step,goTo}){
                     {cid===6&&(<div className="flex flex-col gap-5"><div className="flex justify-center"><span className="w-16 h-16 rounded-full bg-emerald-500/10 ring-2 ring-emerald-500/25 flex items-center justify-center"><I.Check size={30} stroke={2.4} className="text-emerald-300"/></span></div><div className="grid grid-cols-1 gap-3">{[{Icon:I.LayoutDash,label:'Go to Dashboard',sub:'See your workspace',go:'dashboard'}].map(c=>(<button key={c.label} onClick={()=>goTo(c.go)} className="rounded-2xl border border-white/[0.06] bg-white/[0.03] hover:border-brand-500/30 hover:bg-white/[0.05] transition-all p-4 text-center flex flex-col items-center gap-2"><span className="w-10 h-10 rounded-xl bg-brand-500/12 text-brand-300 ring-1 ring-brand-500/20 flex items-center justify-center"><c.Icon size={17}/></span><span className="text-[13px] font-medium text-white">{c.label}</span><span className="text-[11px] text-white/45">{c.sub}</span></button>))}</div></div>)}
                   </div>
                   <div className="mt-9 flex items-center justify-between gap-4">
-                    {step!==6&&<button onClick={()=>goTo('dashboard')} className="text-[13px] text-white/50 hover:text-white transition-colors">I’ll do this later</button>}
+                    {step!==4&&<button onClick={()=>goTo('dashboard')} className="text-[13px] text-white/50 hover:text-white transition-colors">I’ll do this later</button>}
                     <div className="flex items-center gap-2.5">
                       {prev&&<button onClick={()=>goTo(prev)} className="px-5 py-2.5 rounded-xl text-[13px] font-medium text-white/65 hover:text-white bg-white/[0.04] hover:bg-white/[0.07] border border-white/[0.08] transition-all">Back</button>}
-                      <button onClick={()=>{if(cid===1){_onb.workspace=company.trim();_onb.industry=industry;_onb.teamSize=teamSize;}if(cid===2)_onb.pipeline=pipeline;goTo(next);}} className="inline-flex items-center gap-2 px-6 py-2.5 rounded-xl text-[13px] font-semibold text-white bg-brand-500 hover:bg-brand-400 shadow-brand hover:-translate-y-0.5 transition-all">{cid===6?'Go to Dashboard':'Continue'}<I.ArrowRight size={14} stroke={2.4}/></button>
+                      <button disabled={saving} onClick={()=>{if(cid===1){saveWorkspace();return;}if(cid===2)_onb.pipeline=pipeline;goTo(next);}} className={['inline-flex items-center gap-2 px-6 py-2.5 rounded-xl text-[13px] font-semibold text-white transition-all',saving?'bg-brand-500/70 cursor-wait':'bg-brand-500 hover:bg-brand-400 shadow-brand hover:-translate-y-0.5'].join(' ')}>{saving&&<BtnSpinner/>}{cid===6?'Go to Dashboard':'Continue'}{!saving&&<I.ArrowRight size={14} stroke={2.4}/>}</button>
                     </div>
                   </div>
                 </div>
@@ -4931,11 +4994,11 @@ function DashActRow({a}){const Ic=DASH_ACT_ICON[a.kind]||I.Zap;return(<div class
 function renderWidgetBody(def,cfg,goTo,data,id){
   const name=def.name;const t=def.type;
   const D=data||{contacts:CONTACTS_DATA.filter(c=>!c.deleted),leads:LEADS_DATA.filter(l=>!l.deleted),companies:COMPANIES_DATA.filter(c=>!c.deleted)};
-  if(t==='stat'){const d=def.d;const _live=dashStatLive(id,D);const val=_live!=null?_live:d.value;return(<div onClick={()=>goTo&&goTo('pipeline')} className="p-4 h-full flex flex-col cursor-pointer group/m"><div className="flex items-center justify-between mb-3"><p className="text-[10px] font-medium text-white/45 uppercase tracking-[0.14em] group-hover/m:text-white/60">{name}</p><div className={['w-8 h-8 rounded-lg flex items-center justify-center ring-1',WACCENT[d.accent]].join(' ')}><d.Icon size={14}/></div></div><p className="text-white text-[28px] font-bold leading-none tabular-nums">{val}</p><div className="mt-auto flex items-center justify-between gap-2 pt-2"><p className="text-[11px] text-white/45 truncate">{dashStatSub(id,D)}</p><span className="inline-flex items-center gap-1 text-[11px] font-medium text-brand-300 opacity-0 group-hover/m:opacity-100 transition-opacity shrink-0">View<I.ArrowRight size={10} stroke={2.4}/></span></div></div>);}
-  if(t==='bars'){const st=dashStages();const total=Math.max(1,st.reduce((a,s)=>a+s.val,0));return(<div className="flex flex-col h-full">
-    <DashHdr name={name} sub="Default pipeline" action={<button onClick={()=>goTo('pipeline')} className="text-[12px] text-brand-300 hover:text-brand-200 flex items-center gap-1">View<I.ArrowRight size={11} stroke={2.4}/></button>}/>
+  if(t==='stat'){const d=def.d;const _live=dashStatLive(id,D);const val=_live!=null?_live:d.value;return(<div className="p-4 h-full flex flex-col"><div className="flex items-center justify-between mb-3"><p className="text-[10px] font-medium text-white/45 uppercase tracking-[0.14em]">{name}</p><div className={['w-8 h-8 rounded-lg flex items-center justify-center ring-1',WACCENT[d.accent]].join(' ')}><d.Icon size={14}/></div></div><p className="text-white text-[28px] font-bold leading-none tabular-nums">{val}</p><div className="mt-auto flex items-center justify-between gap-2 pt-2"><p className="text-[11px] text-white/45 truncate">{dashStatSub(id,D)}</p></div></div>);}
+  if(t==='bars'){const st=dashStages();const total=st.reduce((a,s)=>a+s.val,0);const max=Math.max(1,...st.map(s=>s.val));return(<div className="flex flex-col h-full">
+    <DashHdr name={name} sub={'$'+total+'k · pipeline'}/>
     <div className="p-5 flex-1">
-      <div className="flex flex-col gap-3">{st.map(s=>(<div key={s.name}><div className="flex items-center justify-between mb-1.5"><div className="flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full" style={{background:s.color}}/><span className="text-[12px] font-medium text-white/70">{s.name}</span><span className="text-[10px] font-mono text-white/50 px-1 py-0.5 rounded bg-white/[0.05]">{s.count}</span></div><span className="text-[12px] font-semibold text-white tabular-nums">${s.val}k</span></div><div className="h-2 rounded-full bg-white/[0.04] overflow-hidden"><div className="h-full rounded-full" style={{width:`${Math.round(s.val/total*100)}%`,background:s.color}}/></div></div>))}</div>
+      <div className="flex flex-col gap-3">{st.map(s=>(<div key={s.name}><div className="flex items-center justify-between mb-1.5"><div className="flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full" style={{background:s.color}}/><span className="text-[12px] font-medium text-white/70">{s.name}</span><span className="text-[10px] font-mono text-white/50 px-1 py-0.5 rounded bg-white/[0.05]">{s.count}</span></div><span className="text-[12px] font-semibold text-white tabular-nums">${s.val}k</span></div><div className="h-2 rounded-full bg-white/[0.04] overflow-hidden"><div className="h-full rounded-full" style={{width:`${Math.round(s.val/max*100)}%`,background:s.color}}/></div></div>))}</div>
     </div>
   </div>);}
   if(t==='activity'){return(<div className="flex flex-col h-full"><DashHdr name={name} sub="Latest across your workspace"/><div className="p-4 flex flex-col gap-2.5 flex-1">{def.d.slice(0,5).map((a,i)=>(<DashActRow key={i} a={a}/>))}</div><div className="px-5 py-3 border-t border-white/[0.05]"><button onClick={()=>goTo('reports')} className="text-[12px] text-brand-300 hover:text-brand-200 inline-flex items-center gap-1">View all<I.ArrowRight size={11} stroke={2.4}/></button></div></div>);}
@@ -4953,6 +5016,9 @@ function DashboardPage({goTo}){
   const loading=useSkeleton(1100);
   const crm=React.useContext(CrmDataContext);
   const _now=new Date();const _greet=_now.getHours()<12?'Good morning':_now.getHours()<18?'Good afternoon':'Good evening';const _dateStr=_now.toLocaleDateString(undefined,{month:'long',day:'numeric',year:'numeric'});
+  const _bc=React.useContext(BillingContext);
+  // useCapGate("contacts"): a read-only workspace blocks every create; the button stays visible, disabled, with the reason as a tooltip.
+  const _capReason=(_bc&&(_bc.billingState==='trial-expired'||_bc.billingState==='cancelled'))?'This workspace is read-only — nothing is deleted, but nothing new can be added until a plan is chosen.':null;
   if(loading)return <DashboardSkeleton goTo={goTo}/>;
   const dashData={contacts:effScopeRows('Contacts',crm.contacts.filter(c=>!c.deleted),c=>c.owner),leads:effScopeRows('Leads',crm.leads.filter(l=>!l.deleted),l=>l.owner),companies:effScopeRows('Companies',crm.companies.filter(c=>!c.deleted),c=>c.owner)};
   const visibleLayout=DEFAULT_LAYOUT.filter(it=>widgetAllowsRole(it.id));
@@ -4961,7 +5027,7 @@ function DashboardPage({goTo}){
       <AppSidebar active="dashboard" goTo={goTo}/>
       <div className="flex-1 flex flex-col min-w-0">
         <AppTopbar goTo={goTo} title={_greet+', Alex'} subtitle={_dateStr+' — Here is where things stand today.'} rightSlot={(<div className="flex items-center gap-2">
-          {effCanObject('Contacts','create')&&<button onClick={()=>window.__nrturQuickAdd?window.__nrturQuickAdd('contact'):goTo('add-contact')} className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-[13px] font-medium text-white bg-brand-500 hover:bg-brand-400 shadow-brand hover:-translate-y-0.5 transition-all"><I.Plus size={14} stroke={2.4}/>New Contact</button>}
+          <span className="hidden md:inline-flex" title={_capReason||undefined}><button disabled={!!_capReason} aria-disabled={!!_capReason} onClick={()=>{if(_capReason)return;window.__nrturQuickAdd?window.__nrturQuickAdd('contact'):goTo('add-contact');}} className={['inline-flex items-center gap-2 px-4 py-2 rounded-xl text-[13px] font-medium text-white bg-brand-500 shadow-brand transition-all',_capReason?'opacity-50 cursor-not-allowed pointer-events-none':'hover:bg-brand-400 hover:-translate-y-0.5'].join(' ')}><I.Plus size={14} stroke={2.4}/>New Contact</button></span>
         </div>)}/>
         <div className="flex-1 overflow-y-auto scroll-area">
           <div className="px-7 py-6 max-w-[1480px] mx-auto">
@@ -12925,9 +12991,11 @@ function ReportsPage({goTo}){
               {blocked?(<div className="py-16 text-center"><div className="w-11 h-11 rounded-xl bg-white/[0.04] border border-white/[0.06] flex items-center justify-center mx-auto mb-3 text-white/35"><I.Lock size={18}/></div><p className="text-[13px] font-semibold text-white">Owner or Admin access required</p></div>)
               :rows.length===0?(<div className="py-16 text-center text-[13px] text-white/45">No activity yet.</div>)
               :(<div className="p-3 flex flex-col gap-1">{visible.map((a,i)=>(<DashActRow key={i} a={a}/>))}</div>)}
-              {!blocked&&rows.length>0&&(<div className="px-5 py-3 border-t border-white/[0.05] flex items-center justify-between">
-                <span className="text-[11px] text-white/45">{visible.length} of {rows.length}{rows.length>=100?' (latest 100)':''}</span>
-                {visible.length<rows.length&&<button onClick={()=>setShown(n=>Math.min(100,n+50))} className="text-[12px] font-medium text-brand-300 hover:text-brand-200">Load more</button>}
+              {!blocked&&visible.length<rows.length&&(<div className="px-5 py-3 border-t border-white/[0.05] flex items-center justify-center">
+                <button onClick={()=>setShown(n=>Math.min(100,n+50))} className="rounded-lg bg-white/[0.06] px-4 py-2 text-[12px] font-medium text-white/70 hover:bg-white/[0.10] transition-colors">Load more</button>
+              </div>)}
+              {!blocked&&visible.length>=100&&(<div className="px-5 py-3 border-t border-white/[0.05] flex items-center justify-center">
+                <p className="text-[11px] text-white/35">Showing the first 100 activities.</p>
               </div>)}
             </div>
           </div>
@@ -14444,42 +14512,62 @@ function PhoneBlockSheet({onClose,onBlock}){
   </SuppressSheet>);
 }
 // ?? Settings Notifications ????????????????????????????????????????????????????
-// The 22 backend notification types, grouped into the 8 categories the settings page shows.
-// Each type has an In-app and a Push switch. Push defaults off for the types in NOTIF_PUSH_OFF.
+// The 22 backend notification types, grouped into the 8 categories the settings page shows
+// (features/notifications/lib/notificationTypeCatalog.ts). Rows follow the server's declared order, so
+// Tasks starts with task.mentioned and Team starts with note.mentioned. Each type has an In-app and a Push switch.
+// Push defaults off for the types in NOTIF_PUSH_OFF.
 const NOTIF_TYPE_GROUPS=[
-  {cat:'Tasks',types:[['task.assigned','Task assigned to me'],['task.mentioned','Mentioned in a task'],['task.reminder','Task reminder'],['task.due','Task due'],['task.overdue','Task overdue']]},
-  {cat:'Leads',types:[['lead.assigned','Lead assigned to me']]},
-  {cat:'Inbox & email',types:[['inbox.mailbox_disconnected','Mailbox disconnected']]},
-  {cat:'Calls & SMS',types:[['call.missed','Missed call'],['sms.received','SMS received'],['sms.opted_out','Contact opted out of SMS']]},
-  {cat:'Sequences & automations',types:[['sequence.replied','Reply to a sequence'],['flow.errored','Automation failed'],['automation.sends_paused','Automation sends paused'],['automation.sends_resumed','Automation sends resumed']]},
-  {cat:'Team',types:[['member.joined','Member joined'],['member.role_changed','Member role changed']]},
-  {cat:'Billing',types:[['wallet.low_balance','Low balance'],['billing.payment_failed','Payment failed'],['billing.payment_recovered','Payment recovered']]},
-  {cat:'Imports',types:[['import.completed','Import finished'],['import.failed','Import failed']]},
+  {cat:'Tasks',types:[['task.mentioned','Mentioned on a task',I.Reply],['task.assigned','Task assigned to you',I.CheckSquare],['task.reminder','Task reminder',I.Clock],['task.due','Task due',I.Calendar],['task.overdue','Task overdue',I.AlertTriangle]]},
+  {cat:'Leads',types:[['lead.assigned','Lead assigned to you',I.UserPlus]]},
+  {cat:'Inbox & email',types:[['inbox.mailbox_disconnected','Mailbox disconnected',I.Mail]]},
+  {cat:'Calls & SMS',types:[['call.missed','Missed call',I.PhoneOff],['sms.received','SMS received',I.MessageSquare],['sms.opted_out','Contact opted out of SMS',I.Ban]]},
+  {cat:'Sequences & automations',types:[['sequence.replied','Sequence reply received',I.Reply],['flow.errored','Automation errored',I.AlertTriangle],['automation.sends_paused','Automation sends paused',I.Pause],['automation.sends_resumed','Automation sends resumed',I.Play]]},
+  {cat:'Team',types:[['note.mentioned','Mentioned in a note',I.Reply],['member.joined','Teammate joined',I.Users],['member.role_changed','Teammate role changed',I.UserCog]]},
+  {cat:'Billing',types:[['wallet.low_balance','Wallet balance low',I.Dollar],['billing.payment_failed','Payment failed',I.CreditCard],['billing.payment_recovered','Payment recovered',I.Check]]},
+  {cat:'Imports',types:[['import.completed','Import completed',I.Check],['import.failed','Import failed',I.AlertTriangle]]},
 ];
 const NOTIF_PUSH_OFF=['task.due','task.overdue','inbox.mailbox_disconnected','sms.received','sms.opted_out','billing.payment_recovered','automation.sends_resumed'];
 function notifDefault(type,col){return col==='push'?NOTIF_PUSH_OFF.indexOf(type)<0:true;}
 function notifLoad(k){try{const s=localStorage.getItem(k);return s?JSON.parse(s):null;}catch(e){return null;}}
 function notifSave(k,v){try{localStorage.setItem(k,JSON.stringify(v));}catch(e){}}
+// /settings/notifications is a standalone page with its own top bar, like /profile (no settings rail).
+// Loading → body; a failed GET shows "Couldn't load notification settings" + Try again
+// (QA hook: window.__nrturNotifSettingsFail(true) then reopen the page).
 function SettingsNotificationsPage({goTo}){
-  // Stored overrides only. Setting a switch back to its default deletes the override.
+  const loading=useSkeleton(600);
+  const [failed,setFailed]=React.useState(()=>!!window.__nrturNotifSettingsFailFlag);
+  React.useEffect(()=>{window.__nrturNotifSettingsFail=(v)=>{window.__nrturNotifSettingsFailFlag=!!v;};return()=>{delete window.__nrturNotifSettingsFail;};},[]);
+  // Stored overrides only. A type's override is deleted only when BOTH surfaces are then at their defaults
+  // (lib/notificationSettingsPatch.ts); otherwise the switched surface is stored, even at its default value.
   const [cfg,setCfg]=React.useState(()=>{const uo=notifLoad('nrtur-notif-user');return (uo&&uo.events)?uo:{events:{},realtime:true};});
   const val=(type,col)=>{const o=cfg.events[type];return (o&&typeof o[col]==='boolean')?o[col]:notifDefault(type,col);};
-  const toggle=(type,col)=>setCfg(c=>{const cur=(c.events[type]&&typeof c.events[type][col]==='boolean')?c.events[type][col]:notifDefault(type,col);const nv=!cur;const ev={...(c.events[type]||{})};if(nv===notifDefault(type,col))delete ev[col];else ev[col]=nv;const events={...c.events};if(Object.keys(ev).length)events[type]=ev;else delete events[type];const n={...c,events};notifSave('nrtur-notif-user',n);return n;});
+  const toggle=(type,col)=>setCfg(c=>{const cur=(c.events[type]&&typeof c.events[type][col]==='boolean')?c.events[type][col]:notifDefault(type,col);const nv=!cur;const ev={...(c.events[type]||{}),[col]:nv};const atDefaults=['app','push'].every(k=>typeof ev[k]!=='boolean'||ev[k]===notifDefault(type,k));const events={...c.events};if(atDefaults)delete events[type];else events[type]=ev;const n={...c,events};notifSave('nrtur-notif-user',n);return n;});
   const toggleRealtime=()=>setCfg(c=>{const n={...c,realtime:c.realtime===false};notifSave('nrtur-notif-user',n);return n;});
   const [popups,setPopups]=React.useState(notifPopupsOn);
+  const card='rounded-2xl border border-white/[0.06] bg-white/[0.03] p-5';
   return(
-    <SettingsShell active="settings-notifications" goTo={goTo} subtitle="Choose which notifications you get in-app and on your devices.">
-      <div className="rounded-2xl border border-white/[0.06] bg-white/[0.03] p-6"><div className="flex items-center justify-between gap-4"><div><p className="text-white font-medium">Live updates</p><p className="text-[12px] text-white/45 mt-0.5">Update the bell the moment something happens. Off, it refreshes every 30 seconds instead.</p></div><Toggle on={cfg.realtime!==false} onChange={toggleRealtime}/></div></div>
-      <div className="rounded-2xl border border-white/[0.06] bg-white/[0.03] p-6"><div className="flex items-center justify-between gap-4"><div><p className="text-white font-medium">Popup cards</p><p className="text-[12px] text-white/45 mt-0.5">When something new lands in the bell, also show a card top-right for a few seconds. Saved on this device only.</p></div><Toggle on={popups} onChange={()=>{const v=!popups;setPopups(v);try{localStorage.setItem(NOTIF_POPUP_LS,v?'1':'0');}catch(e){}}}/></div></div>
-      {NOTIF_TYPE_GROUPS.map(g=>(<div key={g.cat} className="rounded-2xl border border-white/[0.06] bg-white/[0.03] overflow-hidden">
-        <div className="grid items-center gap-4 px-6 py-3 border-b border-white/[0.05] bg-white/[0.015]" style={{gridTemplateColumns:'1fr 72px 72px'}}><span className="text-[12px] font-semibold text-white">{g.cat}</span><span className="text-[10px] font-medium text-white/40 uppercase tracking-[0.14em] text-center">In-app</span><span className="text-[10px] font-medium text-white/40 uppercase tracking-[0.14em] text-center">Push</span></div>
-        {g.types.map(([type,label],i)=>{const app=val(type,'app');return(<div key={type} className={['grid items-center gap-4 px-6 py-3.5',i<g.types.length-1?'border-b border-white/[0.03]':''].join(' ')} style={{gridTemplateColumns:'1fr 72px 72px'}}>
-          <p className="text-[13px] font-medium text-white">{label}</p>
-          <div className="flex justify-center"><Toggle on={app} onChange={()=>toggle(type,'app')}/></div>
-          <div className={['flex justify-center',app?'':'opacity-40 pointer-events-none'].join(' ')} title={app?undefined:'Turn on In-app to get push'}><Toggle on={app&&val(type,'push')} onChange={()=>toggle(type,'push')}/></div>
-        </div>);})}
-      </div>))}
-    </SettingsShell>
+    <div className="h-full flex" style={{background:'var(--s950)'}}>
+      <AppSidebar active="settings" goTo={goTo}/>
+      <div className="flex-1 flex flex-col min-w-0">
+        <AppTopbar goTo={goTo} title="Notifications" subtitle="Choose which notifications you get in-app and on your devices."/>
+        {loading?(<div className="flex-1 overflow-y-auto scroll-area"><div className="px-7 py-6 max-w-2xl mx-auto flex flex-col gap-5">{[0,1,2,3].map(i=>(<div key={i} className={card}><Skel w="30%" h="13px"/><div className="mt-3"><Skel w="80%"/></div><div className="mt-2"><Skel w="65%"/></div></div>))}</div></div>)
+        :failed?(<div role="alert" className="flex-1 flex items-center justify-center px-6 py-20 text-center"><div className="max-w-sm"><div className="mx-auto w-11 h-11 flex items-center justify-center rounded-xl border border-red-500/20 bg-red-500/5 text-red-400"><I.AlertTriangle size={18}/></div><p className="mt-4 text-[13px] font-medium text-white">Couldn't load notification settings</p><button onClick={()=>{window.__nrturNotifSettingsFailFlag=false;setFailed(false);}} className="mt-4 px-3 py-1.5 rounded-lg text-[12px] font-medium text-white/80 bg-white/[0.04] border border-white/[0.10] hover:bg-white/[0.08] transition-all">Try again</button></div></div>)
+        :(<div className="flex-1 overflow-y-auto scroll-area"><div className="px-7 py-6 max-w-2xl mx-auto flex flex-col gap-5">
+          <div className={card}><div className="flex items-center justify-between gap-4"><div><p className="text-white text-[13px] font-semibold">Live updates</p><p className="text-[12px] text-white/45 mt-1">Turning this off only stops the instant in-page nudge when something new arrives — your notifications are still recorded, the bell badge still counts them, and your history still lists them.</p></div><Toggle on={cfg.realtime!==false} onChange={toggleRealtime}/></div></div>
+          <div className={card}><div className="flex items-center justify-between gap-4"><div><p className="text-white text-[13px] font-semibold">Popup cards</p><p className="text-[12px] text-white/45 mt-1">When something new lands in the bell, also show a card top-right for a few seconds. Saved on this device only.</p></div><Toggle on={popups} onChange={()=>{const v=!popups;setPopups(v);try{localStorage.setItem(NOTIF_POPUP_LS,v?'1':'0');}catch(e){}}}/></div></div>
+          {NOTIF_TYPE_GROUPS.map(g=>(<section key={g.cat} className={card}>
+            <h2 className="mb-1 text-[13px] font-semibold text-white">{g.cat}</h2>
+            <div>{g.types.map(([type,label,Ic],i)=>(<div key={type} role="group" className={['flex flex-wrap items-center justify-between gap-3 py-3',i>0?'border-t border-white/[0.05]':'pt-0'].join(' ')}>
+              <div className="flex min-w-0 items-center gap-3"><span className="w-8 h-8 shrink-0 flex items-center justify-center rounded-lg bg-white/[0.04] text-white/55">{Ic?<Ic size={15}/>:<I.Bell size={15}/>}</span><p className="truncate text-[13px] text-white">{label}</p></div>
+              <div className="flex shrink-0 items-center gap-5">
+                <label className="flex items-center gap-2 text-[11px] text-white/55"><span>In-app</span><Toggle on={val(type,'app')} onChange={()=>toggle(type,'app')}/></label>
+                <label className="flex items-center gap-2 text-[11px] text-white/55"><span>Push</span><Toggle on={val(type,'push')} onChange={()=>toggle(type,'push')}/></label>
+              </div>
+            </div>))}</div>
+          </section>))}
+        </div></div>)}
+      </div>
+    </div>
   );
 }
 // ?? Calls Page ????????????????????????????????????????????????????????????????
@@ -16252,7 +16340,7 @@ function App(){
       {page==='forgot-password'   && <ForgotPasswordPage {...p}/>}
       {page==='verify-email'      && <EmailVerificationPendingPage {...p}/>}
       {page==='reset-expired'     && <ResetExpiredPage {...p}/>}
-      {page==='accept-invite'     && <AcceptInvitePage {...p}/>}
+      {page==='accept-invite'     && <AcceptInvitePage key={(()=>{try{return JSON.stringify(nav||{});}catch(e){return 'x';}})()} {...p}/>}
       {page==='unsubscribe'       && <UnsubscribePage {...p}/>}
       {page==='onboarding-1'      && <OnboardingPage step={1} {...p}/>}
       {page==='onboarding-2'      && <OnboardingPage step={2} {...p}/>}

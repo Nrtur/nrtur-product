@@ -38,7 +38,7 @@ The full price and limit table is in [`pricing/pricing.md`](../../pricing/pricin
 - Texting is withdrawn from sale.
   - Checkout refuses it with `409 TEXTING_NOT_AVAILABLE`.
   - In the app, `TEXTING_PURCHASABLE = false` (`lib/textingSale.ts`), so the dialog shows "Texting — coming soon" instead.
-- **Welcome credit.** Wallet credit of $15 on Team, $40 on Pro and $75 on Business. It is granted by the webhook once per workspace, on the first paid plan invoice (`service/welcome_credit.go`). The plan cards only promise it while the tier is `trial`.
+- **Welcome credit.** Wallet credit of $15 on Team, $40 on Pro and $75 on Business. It is granted by the webhook once per workspace, on the first paid plan invoice (`service/welcome_credit.go`). Solo grants nothing and does not use up the credit, so Solo → Team/Pro/Business earns it on the first full paid invoice (proration invoices are skipped). The plan cards only promise it while the tier is `trial`.
 
 **The two-subscriptions model**
 - Stripe will not mix billing intervals in one subscription, and every add-on is monthly.
@@ -69,6 +69,7 @@ The full price and limit table is in [`pricing/pricing.md`](../../pricing/pricin
 - Removing drops the quantity immediately with no refund. The removed users are paid through the period end.
 - Floor on removal: members + live pending invitations − 1 (`409 SEATS_BELOW_MEMBERS`).
 - The seat door is hidden on Solo (`409 SEATS_NOT_AVAILABLE`).
+- Seat changes are refused with `409 PLAN_NOT_SWITCHABLE` while the plan subscription is `PAST_DUE`, `INCOMPLETE` or `CANCEL_SCHEDULED` (the same `switchableStatus` check as a plan switch, `service/quantity_change.go`).
 - A pending invitation reserves a seat when an invite is sent. Invite accept and member reactivation are judged against accepted members only.
 
 **Add-ons** (`service/addon_change.go`)
@@ -76,6 +77,7 @@ The full price and limit table is in [`pricing/pricing.md`](../../pricing/pricin
 - In the app the owner can change mailboxes, local lines and toll-free lines, via `AddonsCard` steppers or the point-of-need `AddonOfferDialog`. Texting is not editable.
 - All three quantities are absolute totals and are required on every call.
 - The stepper is clamped at the plan's hold minus what is included; above that is `422 INVALID_QUANTITY`. Lowering below what is in use is `409 ADDONS_BELOW_HELD`.
+- Add-on changes are also refused with `409 PLAN_NOT_SWITCHABLE` while the plan subscription is `PAST_DUE`, `INCOMPLETE` or `CANCEL_SCHEDULED` (`service/addon_change.go`). The app does not pre-empt this; the refusal arrives on submit.
 - When a member is removed and mailboxes or lines exceed the new included allowance, the extras are billed as add-ons on the next invoice.
 
 **Wallet** (`internal/platform/wallet`, `service/wallet_topup.go`, `service/wallet_charge.go`)
@@ -86,7 +88,9 @@ The full price and limit table is in [`pricing/pricing.md`](../../pricing/pricin
   - only for workspaces on a plan; otherwise `409 NO_ACTIVE_PLAN`
 - How it pays:
   - With a card on file, `POST /billing/wallet/charge` charges it directly, with an idempotent `request_id`.
-  - Otherwise it falls back to Stripe Checkout through `POST /billing/wallet/topup`.
+  - With no card on file the charge returns `409 NO_PAYMENT_METHOD` and the dialog does **not** fall back on its own. It offers two buttons: "Add a card" (opens the Stripe portal; the owner then tops up again) or "Pay with Stripe" (Stripe Checkout through `POST /billing/wallet/topup`, which collects a card).
+  - The dialog goes straight to Checkout with the same amount only when the bank requires authentication (3DS: `402 PAYMENT_DECLINED` with `AUTHENTICATION_REQUIRED`); the server has already cancelled the off-session attempt (`TopUpButton.tsx`).
+  - On a trial the owner sees a "Select your plan" button (to the plan grid) in place of the top-up button. The top-up dialog's terms text says calling and sending stop when the balance is empty while receiving continues, and that prepaid credit is non-refundable, does not expire while the account is open, and stays usable for 12 months after cancellation.
 - Charges are written per send at the versioned rate card (`CardV1`). The rate version and unit price are stored on each ledger row.
 - A send that did not happen is reversed back into the wallet. Wallet money is never refunded to a card.
 - If the balance cannot cover a send, the send is refused with `402 WALLET_INSUFFICIENT_BALANCE`. The inbox SMS composer shows `LowBalanceNotice` / `EmptyWalletNotice`.
@@ -96,7 +100,7 @@ The full price and limit table is in [`pricing/pricing.md`](../../pricing/pricin
   - Calls are settled when the call ends.
   - An outbound call first places a hold for the minutes the balance can cover. A call with no coverable minutes is refused. Stale holds are released by a sweep job, on holds older than 4 hours.
   - Inbound traffic is still received when the balance is empty, and becomes a shortfall.
-- Owners are notified when the balance falls to $5.
+- Owners are notified when a charge takes the balance across a line downward (`telephony/wallet_charge.go`, SCRUM-1112): "low on credit" when it crosses below **$5**, and "out of credit" when it falls below the price of one SMS (**$0.02**), the point at which sending stops. It fires on the crossing only, not on every later charge, and a single charge that crosses both lines sends only the "out of credit" notice.
 - Ledger sources: top-up, auto top-up, welcome credit, promo, admin, migration, charge and reversal.
 
 **Plan limits and enforcement** (`internal/platform/entitlements`)
@@ -142,7 +146,7 @@ The full price and limit table is in [`pricing/pricing.md`](../../pricing/pricin
 - What `read_only` refuses: every capped create (records, imports, pipelines, fields, tags, invites, accepting invites, mailbox connect, number purchase) and every gated feature.
 - What `read_only` does **not** refuse: editing or deleting existing records, reads, manual email, and texts or calls paid from a remaining wallet balance. There is no general write lock. `ReadOnlyBanner` then shows "… — this workspace is read-only · Your data is kept" on every page.
 - Cancelling happens in the Stripe portal. The app says that cancelling the plan also cancels add-ons immediately, while cancelling only the add-ons keeps the plan.
-- To resubscribe, start a new checkout from the plan grid. The welcome credit is not granted again.
+- To resubscribe, start a new checkout from the plan grid. The welcome credit is not granted again (unless the workspace has only ever paid for Solo).
 
 **Return pages**
 - `/billing/success` shows plan or top-up copy depending on `?kind`. It refreshes the usage and wallet queries and links back to Settings.
@@ -156,7 +160,7 @@ The full price and limit table is in [`pricing/pricing.md`](../../pricing/pricin
   - The plan grid is replaced by "Billing is restricted".
   - Banners and gates tell them to "Ask your workspace owner…".
 - **Billing alerts** (webhook-driven notifications) go to the roles that hold `CapBillingManage`, which is the owner only.
-- **Legacy `manager` rows** are treated exactly like admin (`internal/platform/authz/policy.go`).
+- **Legacy `manager` rows** cannot manage billing (owner only), the same as admin.
 
 ## API
 - `POST /billing/checkout`: plan checkout session (with quantities)
@@ -203,3 +207,4 @@ The full price and limit table is in [`pricing/pricing.md`](../../pricing/pricin
 - **Records-cap batch gap.** On paid tiers, the one save allowed at the records line is not capped for batch admissions: a latent gap in `records_policy.go`.
 - **Unpaid charges are never collected.** Shortfalls are recorded, but nothing collects them later.
 - **The Stripe portal only allows** changing the payment method and cancelling. Plan changes go through the app's own plan-switch screen.
+- **Seat and add-on doors do not pre-empt a blocked subscription.** While the plan is `past_due`, `incomplete` or set to cancel, the add-on steppers and seat door stay enabled and the backend refuses on submit with `409 PLAN_NOT_SWITCHABLE`. Only the plan cards are disabled up front.

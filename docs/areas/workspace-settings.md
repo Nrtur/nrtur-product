@@ -7,7 +7,7 @@ verified_on: 2026-10-06
 # Workspace settings
 
 ## What it does
-Settings is where a workspace is configured and where each person manages their own account. `/settings` is one screen with a grouped rail on the left, a per-page title bar, and the active page in the body. The page is chosen with `?tab=`. Owners and admins can rename the workspace and set its defaults, and they can invite and manage teammates. They also set the legal mailing address that automation emails need, set task defaults, and manage custom fields, tags and statuses. Owners and admins can also merge duplicates and connect email accounts. Members can open every page, but workspace pages are read-only for them, with a "Managed by your admin" notice. Each user's own profile, password and sign-out live on `/profile`. Billing, phone numbers, pipeline/deal settings and notification settings sit in the same menu but are documented in their own area docs.
+Settings is where a workspace is configured and where each person manages their own account. `/settings` is one screen with a grouped rail on the left, a per-page title bar, and the active page in the body. The page is chosen with `?tab=`. Owners and admins can rename the workspace and set its defaults, and they can invite and manage teammates. They also set the legal mailing address that automation emails need, set task defaults, and manage custom fields, tags and statuses. Owners and admins can also merge duplicates and connect email accounts. Members can open every page, but workspace pages are read-only for them, with a "Managed by your admin" notice, with three exceptions: on **Tags** members can create (not delete); **Duplicates** is fully usable by members (scan, dismiss, merge), with no notice; and **Integrations** shows no notice but hides Connect and Disconnect from members. Each user's own profile, password and sign-out live on `/profile`. Billing, phone numbers, pipeline/deal settings and notification settings sit in the same menu but are documented in their own area docs.
 
 ## Screens
 The Settings menu, exactly as the app ships it. Every item not listed here is cut.
@@ -18,13 +18,13 @@ The Settings menu, exactly as the app ships it. Every item not listed here is cu
 | **My account** › Notifications: `/settings/notifications` | `settings-notifications` | See notifications area doc. |
 | **Workspace** › General: `/settings?tab=general` | `settings-general` | Workspace name, industry, company size, timezone, currency. Danger zone: delete workspace. |
 | **Workspace** › Team: `/settings?tab=team` | `settings-team` | Members and pending invites in one table: invite, resend, revoke, change role, remove. |
-| **Workspace** › Compliance: `/settings?tab=compliance` | (none, new) | Postal mailing address and unsubscribe base URL for automation emails. |
+| **Workspace** › Compliance: `/settings?tab=compliance` | `settings-compliance` | Postal mailing address and unsubscribe base URL for automation emails. |
 | **Workspace** › Tasks & reminders: `/settings?tab=tasks` | `settings-tasks` | Workspace defaults for new tasks and reminders. |
 | **Objects & fields** › Custom fields: `/settings?tab=custom-fields[&object=]` | `settings-properties` | List, create and delete custom fields per object. |
 | **Objects & fields** › Tags: `/settings?tab=tags` | `settings-tags` | Search, create and delete workspace tags. |
 | **Objects & fields** › Statuses: `/settings?tab=statuses` | `settings-statuses` | Lead and contact status lists, plus a pointer to deal stages. |
 | **Data management** › Duplicates: `/settings?tab=data` | `settings-duplicates` | Find and merge duplicate contacts, companies and leads. |
-| **Integrations** › Integrations: `/settings?tab=integrations` | `settings-integrations` | Email accounts (connect and disconnect mailboxes). |
+| **Integrations** › Integrations: `/settings?tab=integrations` | `settings-integrations` | Email accounts (connect, reconnect and disconnect mailboxes). |
 | **Integrations** › Phone numbers: `/settings?tab=phone-numbers` | `settings-phone-numbers` | See phone-and-sms-setup area doc. |
 | **Billing** › Billing & usage: `/settings?tab=billing` | `settings-billing` | See billing area doc. |
 
@@ -50,16 +50,17 @@ The menu has 6 groups: My account, Workspace, Objects & fields, Data management,
 
 **Team** (`features/workspace/TeamSettings`)
 - One table merges active members and live pending invites.
-  - Role pill: Admin or Member are editable. Owner and Manager show as read-only badges.
+  - Role pill: Admin or Member are editable on member rows. Owner and Manager show as read-only badges, and a pending invite always shows a read-only badge (there is no endpoint to change an invite's role).
   - Status: Active or Pending.
 - Header: "N members · M pending". Pending invites and their count are shown to owners and admins only.
 - `?member=<id>` highlights that member's row (the link from the member-joined notification).
 - **Invite dialog:** one email plus a role (Admin or Member), and a seat line such as "2 of 3 seats in use on the Trial plan".
   - Send is disabled at an enforced seat cap. The cap counts accepted members plus live pending invites.
+  - At the cap the dialog adds a remedy line that depends on tier and role (`features/billing/lib/inviteSeatLine.ts`). The owner sees "Add a user" (paid plans; plus "or revoke a pending invitation" when one exists), "Choose a plan to add more" (Trial) or "Move to Team to add users" (Solo), with a link. Everyone else sees "Ask your workspace owner …" with no link.
   - Errors: `ALREADY_MEMBER` shows on the email field.
   - Re-inviting someone with a live pending invite returns the existing invite.
   - Each email can receive at most 10 invites per hour across all workspaces.
-- Resend has a 60s cooldown, with at most 10 resends per invite. Revoke and Remove each ask for confirmation.
+- Resend fires at once (a spinner, no confirmation), with a 60s cooldown and at most 10 resends per invite. Revoke and Remove each ask for confirmation.
 - **Role matrix** (`workspaces/service/members.go`):
   - The owner manages everyone.
   - An admin manages members (and legacy managers), but never owners or other admins.
@@ -94,7 +95,7 @@ The menu has 6 groups: My account, Workspace, Objects & fields, Data management,
 **Tags** (`features/tags/SettingsTagsPage`)
 - The list has search and a count. "New tag" takes a name (up to 100 chars) and a colour from 3 quick swatches or a custom picker.
 - Delete asks for confirmation.
-- There is no rename, recolour, merge or per-tag usage count. The UI shows Delete only to owner, admin or manager.
+- There is no rename, recolour, merge or per-tag usage count; the delete confirmation shows no count either. The UI shows Delete only to owner, admin or manager (`canManageWorkspaceConfig`). Members still see "New tag" and a notice that starts "Deleting tags needs an admin." and ends "You can still create tags."
 
 **Statuses** (`features/status/StatusesSettingsPage`)
 - **Lead status card:** add, rename, recolour, drag to reorder, set default, delete.
@@ -108,15 +109,17 @@ The menu has 6 groups: My account, Workspace, Objects & fields, Data management,
 **Duplicates** (`features/settings/DuplicatesSettings` over `features/duplicates`)
 - Header: "We found N possible duplicates…".
 - Object tabs Contacts / Companies / Leads, each with a count.
-- Cards/List toggle, "Scan now", and a merge drawer for choosing field values.
-- Dismiss lasts for the session only.
+- Toolbar: a **Minimum match confidence** select with four presets (All matches 40%+, Likely 60%+, High confidence 80%+, Near-certain 95%+), driving `min_confidence` (backend default and floor 0.4), the Cards/List toggle and "Scan now".
+- A merge drawer for choosing field values. Activity timelines are always combined (fixed text, not a toggle); "Combine tags" is the only toggle, on by default.
+- Dismiss lasts for the session only. The toast reads "Hidden for now": "Not a duplicate" isn't saved yet, and the pair comes back on reload.
 - No bulk merge.
 - The plan feature `duplicate_detection` can refuse with 422.
 
 **Integrations** (`features/settings/SettingsIntegrationsPage`)
 - The only wired content is the Email accounts card (from `features/inbox`):
-  - It lists mailboxes with their sync state.
-  - It offers Connect account or Add another account, and Disconnect.
+  - It lists mailboxes with their sync state: Synced, Syncing…, Sync error, Reconnect needed or Disconnected.
+  - Owners and admins get Connect account or Add another account, and Disconnect. Members see the list only, with no notice; the buttons are simply hidden.
+  - A "Reconnect needed" row gets a **Reconnect** button for owners and admins. The plan's mailbox cap gates Connect only, never Reconnect.
 - See Known gaps for the other items on the page.
 
 **Profile** (`/profile`, `features/profile`)
@@ -130,7 +133,7 @@ The menu has 6 groups: My account, Workspace, Objects & fields, Data management,
   - "Sign out of all devices" asks for confirmation, revokes every session, then signs out locally.
 
 ## Permissions
-These rules are enforced by `internal/platform/authz/policy.go` plus service checks. The legacy `manager` role is treated as admin.
+These rules are enforced by `internal/platform/authz/policy.go` plus service checks. The legacy `manager` role passes capability checks but is refused wherever a service checks for owner/admin literally: team management, General edits and mailbox disconnect (see [permissions.md](../permissions.md)).
 
 | Area | Owner | Admin | Member |
 |---|---|---|---|
@@ -248,9 +251,10 @@ Profile
 - **Gate widths differ by page.** UI gates differ in how wide they are:
   - Statuses and custom fields allow owner/admin only (`isWorkspaceManager`).
   - Compliance and tag delete also allow the legacy `manager` (`canManageWorkspaceConfig`).
-  - The backend treats manager as admin everywhere.
+  - The backend is inconsistent too: manager passes capability checks but is refused by team management, General edits, mailbox disconnect and pipelines.
 - **Delete-workspace copy.** The copy says data is "permanently removed", but the backend soft-deletes. Nothing handles a workspace-less account after deletion.
 - **Statuses pointer.** The "Deal stages" row links to the board. Stage editing is documented in the deals area.
 - **Custom field limit.** The backend enforces a fixed 100 per type. The per-plan field caps are reported but not enforced on this route.
 - **Stale settings search.** Global search's Settings group lists only General, Duplicates and Billing (`components/layout/sidebar-search.tsx`).
 - **Member role badge.** The Team table can show a legacy "Manager" badge for old rows. Managers cannot be assigned.
+- **Admins are shown Team controls the backend refuses.** In `TeamMemberRow.tsx`, `roleEditable` and Remove check only `canManage && !isSelf`, so an admin sees the role select on other admins' rows and Remove on the owner's row. The backend (`members.go` `canManageMember`) refuses both with 403. The design correctly hides them.

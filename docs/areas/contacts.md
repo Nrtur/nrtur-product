@@ -42,11 +42,11 @@ Contacts are the people a workspace sells to. The Contacts page is a searchable,
 
 **Contact page**
 - Header: breadcrumb, record switcher (position counter and Previous/Next through the list the contact was opened from; absent on a deep link), Enroll in sequence, ⋯ menu with Edit contact and Delete contact.
-- Hero: avatar, name, title · company, editable status, Do-not-email/SMS/call pills, and four quick actions: Send Email (a plain `mailto:` link), Make call (in-app softphone; needs calling set up and a dialable number), Add Note (focuses the composer), Send SMS (SMS composer). Each is disabled by the matching suppression row. "Log manually" opens the log-call modal and is not blocked by do-not-contact.
+- Hero: avatar, name, title · company, editable status, Do-not-email/SMS/call pills, and four quick actions: Send Email (a plain `mailto:` link), Make call (in-app softphone; needs calling set up and a dialable number), Add Note (focuses the composer), Send SMS (SMS composer). Each communication action (email, call, SMS) is disabled by the matching suppression row; Send Email checks the transactional scope. Add Note has no suppression gate. "Log manually" opens the log-call modal and is not blocked by do-not-contact.
 - A do-not-contact banner shows when a `channel: all` suppression exists.
 - About panel (`RecordProperties`): inline edit (commit on blur/Enter, Escape cancels) of name, email, phone, job title, company (re-links via the association endpoints), owner, status, tags, source. Additional emails/phones, mailing address and LinkedIn are read-only (no backend columns). Custom fields are editable below it (values come embedded on the detail response).
 - "Converted from lead" card when the contact came from a lead conversion.
-- Communication preferences: do-not-contact master switch plus per-channel suppression toggles (`/suppressions`); editable by owner/admin only.
+- Communication preferences: do-not-contact master switch plus per-channel suppression toggles (`POST`/`DELETE /suppressions`); editable by owner/admin only, and the backend enforces it (`config:manage`). Members see the toggles read-only.
 - Deals card (`GET /deals?contact_id=`), Sequences card (hidden unless enrolled), Tasks (`RecordTasks`).
 - Timeline: `GET /contacts/{id}/timeline` merges the contact's own events with events from its linked deals, companies and originating lead, each tagged with its source. It is capped at the 200 most recent, with no pagination. Filter tabs (All, Emails, Calls, Notes, Tasks, Deals, Changes) filter client-side.
 - Composer: Note (with @mentions, #tags and file attachments up to 25 MB each, within the plan's attachment storage) and a Task launcher. Notes can be edited or deleted by their author only.
@@ -60,10 +60,9 @@ Contacts are the people a workspace sells to. The Contacts page is a searchable,
 ## Permissions
 - Owner, admin and member can all create, edit, delete, archive, tag, bulk-tag, import, export, merge duplicates and add notes. The backend has no role check on contact records (`authz` `crm:read`/`crm:write` are held by every role).
 - Every member sees every contact in the workspace (no owner-scoped visibility).
-- Owner/admin only (`config:manage`): contact-status CRUD and custom-field definitions.
+- Owner/admin only (`config:manage`): contact-status CRUD, custom-field definitions, and suppression writes (`POST /suppressions`, `DELETE /suppressions/{id}`), which is what the communication-preference toggles call. `GET /suppressions` is open to every role.
 - Saved views: anyone can create personal or shared views. Personal views are editable/deletable by their creator only; shared views by their creator or an owner/admin.
 - Notes: edit/delete by author only (no admin override).
-- UI-only gate: communication-preference toggles are editable by owner/admin only in the UI.
 - Legacy role `manager` is treated as admin by the backend.
 
 ## API
@@ -72,13 +71,13 @@ Contacts are the people a workspace sells to. The Contacts page is a searchable,
 - `GET /contacts/export`
 - `POST /contacts/{id}/companies` · `DELETE /contacts/{id}/companies/{companyId}`
 - `POST /contacts/{id}/tags` · `DELETE /contacts/{id}/tags/{tagId}` · `POST /contacts/tags/bulk-attach` · `POST /contacts/tags/bulk-detach` · `GET /tags` · `POST /tags`
-- `GET /contacts/{id}/timeline` · `GET /contacts/{id}/activities` · `POST /contacts/{id}/activities` · `PATCH|DELETE /contacts/{id}/activities/{activityId}` · `POST /contacts/{id}/activities/{activityId}/attachments`
+- `GET /contacts/{id}/timeline` · `GET /contacts/{id}/activities` · `POST /contacts/{id}/activities` · `PATCH|DELETE /contacts/{id}/activities/{activityId}` · `POST /contacts/{id}/activities/{activityId}/attachments` · `GET /contacts/{id}/activities/{activityId}/attachments/{attachmentId}` (download)
 - `POST /contacts/{id}/custom-fields` · `GET /custom-fields/definitions`
 - `GET /contact-statuses`
 - `GET /contacts/duplicates` · `POST /contacts/{id}/merge`
 - `POST /imports/contacts/analyze|validate|import` · `GET /imports/{id}` · `GET /imports/{id}/rows`
 - `GET|POST /saved-views` · `PATCH|DELETE /saved-views/{id}`
-- `GET /workspaces/{id}/members` (owner pickers) · `/suppressions` · `POST /flows/{id}/enroll` · `GET /deals?contact_id=` · `/tasks`
+- `GET /workspaces/{id}/members` (owner pickers) · `GET|POST /suppressions` · `DELETE /suppressions/{id}` · `POST /flows/{id}/enroll` · `GET /deals?contact_id=` · `/tasks`
 
 ## API only (no UI yet)
 - List filters `updated_from`/`updated_to`, sort `oldest` and `cf:<key>` sorts.
@@ -101,7 +100,7 @@ Contacts are the people a workspace sells to. The Contacts page is a searchable,
 - Contact score.
 
 ## Known gaps
-- UI and API validation differ: the UI requires first name, last name and email and caps names at 50; the API needs only one identity field and allows 100. The UI phone check is permissive while the API requires E.164, so a non-E.164 phone fails on save. The API does not validate email format for contacts (leads do).
+- UI and API validation differ: the UI requires first name, last name and email and caps names at 50; the API needs only one identity field and allows 100. The API requires E.164; the sheet's `PhoneInput` always emits `+<dial code><digits>`, so a 422 `PATTERN` now needs something like a wrong digit count. The API does not validate email format for contacts (leads do).
 - The create sheet still sends the legacy `status: "lead"` alongside `status_id`.
 - Export ignores the New This Week date filter (`GET /contacts/export` has no `created_from`/`created_to`); the success toast says so.
 - The Tags filter sends only the first selected tag.

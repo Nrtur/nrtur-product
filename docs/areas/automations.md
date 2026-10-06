@@ -7,13 +7,13 @@ verified_on: 2026-10-06
 # Automations
 
 ## What it does
-Automations are trigger-based workflows. When something happens to a record (a contact is created, a lead is assigned, a deal changes stage, a call is logged, and so on), the record is enrolled and walks a top-to-bottom flow of steps: actions, if/then conditions, split paths, waits, "wait until" and goals. The list lives in the **Engage** hub (`/engage?tab=automations`), and the builder is a full-page canvas at `/automations/new` and `/automations/{id}`. Engage also holds the sequence list (see `sequences.md`), Lead scoring rules and the workspace Deliverability guardrails (frequency cap, quiet hours, concurrent-flow limit, re-engagement rule, suppression list). Every outbound message that a flow sends passes a server-side gate chain: kill switch, suppression, quiet hours, frequency cap, mailbox quota, provider circuit breaker, the daily workspace send budget, and the plan's monthly automated-send allowance. Owners and admins author flows. Members can view them and enroll records into sequences.
+Automations are trigger-based workflows. When something happens to a record (a contact is created, a lead is assigned, a deal changes stage, a call is logged, and so on), the record is enrolled and walks a top-to-bottom flow of steps: actions, if/then conditions, split paths, waits, "wait until" and goals. The list lives in the **Engage** hub (`/engage?tab=automations`), and the builder is a full-page canvas at `/automations/new` and `/automations/{id}`. Engage also holds the sequence list (see `sequences.md`), Lead scoring rules and the workspace Deliverability guardrails (frequency cap, quiet hours, concurrent-flow limit, re-engagement rule, suppression list). Every outbound message that a flow sends passes a server-side gate chain: kill switch, suppression, the step's send time, quiet hours, frequency cap, provider circuit breaker and the daily workspace send budget, then (inside the send executor) the per-mailbox quota for email and the plan's monthly automated-send allowance. Owners and admins author flows. Members can view them and enroll records into sequences.
 
 ## Screens
 | Route (app) | Prototype page id | Purpose |
 |---|---|---|
 | `/engage` (`?tab=` / `?sub=`) | `engage` | Engage hub. Its live tabs are Sequences (SMS, Email), Automations, Rules (Lead scoring only) and Deliverability (Frequency cap, Re-engagement, Suppression list). |
-| `/engage?tab=automations` | `engage` → `settings-automations` (`SettingsAutomationsPage`) | Automation list: concept banner, folder rail, cards with an on/off switch, Enrolled, Run history, Edit and a ··· menu (Duplicate, Delete), plus the template browser. |
+| `/engage?tab=automations` | `engage` → `settings-automations` (`SettingsAutomationsPage`) | Automation list: concept banner, folder rail, cards with an on/off switch (shown on drafts too, for owners and admins), Enrolled, **Logs**, Edit and a ··· menu (Duplicate, Delete), plus a header **Templates** button that opens the template browser. On mobile the secondary actions fold into the ··· menu, where Logs is labelled "Run history" (`AutomationCard.tsx`). |
 | `/automations` | — | Redirects to `/engage?tab=automations`, so old links keep working. |
 | `/automations/new`, `/automations/{id}` | `automation-builder` | The builder: trigger tile and drawer, step canvas, step picker, step settings drawer, flow summary sidebar, on-canvas test run, run history and the activate switch. `?recipe=` preloads a template. |
 | `/engage?tab=delivery&sub=frequency` | `settings-frequency` (rendered inside `EngageDelivery`) | Frequency cap per channel (email and SMS), the transactional exemption, the max concurrent flows per contact, and quiet hours. |
@@ -41,7 +41,10 @@ Automations are trigger-based workflows. When something happens to a record (a c
 - **Logic and timing steps** (`nodes.go`, `lib/nodes.ts`): If / then branch (`condition`), Split into paths (`branch`, rule-based lanes with a default, up to 10 lanes), Wait / delay (`wait`), Wait until (`waitUntil`, a rule plus a timeout) and Goal / exit (`goal`).
   - **Unsupported steps.** `mapFields` is in the vocabulary but the server refuses it at save. A step like that loaded from the server renders as "Unsupported step".
   - **No split test.** There is no percentage or A/B split node (the contract says a future `split` kind would carry weights).
-- **Waits** (`config/WaitConfig.tsx`, which uses `features/scheduling/ScheduleField`). Wait N minutes, hours, days or weeks, then optionally send at a time of day, on chosen weekdays, or on a calendar date.
+- **Waits** (`config/WaitConfig.tsx`, which uses `features/scheduling/ScheduleField`). Three tabs: **"As soon as it ends"** (wait N minutes, hours, days or weeks), **"At a time"** (wait N, then a time of day, with optional weekdays) and **"On a date"** (a calendar date and time).
+  - **Date mode cannot carry a wait.** The Wait row is hidden on "On a date"; a fixed date has nothing to offset from.
+  - **If the time has already passed** ("At a time"): wait for the next matching day, or send now instead.
+  - **If the date has already passed** ("On a date"): send now, skip this step, or end the enrollment. Ending records the exit reason `calendar_date_passed`.
   - **Timezone** is the workspace's or a fixed IANA zone. A contact or sender timezone is reserved on the wire but returns 422.
   - **Schedule preview.** `POST /flows/timing/preview` exists in the backend, but the frontend does not call it (`schedulingService.previewAvailable = false`).
 - **Conditions.** These 11 fields can be authored: Status, Owner, Tag, Deal value, Last contacted, Created date, Lead status, Lead source, Lead score, Company type and Company industry (`lib/conditions.ts`), each with a per-field operator list.
@@ -56,19 +59,20 @@ Automations are trigger-based workflows. When something happens to a record (a c
 - **Test run** (on the canvas, SCRUM-551). `POST /flows/{id}/test` runs the saved tree against one real record and writes nothing. The test bar plays back node by node. It is available only after the first save. Task-subject triggers cannot be tested because there is no task picker.
 - **Run history.** The run log (`GET /flows/{id}/runs` and `/stats`) shows header stats, per-run rows and an expandable step trace with a snapshot of the record. Owners and admins can **retry from the failed step** (`POST /flows/{id}/enrollments/{enrollmentId}/retry`).
 - **Enrolled modal and Engagement modal.** These are shared with sequences (`components/enrollment/`). The Enrolled modal shows four states (active, waiting, completed, exited) with filters. The Engagement modal shows the funnel, rates, clickers and recent events. Its "Top clicked links" block is disabled because nothing aggregates clicks per URL.
-- **Templates.** "Browse templates" opens `GET /flows/template-catalog`, which has 4 templates: New Lead Welcome (`contact.created`), Speed-to-lead (`lead.assigned`), Status-change follow-up (`contact.status_changed`) and Deal stage triage (`deal.stage_changed`).
+- **Templates.** The list header's "Templates" button (and "Browse templates" in the empty state) opens `GET /flows/template-catalog`, which has 4 templates: New Lead Welcome (`contact.created`), Speed-to-lead (`lead.assigned`), Status-change follow-up (`contact.status_changed`) and Deal stage triage (`deal.stage_changed`).
 - **Folders.** Folders (`GET/POST/PATCH/DELETE /folders`, `PATCH /{object}/{id}/folder`, surface key `automations`) group the list. Deleting a folder unfiles its items.
 - **List limits.** The list renders one page of up to 100 automations.
 - **Duplicate and Delete.** Duplicate creates a paused "Copy of …". Delete is a soft delete, and the run log survives.
-- **Gate chain on every send** (`runner/gates.go`), checked in this order:
+- **Gate chain on every send** (`runner/gates.go` `DefaultGates`, then the send executor), checked in this order:
   1. Kill switch (global `FLOW_ENGINE_ENABLED`, plus a per-workspace pause), which defers.
   2. Suppression, which skips the send and can end the enrollment.
-  3. Quiet hours, which defers.
-  4. Frequency cap per contact per channel, which defers.
-  5. Mailbox quota (250 a day and 10 a minute per connected inbox), which defers.
+  3. Send time (`SendTimeGate`), which holds a message step until the local send time set on the step.
+  4. Quiet hours, which defers. When both apply, the later of send time and the quiet-hours window wins.
+  5. Frequency cap per contact per channel, which defers.
   6. Provider circuit breaker, which defers until the next probe.
   7. The workspace send budget (`WorkspaceSendBudgetPerDay = 5000`, UTC day).
-  8. Last, right before the provider call, the monthly **automated-send meter** draws one unit per email or text (`service/send_meter.go`). A refused draw fails the step with no auto-retry and flips the flow to `error` with `engine: plan_limit:automated_sends`.
+  8. Email only: the mailbox quota (250 a day and 10 a minute per connected inbox), reserved inside the email executor at send time (`service/executor_email.go`), which defers. The chain still has a `mailbox_quota` slot between the frequency cap and the breaker, but it is a no-op.
+  9. Last, right before the provider call, the monthly **automated-send meter** draws one unit per email or text (`service/send_meter.go`). A refused draw fails the step with no auto-retry and flips an automation to `error` with `engine: plan_limit:automated_sends` (a sequence is not flipped; see `sequences.md`).
 - **Guardrail defaults** (`service/guardrails.go`):
   - Email cap is 3 per 168 h and SMS cap is 2 per 168 h.
   - The transactional exemption is on but **not enforceable**, because no send has a class.
@@ -151,3 +155,7 @@ Automations are trigger-based workflows. When something happens to a record (a c
 - **The automated-send meter can over-count.** When an SMS is refused for an empty prepaid wallet, the unit is still drawn (`send_meter.go`).
 - **Folder membership is read one item at a time**, which is slow for large lists.
 - **Flow partitions have no retention policy.** `flow_events` and `flow_stats_daily` gain a partition every month and nothing removes them (backend README).
+- **The "Deal moved to" hint says the stage is optional, but it is required.** The trigger drawer's hint reads "Leave unset to fire on every stage change" (`TriggerDrawer.tsx`), but the backend's trigger config marks `stage_id` required and refuses the flow with 422 without it (`triggers.go`). "Deal stage changed" is the trigger for every stage change.
+- **The step picker shows raw catalog descriptions.** Catalog descriptions override the app's own copy (`lib/nodes.ts`, `entry.description ?? preset?.description`), so Create task reads "… Config: `mentions` — user ids of …" and the two enroll actions read "… Config: `sequenceId` — …" (`actions.go`).
+- **Deliverability still shows unbuilt controls the trimmed design drops.** Suppression's Domains tab reads "Domain blocking is coming soon" (`SuppressionDomainsPanel.tsx`); Export CSV is disabled with "CSV export has no backend endpoint yet" (`SuppressionPanel.tsx`); "Global opt-out suppression" and "Honor GDPR deletion requests" carry a "Coming soon" pill (`ComplianceRulesCard.tsx`); and the Frequency cap's "contacts at their cap right now" count shows "—" because there are no per-contact counters (`FrequencyCapPanel.tsx`). The app should hide them or keep them clearly disabled.
+- **Concurrency label mismatch.** The Frequency cap page labels the guardrail "Max simultaneous sequences per contact", but the backend's `max_concurrent_flows` counts automations and sequences together.

@@ -113,10 +113,11 @@ Calls and texts are paid from a prepaid balance (rate card `v1`).
 Wallet rules:
 - **Top-up amounts:** minimum $20, maximum $999,999.99 per top-up, whole cents. Presets in the app are $20, $50 and $100.
 - **Who can top up:** only workspaces on a paid plan. A trial cannot buy credit.
+- **Low-balance notices:** owners are notified once when the balance crosses below $5, and again when it falls below the price of one SMS ($0.02).
 - **Running out:** when the balance cannot cover a send, the send is refused. A charge the balance could not cover is shown as an unpaid charge and is not billed later.
 - **Refunds:** balance is never refunded to a card. A send that did not happen is reversed back into the wallet.
 - **Rate changes:** every charge records the rate card version and the unit price, so a later rate change never rewrites history.
-- **Welcome credit:** granted once per workspace on the first paid plan invoice. It is not granted again on a resubscribe or a plan change.
+- **Welcome credit:** granted once per workspace on the first paid plan invoice. It is granted once per workspace: not again on a resubscribe or a later plan change. Solo grants nothing and does **not** use up the once-per-workspace credit, so a workspace that moves from Solo to Team, Pro or Business earns it on its first full paid invoice (proration invoices are skipped).
 
 ## Trial
 

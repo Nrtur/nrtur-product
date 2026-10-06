@@ -55,14 +55,14 @@ A deal is a revenue opportunity. Every deal sits in exactly one pipeline and one
 - Board: drag a card to another column to move it (optimistic, rolled back on error). Each card also has a keyboard "Move to…" select. Cards show name, company, amount, an "Overdue" flag when an open deal's close date has passed (otherwise an age dot and last-updated time), and the owner.
 - Column header: stage name, count, total value, probability; a "⋯" menu with "Enroll stage in sequence…" (bounded audience, consent-checked), "Stage automation…" (an info sheet that links to Automations; no per-stage rule list), and "Edit stages" (owner/admin). "Select all in stage" is shown disabled with a "Soon" badge; "Email everyone in stage" is not rendered (SCRUM-921).
 - Small screens get a stage chip strip instead of side-by-side columns.
-- List view: fixed columns Opportunity, Company / Contact, Stage, Amount, Close Date, Owner, Age. Row click opens the deal. No selection, no bulk actions, no column chooser, no inline edits (there is no deal bulk endpoint).
+- List view: fixed columns Opportunity, Company / Contact, Stage, Amount, Owner, Close Date, Age. Headers are not sortable. Row click opens the deal. No selection, no bulk actions, no column chooser, no inline edits (there is no deal bulk endpoint).
 - Forecast view: "By stage" (open deals, value and weighted value per stage, deal probability overrides stage probability, plus a "Closed won" line) and "By close date" (Overdue, this month and the next three months, Later, No close date). The headline figure is the server forecast; the breakdown covers only the loaded deals and says so when narrowed.
 
 **Deal page** (`DealDetailView.tsx`)
 - Header: "← Pipeline" breadcrumb, "Move to {next stage}" button, a disabled "Schedule · Coming soon" button, and a "⋯" menu with Edit deal and Delete deal (confirm). No record switcher.
 - Hero: name and company, win probability (green ≥ 70, amber ≥ 40), amount, stage pill (Won/Lost), pipeline chip, "In {stage} for N days" (from the newest stage-change activity, falling back to created date; hidden for closed deals), clickable stage stepper.
 - Pipeline chip (`DealPipelineMover`): "Move to pipeline" sends one `PUT` with the new `pipeline_id` and the target's first non-lost stage. Moving a won/lost deal warns that it reopens it. A static chip when there is only one pipeline. There is no multi-pipeline enrollment.
-- About panel: Name, Amount, Expected close date, Owner (read-only here, edited via Edit deal); Primary contact and Company (click to edit with a searchable picker, clearable, with an open-record link); Next action (select); Tags (picker); Status (derived Open / Won / Lost). Pipeline, stage and probability are in the hero only.
+- About panel: Name, Amount, Expected close date, Owner (read-only here, edited via Edit deal); Primary contact and Company (click to edit with a searchable picker, clearable, with an open-record link); Next action (select); Tags (picker); Status (derived Archived / Won / Lost / Open; an archived deal reads Archived whatever its stage). Pipeline, stage and probability are in the hero only.
 - Custom fields card (`GET`/`POST /deals/{id}/custom-fields`).
 - Tasks card (`RecordTasks`, shared with tasks).
 - Timeline: the deal's own events only (`GET /deals/{id}/activities`), tabs All · Notes · Tasks · Deals with counts. Composer: Note (with attachments) and Task (opens the task drawer pre-linked to the deal). Rows expand to show details.
@@ -123,6 +123,8 @@ A deal is a revenue opportunity. Every deal sits in exactly one pipeline and one
 - The KPI strip ignores stage, custom-field and client-side filters (only pipeline and owner are sent to the forecast).
 - "Select all in stage" is rendered disabled with "Soon" in the stage menu; it should be removed rather than shown.
 - The "Stage automation…" sheet is a placeholder that points to Automations.
+- "Enroll stage in sequence…" lists email sequences only (no SMS sequences) and offers no start timing, business-days or start-step choice: enrollment starts at the sequence's first step. A "start from a template" row opens the sequence builder (owner/admin only) rather than creating and enrolling in one go (`StageSequenceModal.tsx`).
+- The create-deal sheet has no Pipeline, Next action or Tags field (pipeline comes from the board on screen or the default; Next action and Tags are set on the deal page afterwards). It does have Probability.
 - The stage-menu deal count is scoped by owner only; under any other filter it reports the whole stage and the audience actions stand down.
 - The backend pipeline/stage role check accepts only `owner` and `admin`; a legacy `manager` row (admin-equivalent elsewhere) gets 403.
 - `features/deals/README.md` lags the code in places (for example it says Next action and Tags are not rendered on the deal page; they are).

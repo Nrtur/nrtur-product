@@ -24,7 +24,7 @@ A task is a to-do with a title, priority, optional due date (all-day or timed), 
 - Due: a civil date, optionally a time and an IANA time zone. An all-day task is pinned to 09:00 in the workspace zone. Quick chips: Today, Tomorrow, Weekend, Next week. On edit, an untouched due field is not re-sent; clearing it sends `null`.
 - Reminder: None, At due time, 5, 10, 15, 30 min, 1 hour or 1 day before (any value ≥ 0 is accepted by the API). "Also email me" appears once a reminder is set.
 - Assignee must be an active member of the workspace (422 `ASSIGNEE_NOT_MEMBER`).
-- Related record: Type (Contact / Lead / Company) plus a record picker, and a separate Deal picker. At most one primary record. A related record from another workspace is 400 `INVALID_REFERENCE`.
+- Related record: one Type dropdown (Lead / Contact / Company / Deal) and one record picker (`RelatedRecordFields.tsx`). A Deal pick also fills the task's `deal_id` (the API requires `rel_record_id === deal_id` when the type is deal). There is no separate Deal picker in the drawer; older tasks can still carry both a primary record and a deal. At most one primary record. A related record from another workspace is 400 `INVALID_REFERENCE`.
 - Marking done stamps `completed_at`; reopening clears it.
 - Creating a task, and completing it, writes a `task` activity on the primary related record's timeline (not on the deal when both are set). Un-completing writes nothing.
 - Assigning a task to someone, and @mentioning someone in its notes, sends them an in-app notification.

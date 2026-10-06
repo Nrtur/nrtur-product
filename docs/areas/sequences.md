@@ -23,17 +23,18 @@ A sequence is a drip campaign on one channel, **SMS** or **Email**: an ordered l
 
 ## Behaviour and rules
 - **Channels.** Only `sms` and `email` exist. Migration 0065 / D54 removed `push` and `inapp` from the flow channel vocabulary, so the API returns 422 for them on every route. The app still renders Push and In-app as inert tabs (`SequenceChannelTabs.tsx`, `engageTabs.ts`).
-- **Statuses.** A sequence is `draft`, `active`, `paused` or `error`.
+- **Statuses.** A sequence is `draft`, `active`, `paused` or `error`. In practice the runner never moves a sequence to `error`: the flow-level error transition (`SetFlowErrored`) is pinned to `flow_kind = 'automation'`, so a failing sequence step fails only that enrollment and the sequence stays `active`.
   - **Create** always writes `draft`. An update never changes status, so "Save" and "Save as draft" do the same thing.
-  - **Activate or pause.** Activation (`PATCH /sequences/{id}/status`) recompiles and validates the stored steps. An errored sequence returns 409 `FLOW_ERRORED` until it is paused, and 503 means no compiler is wired.
+  - **Activate or pause.** Activation (`PATCH /sequences/{id}/status`) recompiles and validates the stored steps. A flow in `error` returns 409 `FLOW_ERRORED` until it is paused (this is reachable for automations, not for sequences), and 503 means no compiler is wired.
+  - **No delete or archive.** There is no DELETE or archive route for a sequence (`service/sequences.go`), and `DELETE /automations/{id}` matches automations only. A sequence can only be paused.
   - **No trigger check.** The trigger-liveness gate is deliberately skipped for sequences (D65). Their stamped trigger is `manual.enrolled`.
 - **Steps** (`SequenceStep`: `subject?`, `body`, `delay`, `sendTime` or `at`/`tz`).
   - **Required text.** Email needs a subject and a body. SMS needs a body.
   - **Merge tags.** An unknown merge tag is rejected client-side (`schemas/sequenceStepSchema.ts`).
   - **SMS segments.** SMS shows a GSM-7/UCS-2 segment counter.
-  - **Delays.** Step 1 cannot have a delay. Each later step defaults to a delay of N minutes, hours, days or weeks.
+  - **Delays.** Step 1 cannot have a delay. Each later step takes a delay of N minutes, hours, days or weeks.
 - **Scheduling.**
-  - **Email** steps use the shared `ScheduleField`: wait N, then send "as soon as eligible", at a time of day, or on chosen weekdays. There is no calendar date for sequences. The timezone is the workspace's or a fixed zone; the contact's timezone is not supported.
+  - **Email** steps use the shared `ScheduleField` with the calendar tab turned off (`allowCalendar={false}`, `WaitDrawer.tsx`): wait N, then send **"As soon as it ends"** or **"At a time"**. Weekdays are an optional refinement inside "At a time", not a mode of their own, so "as soon as eligible on chosen weekdays" cannot be stored. "At a time" carries an **"If the time has already passed"** choice: wait for the next matching day, or send now instead. There is no calendar date for sequences. The timezone is the workspace's or a fixed zone; the contact's timezone is not supported.
   - **Legacy send times.** A legacy 12-hour `sendTime` is shown as an equivalent schedule and is resent unchanged unless the user edits it. A step never carries both `sendTime` and `at`.
   - **SMS** has a delay only, with no send-time control.
   - **Quiet hours** (workspace guardrail) still hold any send outside the sending window.
@@ -46,6 +47,7 @@ A sequence is a drip campaign on one channel, **SMS** or **Email**: an ordered l
   - **Email reply.** An inbound email reply ends live enrollments with `replied`. Matching uses the provider thread id.
   - **Suppression.** Suppressed recipients (including unsubscribes) are skipped at the suppression gate and the enrollment can end with `suppressed`.
   - **Not detected yet.** `meeting_booked` and `bounced` exist in the vocabulary, but nothing in the backend writes them.
+  - **No SMS reply exit.** Only an inbound **email** reply ends an enrollment. An SMS reply does not end an SMS sequence (the worker wires only the inbox observer, `service/reply.go`).
 - **Enrollment** (`POST /flows/{id}/enroll`).
   - **Batch size.** Up to **100** distinct ids per request. More than that returns 422 and nothing is enrolled; the API never does a partial truncate.
   - **Server report.** The server returns enrolled and skipped counts with a reason per skipped record: `already_enrolled`, `condition_not_met`, `max_concurrent_flows`, `suppressed` or `no_contact_linked`.
@@ -61,13 +63,13 @@ A sequence is a drip campaign on one channel, **SMS** or **Email**: an ordered l
 - **Plan gates** (`lib/planGates.ts`, `internal/platform/entitlements/catalog.go`).
   - **Which plans include sequences.** The `sequences` feature is **off on Trial, Solo and Team/Starter** and on for Pro and Business, where active sequences are unlimited.
   - **What is checked.** Create checks `total_flows`. Activate checks `active_sequences` and the `sequences` feature.
-  - **Plan-limit pause.** Each send also draws the monthly automated-send meter (Pro 7,500, Business 35,000). When the plan refuses a draw, the sequence is paused with `engine: plan_limit:automated_sends`.
+  - **Plan-limit refusal.** Each send also draws the monthly automated-send meter (Pro 7,500, Business 35,000). When the plan refuses a draw, the step fails with `plan_limit:automated_sends` and is not auto-retried, so that enrollment ends `failed`. The sequence is **not** paused and does **not** go to `error`: unlike an automation (which flips to `error` with `engine: plan_limit:automated_sends`, see `automations.md`), a sequence stays `active` and every later enrollment that reaches a send step fails the same way. After upgrading or the cycle resetting, an owner or admin can retry each failed enrollment from the failed step.
   - **Enforced.** `entitlements.Boot()` turns on strict enforcement of every cap, meter and feature gate in both the API and the worker. Code comments that still mention `watch` mode are out of date.
 - **Starters.** The New-sequence drawer seeds from a local list (`lib/starters.ts`). SMS has New Lead Welcome, Proposal Follow-up and Re-engagement. Email has Lead Nurture, Demo Follow-up and Onboarding. The backend's `GET /flows/sequence-template-catalog` is not used.
 
 ## Permissions
 - **Owner and admin** (`config:manage`): create, edit, activate or pause sequences; manage folders. Retry from a failed step uses the same rule as automations.
-- **Member** (`crm:write`): view the list and builder read-only; **enroll** records they can edit (`POST /flows/{id}/enroll`); unenroll through the API.
+- **Member** (`crm:write`): view the list (the on/off switch, folder button and Edit are hidden, `SequenceRow.tsx` `canManage &&`), so the read-only builder is reachable only by URL or an enrollment deep link; **enroll** records they can edit (`POST /flows/{id}/enroll`); unenroll through the API.
 - **Plan gate first.** Create, update and status routes are wrapped in `RequireFeature(sequences)` before the permission check (`cmd/api/main.go`).
 
 ## API
@@ -114,3 +116,5 @@ A sequence is a drip campaign on one channel, **SMS** or **Email**: an ordered l
 - **`schedule_summary` is not on the wire**, so wait tiles show a plain summary built from the delay and schedule.
 - **The automated-send meter can over-count SMS.** When the prepaid wallet is empty, the unit is still drawn (see `automations.md`).
 - **`/sequences` and `/sequences/{channel}` return 404** instead of redirecting to the Engage tab.
+- **A plan-limited sequence has no single stop.** When the automated-send allowance runs out, an automation flips to `error` once and notifies owners and admins. A sequence cannot enter `error` (`SetFlowErrored` is pinned to automations), so it stays `active`, each enrollment fails at its next send with `plan_limit:automated_sends`, no flow-errored notification fires, and each failed enrollment needs its own retry.
+- **The list can render an Error status that sequences never reach.** `lib/status.ts` and `SequenceRow.tsx` map `error` and a "Last run failed" line, but the backend never sets `error` on a sequence.

@@ -19,24 +19,24 @@ Companies are the organisations that contacts, deals and (after conversion) lead
 
 ## Behaviour and rules
 **List**
-- Page size 25; backend default 20, max 100.
+- Page size 25; backend default 20, max 100 (a larger `page_size` falls back to 20 rather than being clamped).
 - Search `q` matches name and domain (debounced 300 ms).
 - Sort: Name only in the UI (`name_asc` / `name_desc`, default `recent`). The backend also accepts `oldest`.
 - Columns: Company, Type, Industry, Contacts, Open deals, Owner (default); Annual revenue, Employees, Location, Website, Tags (optional). Type and Owner are editable inline. Contacts and Open deals always render empty (the API returns no counts).
 - System views: All Companies, My Companies (`owner_id` = me), Archived. Customers, Prospects, With deals, Recently Active, Going Cold and No Owner render as disabled "Coming soon" rows (cut from the design). "Save view" is disabled: there are no user saved views for companies yet.
 - Filters: the Filters popover builds conditions but they are never sent. It shows a "Preview — advanced filtering is coming soon" banner (SCRUM-1206). Treat filtering as not built.
 - Bulk: selecting rows shows only "N selected" and Clear. Archive, Delete, Change type, tags and Assign owner are withheld (SCRUM-921; there is no companies bulk endpoint).
-- Row menu: Archive (asks for confirmation) and Restore.
+- Row actions (inline buttons, no menu): an Archive icon on each row (asks for confirmation); in the Archived view, a Restore button.
 - Tools gear: Find & merge duplicates (in-page mode; `GET /companies/duplicates` uses name and phone signals; merge via `POST /companies/{id}/merge`; plan feature `duplicate_detection`, not on Solo), Manage properties (owner/admin), Manage statuses. "Manage tags" is disabled.
 
 **Create / edit**
-- UI rules (`schemas/companySchema.ts`): name required (≤ 120); website/domain ≤ 120 and must look like `company.com`; type is one of customer, prospect, partner, competitor, other (create defaults to prospect); employees whole number; location ≤ 120; owner; tags; custom fields. Industry is free text with suggestions (Marketing & Advertising, Software / SaaS, Design / Creative, Consulting, Media, E-commerce, Finance, Healthcare).
-- Backend rules: name required (≤ 255). The domain is normalised to a bare host and must be unique per live company in the workspace (409 `company_domain_exists`, shown inline with a link to the existing company). `company_type` is restricted to the same five values and stored lowercase. `description` is an alias for `notes`.
+- UI rules (`schemas/companySchema.ts`): name required (≤ 120); website/domain ≤ 120 and must look like `company.com`; type is one of customer, prospect, partner, competitor, other (create defaults to prospect); employees whole number; location ≤ 120; owner; tags; custom fields. Industry is picked from a fixed list of eight (`COMPANY_INDUSTRIES`: Marketing & Advertising, Software / SaaS, Design / Creative, Consulting, Media, E-commerce, Finance, Healthcare), in both the sheet and the properties panel; the API accepts any text ≤ 100.
+- Backend rules: name required (≤ 255). The domain is normalised to a bare host and must be unique per live company in the workspace (409 `COMPANY_DOMAIN_EXISTS`, shown inline with a link to the existing company). `company_type` is restricted to the same five values and stored lowercase. `description` is an alias for `notes`.
 - The sheet's "Multiple records" toggle is disabled; multi-add exists only through Quick add.
 - Plan cap: New Company, Import and Create are gated by the per-type companies cap (trial 2,500, Solo 5,000, Team 50,000, Pro 500,000, Business 2,000,000). Editing is never gated.
 
 **Company page**
-- Header: breadcrumb, record switcher (Previous/Next through the source list), Delete (confirm), New deal (deal sheet prefilled with this company), Edit.
+- Header: breadcrumb, record switcher (Previous/Next through the source list), Delete (confirm), New deal (deal sheet prefilled with this company), Schedule (a live button that only toasts "Scheduling is coming soon."), Edit.
 - Hero: logo (favicon derived from the domain), domain link, type badge, and stat tiles Contacts / Open deals / Pipeline that jump to the panels (computed from the loaded lists).
 - Properties (inline edit): name, website, industry, owner, employees, annual revenue, location, tags; secondary fields LinkedIn, description, billing address. Parent company and shipping address are read-only (no backend fields). Custom fields are editable.
 - Deals panel: `GET /deals?company_id=` (first 6, "Show all", fetched up to 100).
@@ -62,7 +62,7 @@ Companies are the organisations that contacts, deals and (after conversion) lead
 - `GET /companies/{id}/contacts`
 - `POST /companies/{id}/tags` · `DELETE /companies/{id}/tags/{tagId}`
 - `GET|POST /companies/{id}/custom-fields`
-- `GET /companies/{id}/activities` · `GET /companies/{id}/activities/facets` · `POST /companies/{id}/activities` · `PATCH|DELETE /companies/{id}/activities/{activityId}` · `POST /companies/{id}/activities/{activityId}/attachments`
+- `GET /companies/{id}/activities` · `GET /companies/{id}/activities/facets` · `POST /companies/{id}/activities` · `PATCH|DELETE /companies/{id}/activities/{activityId}` · `POST /companies/{id}/activities/{activityId}/attachments` · `GET /companies/{id}/activities/{activityId}/attachments/{attachmentId}` (download)
 - `GET /companies/duplicates` · `POST /companies/{id}/merge`
 - `POST /imports/companies/analyze|validate|import` · `GET /imports/{id}` · `GET /imports/{id}/rows`
 - `GET /deals?company_id=` · `GET /workspaces/{id}/members` · `/tasks`
@@ -89,3 +89,4 @@ Companies are the organisations that contacts, deals and (after conversion) lead
 - UI name limit 120 vs backend 255; domain 120 vs 255.
 - The Contacts and Open deals list columns are always empty.
 - Schedule shows a "Scheduling is coming soon." toast rather than being hidden.
+- Industry is a closed list of eight in the UI, while the API accepts any text ≤ 100. Values set by import or the API can fall outside the picker's options.

@@ -27,7 +27,7 @@ nrtur runs managed telephony: the workspace buys US phone numbers inside the app
 - Number status on the wire is `active` or `releasing`. Release asks for confirmation and cannot be undone.
 - Inbound routing per number: assigned to one member, or "Everyone" (`assignedUserId: null`). Sending an empty string is a 400 error.
 - The list header reads "N numbers · $X/mo · billed to your workspace". The default sender shows as a read-only "Default" badge.
-- Plan cap `phone_numbers`: Trial 0; Solo 0 included (one can be bought as an add-on); Team, Pro and Business 1 per user, with add-ons up to 2 × users. The "Buy number" button is blocked when the cap is reached, and a server 422 `PLAN_LIMIT_REACHED` also blocks inside the open sheet. The owner is offered the line add-on (`local_line`).
+- Plan cap `phone_numbers`: Trial 0; Solo 0 included (one can be bought as an add-on); Team, Pro and Business 1 per user, with add-ons up to 2 × users. The "Buy number" button is blocked when the cap is reached, and a server 422 `PLAN_LIMIT_REACHED` also blocks inside the open sheet. The pre-emptive notice on the page always names the local line add-on (`local_line`). When a buy is refused, the owner is offered the add-on that matches the number type: `tollfree_line` for a toll-free number, otherwise `local_line` (`billing/lib/addonDoor.ts`, `lineKindForNumberType`); the offer dialog retries the buy once.
 
 **Readiness**
 - `GET /telephony/status` returns `voiceReady`. When it is false, "Make a call" is disabled with a stated reason. Admins also get a Repair button (`POST /telephony/reprovision`, which repairs the account but does not create it: 409 `TELEPHONY_NOT_PROVISIONED` on a workspace that has never been set up). `provisionError` is shown only to admins; members are told to ask an admin.
@@ -53,6 +53,7 @@ nrtur runs managed telephony: the workspace buys US phone numbers inside the app
 - The sender is chosen in this order: a pinned `fromNumberId`, then the number already used in a thread with that recipient, then the workspace default. The picker lists only active numbers that can send SMS. Sending from a number without SMS returns 409 `TELEPHONY_NOT_SMS_CAPABLE`. Media attached while the selected number cannot send MMS blocks Send in the composer.
 - Each send carries an `Idempotency-Key`. `IDEMPOTENCY_IN_FLIGHT` keeps the message queued and is not treated as a failure.
 - A recipient who opted out returns 409 `TELEPHONY_RECIPIENT_OPTED_OUT`. Inbound STOP, STOPALL, UNSUBSCRIBE, CANCEL, END or QUIT suppresses the number. START, YES or UNSTOP lifts the suppression. Both are written to the contact timeline.
+- This STOP list (`sms_suppressions`) is the only thing that blocks a manual text. The workspace suppression list (`/suppressions`, including an SMS or `all` do-not-contact row set on a contact) does not block `POST /telephony/sms/send`; it blocks only automation and sequence SMS steps, through the flow runner's suppression gate. Calls are never checked against either list. See `inbox.md` → "What blocks a send…".
 
 **SMS segments and billing (prepaid wallet, rate card v1)**
 - The composer counts segments live: GSM-7 is 160 characters, or 153 per segment when split; UCS-2 (emoji, most non-Latin text) is 70, or 67 per segment. A warning appears at 4 or more segments.
@@ -97,6 +98,7 @@ nrtur runs managed telephony: the workspace buys US phone numbers inside the app
 - Matching a post-call note to its call relies on a heuristic until the backend fills `twilioCallSid`. It is designed to fail to find a row rather than pick the wrong one.
 - `contactName` on calls and SMS conversations is not yet filled by the backend, so the lists show numbers.
 - A trial workspace's phone-number cap is 0, so trials cannot buy a number or test calling or SMS.
-- The prototype has no incoming-call, wallet-gate, microphone-blocked or Repair states; the app has all of them.
+- **Compliance gap:** manual SMS and outbound calls do not check the workspace suppression list. A contact marked do-not-contact, or with an SMS or calls suppression row, can still be texted (unless they texted STOP) and called. Only automation and sequence SMS honour the list.
+- The prototype has no incoming-call, wallet-gate or microphone-blocked states; the app has all of them. (The prototype's Calls workspace does show a "Calling isn't ready." banner with Repair for admins.)
 - A comment in `voice_webhook.go` still says receiving a call costs nothing. Inbound minutes have been charged since SCRUM-1167.
 - `LogCallModal`, `Dialer` and a few other sheets still lack the `min-h-0` scroll fix, so a long sheet can show two scrollbars.
