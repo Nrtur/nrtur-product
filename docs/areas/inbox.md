@@ -17,7 +17,7 @@ The Inbox is one screen (`/inbox`) where a team reads and answers its email, tex
 | `/inbox` → Email | `inbox` (tab `email`) | Folder rail (Inbox, Starred, Drafts, Sent, Archived, Trash), workspace labels, connected mailboxes, thread list with filter chips, reader, inline reply composer. |
 | `/inbox` → SMS | `inbox` (tab `sms`) | Conversation list, thread with inline MMS, composer with sender-number picker and segment counter, "New message" modal. |
 | `/inbox` → Calls | `inbox` (tab `calls`) | Call log with filter chips, call detail with editable notes, "Log a call", inline dialer. Covered in detail in `phone-and-sms-setup.md`. |
-| `/inbox` → Push / In-app (under "More channels") | none (the prototype has only All, Email, SMS and Calls) | Read-only notification history. Owned by the Notifications area. |
+| `/inbox` → Push / In-app (under "More channels") | `inbox` (More → Push / In-app) | Read-only notification history. Owned by the Notifications area. |
 | Compose modal (Email tab, All-tab "Compose" menu, quick-add) | `EmailComposeModal` | New email from a chosen mailbox. |
 | `/settings?tab=integrations` → email accounts card | `settings-integrations` | List, connect, reconnect and disconnect mailboxes. Shared with the Integrations area. |
 | `/unsubscribe/[token]` (public, outside the app shell) | none | Recipient confirms opt-out from an automation email. |
@@ -125,5 +125,5 @@ There are two stop lists. The workspace suppression list (`suppressions`, `/supp
 - **Compliance gap: manual SMS and calls ignore the suppression list.** Manual SMS is refused only after an inbound STOP (`sms_suppressions`); an SMS or `all` row added from Communication preferences does not block it. No call path checks suppression at all, so a `calls` row is never enforced.
 - The inbox status footer counts only `status === "error"` as "reconnect needed" (`InboxWorkspace.tsx`). An account in the needs-reconnect state (expired or failed grant) still reads "live sync".
 - Microsoft 365 / Outlook is rendered as a disabled "coming soon" card in the connect screens; per the Soon rule it is left out of the design.
-- The app has screens the prototype does not: the "More channels" menu (Push, In-app, MMS pointer), Reply all with editable To/Cc, email search on the Email tab, per-mailbox sync states, the status footer, the Reconnect flow, the sequence chip and line, Attach media in the New SMS modal, the call-list "Load more", and the unsubscribe page.
+- The app has screens the prototype does not: the Reconnect flow, the sequence chip and line, and the unsubscribe page. (The prototype shows per-mailbox sync states and the status footer through a demo toggle, not a real reconnect.)
 - Per-IP rate limiting on unsubscribe sits behind the frontend proxy. It is unconfirmed whether the backend reads the real client IP, so recipients could share one bucket.
