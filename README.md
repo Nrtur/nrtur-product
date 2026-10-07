@@ -10,7 +10,7 @@ The single source of truth for **what nrtur is**: the design and the product doc
 | Path | What it is |
 |---|---|
 | [`design/`](design/) | The clickable prototype, served at **design.nrtur.io**. It shows only screens that are built or approved. |
-| [`docs/`](docs/) | Product docs: one file per product area, plus cross-cutting docs (permissions, glossary). |
+| [`docs/`](docs/) | Product docs: one file per product area, plus cross-cutting docs (permissions, personas). |
 | [`pricing/`](pricing/) | Plans, prices and limits. This is the one pricing source. |
 | [`decisions/`](decisions/) | Owner decisions, dated. These explain *why* things are the way they are. |
 | [`proposals/`](proposals/) | Features under review or approved but not yet built. |

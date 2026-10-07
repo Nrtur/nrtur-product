@@ -88,7 +88,7 @@ Leads are unqualified prospects that a team works before turning them into conta
 - Every member sees every lead.
 - Owner/admin only (`config:manage`): lead-status CRUD and the default status; custom-field definitions; editing lead-scoring rules (`PUT /lead-scoring-rules` returns 403 for a member). Members see the scorecard read-only (both `GET` and `PUT /lead-scoring-rules` require the `lead_scoring` plan feature).
 - Saved views: as for contacts (creator, or owner/admin for shared views).
-- Legacy `manager` role is treated as admin.
+- Legacy `manager` role: passes capability checks like admin, but is refused wherever the backend checks for owner/admin literally (see [permissions.md](../permissions.md)).
 
 ## API
 - `GET /leads` · `POST /leads` · `GET /leads/{id}` · `PUT /leads/{id}` · `DELETE /leads/{id}`

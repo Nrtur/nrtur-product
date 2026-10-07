@@ -13,6 +13,7 @@ These are owner decisions taken while billing was built. The current numbers liv
 ## 2026-09-10
 
 - **A "user" (seat) is an accepted member.** You buy a seat, then invite someone. The seat is used only when the person accepts. Pending invitations don't count. Deactivated (suspended) members don't count either, and reactivating one is subject to the seat cap.
+  - **Superseded in the build (seat reservation):** sending an invitation now *reserves* a seat. The invite is refused when members plus pending invitations would exceed the seats bought (`checkInviteCap` in `users/service/invitation.go`). Billing still counts only accepted members.
 - **Mailbox and phone-line caps are additive:** a base allowance for the workspace, plus 2 for every additional member.
   - Example (mailboxes on Team): 1 user = 10, 2 users = 12, 3 users = 14.
   - The pricing page's old wording "10 or 2 per user" was wrong and was reworded.
@@ -24,6 +25,7 @@ These are owner decisions taken while billing was built. The current numbers liv
 
 - **Automated sends per month: Team 1,000 · Pro 7,500 · Business 35,000.** The trial gets Pro's 7,500.
 - **A mid-cycle downgrade keeps the higher send allowance until the cycle ends.**
+  - **Superseded by the 2026-09-15 plan-switching decisions:** a *paid* downgrade lowers the allowance immediately to the new plan's bundle, minus what has already been used (`BundleLowered` in `entitlements/grant.go`). The switch is refused while this cycle's usage is above the target plan's allowance. Only a *cancellation* keeps the higher allowance until the cycle rolls.
 - **Cancelling the plan also cancels the add-on subscription**, immediately and without proration. A read-only workspace must not keep paying for mailboxes it cannot use.
 - **One live plan per workspace.** Checkout refuses while a plan is live, including one set to cancel at period end.
 

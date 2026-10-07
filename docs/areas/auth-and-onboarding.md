@@ -91,7 +91,7 @@ This area covers everything a person goes through before they reach the CRM. The
 ## Permissions
 - Every screen here is pre-auth or public, except onboarding, which needs a session.
 - The sign-up user becomes **owner** of their new workspace.
-- An invited user gets the invite's role, **admin** or **member**. Owner is never invitable. The legacy `manager` role is treated as admin by the backend.
+- An invited user gets the invite's role, **admin** or **member**. Owner is never invitable. A legacy `manager` passes capability checks like admin but is refused by literal owner/admin checks (see [permissions.md](../permissions.md)).
 
 ## API
 All paths sit under `/api/v1`.

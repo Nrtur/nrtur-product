@@ -195,7 +195,7 @@ The full price and limit table is in [`pricing/pricing.md`](../../pricing/pricin
   - the per-state page layouts and the floating billing-state switcher
 
 ## Known gaps
-- **Subscription read is owner-only.** `GET /billing/subscription` is restricted to the owner, but `SubscriptionDetailsCard` and `InvoicesCard` are mounted for every member. For admins and members the read is refused, so those cards have nothing to show.
+- **Subscription read is owner-only.** `GET /billing/subscription` is restricted to the owner, but `SubscriptionDetailsCard` and `InvoicesCard` are mounted for every member. For admins and members the request is refused (403) and both cards render nothing, so they never see subscription details or invoices, at the cost of one wasted request per visit.
 - **Monthly↔yearly switching** is refused in the app ("contact support").
 - **Add-ons past the hold at checkout.** Checkout could sell add-ons past the plan's hold, while the add-on door refuses that. This was a listed backend follow-up in the 2026-09-18 handoff and was not re-verified here.
 - **Stale comments** in `entitlements/catalog.go` still say caps run in watch mode; they all enforce. The frontend billing README is also out of date, for example `ADDONS_PURCHASABLE` (now true).

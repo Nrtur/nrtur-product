@@ -14,19 +14,19 @@ nrtur runs managed telephony: the workspace buys US phone numbers inside the app
 |---|---|---|
 | `/settings?tab=phone-numbers` | `settings-phone-numbers` | "Your numbers" list (number, capabilities, status, inbound routing, monthly price, Release) and "Buy number". |
 | Buy number sheet (from the page above) | `BuyNumberModal` | Search (country, Local or Toll-free, optional 3-digit area code) → priced results → confirmation summary → buy. |
-| Softphone dock, on every app page (`<Softphone>` in `AppShell`) | none (closest is the `CallsWorkspace` dialer and `ContactDialerPopover`) | Dial pad with a caller-ID picker, live call (Mute, Keypad/DTMF, quick note, End) and a wallet countdown. |
+| Softphone dock, on every app page (`<Softphone>` in `AppShell`) | `SoftphoneDock` (opened from the contact and lead pages only; also the `CallsWorkspace` dialer) | Dial pad with a caller-ID picker, live call (Mute, Keypad/DTMF, quick note, End) and a wallet countdown. |
 | Incoming call dialog, on every app page | none | Accept or decline, with a best-effort caller name. |
 | Post-call notes modal | `CallEnrichmentForm` | Outcome, reason, next step and notes, saved onto the call the backend logged automatically. |
 | `/inbox` → Calls | `inbox` (tab `calls`) → `CallsWorkspace` | Call log, call detail, "Log a call", inline dialer, "Make a call". |
 | Log a call modal (Calls tab, contact record, quick-add) | `LogCallModal` | Manually log a call that happened outside nrtur. |
-| Contact and lead record "Call" button | `ContactDialerPopover` | Opens the global softphone with the record's number filled in. |
+| Contact and lead record "Call" button | `contact-detail` / `lead-detail` → `SoftphoneDock` | Opens the global softphone with the record's number filled in. |
 
 ## Behaviour and rules
 **Numbers**
-- Search is US only (the country select has one option) and covers `local` or `toll_free` numbers. The area code is optional and must be exactly 3 digits. Each result shows `$X.XX/mo`. Before buying, a summary reads "You'll be charged $X/month for {number}, billed to your workspace". A purchase can take several seconds while the workspace's telephony account is created.
+- Search is US only (the country select has one option) and covers `local` or `toll_free` numbers. The area code is optional and must be exactly 3 digits. Each result shows `$X.XX/mo`. Before buying, a summary reads "You'll be charged $X/month for {number}, billed to your workspace". That price is a display-only placeholder: the backend returns a flat `NumberMonthlyPriceCents = 500` ($5.00/mo) for every number, local or toll-free (`telephony/dto.go`, `numbers.go`), stores it as `monthly_cost_cents`, and never charges it. Lines are actually billed through the plan: included lines per plan, then the $5 local / $8 toll-free line add-ons (see `pricing/pricing.md`). See Known gaps. A purchase can take several seconds while the workspace's telephony account is created.
 - Number status on the wire is `active` or `releasing`. Release asks for confirmation and cannot be undone.
 - Inbound routing per number: assigned to one member, or "Everyone" (`assignedUserId: null`). Sending an empty string is a 400 error.
-- The list header reads "N numbers · $X/mo · billed to your workspace". The default sender shows as a read-only "Default" badge.
+- The list header reads "N numbers · $X/mo · billed to your workspace", where $X is the sum of the placeholder per-number prices. The default sender shows as a read-only "Default" badge.
 - Plan cap `phone_numbers`: Trial 0; Solo 0 included (one can be bought as an add-on); Team, Pro and Business 1 per user, with add-ons up to 2 × users. The "Buy number" button is blocked when the cap is reached, and a server 422 `PLAN_LIMIT_REACHED` also blocks inside the open sheet. The pre-emptive notice on the page always names the local line add-on (`local_line`). When a buy is refused, the owner is offered the add-on that matches the number type: `tollfree_line` for a toll-free number, otherwise `local_line` (`billing/lib/addonDoor.ts`, `lineKindForNumberType`); the offer dialog retries the buy once.
 
 **Readiness**
@@ -97,8 +97,9 @@ nrtur runs managed telephony: the workspace buys US phone numbers inside the app
 - Telephony types in the frontend are hand-written against the spec, not generated from it (`telephonyService` uses `bffFetch`).
 - Matching a post-call note to its call relies on a heuristic until the backend fills `twilioCallSid`. It is designed to fail to find a row rather than pick the wrong one.
 - `contactName` on calls and SMS conversations is not yet filled by the backend, so the lists show numbers.
+- **Per-number price is a placeholder:** every number shows a flat $5.00/mo (search results, the pre-buy summary, the list rows and the "N numbers · $X/mo · billed to your workspace" header), local or toll-free, but nothing charges it. Real line cost comes from the plan's included lines plus the $5 local / $8 toll-free add-ons (`pricing/pricing.md`). So a Team user's included line is labelled "$5.00/mo billed to your workspace" although it costs nothing extra, and a toll-free number reads $5 although its add-on is $8.
 - A trial workspace's phone-number cap is 0, so trials cannot buy a number or test calling or SMS.
-- **Compliance gap:** manual SMS and outbound calls do not check the workspace suppression list. A contact marked do-not-contact, or with an SMS or calls suppression row, can still be texted (unless they texted STOP) and called. Only automation and sequence SMS honour the list.
+- **Compliance gap:** the backend does not check the workspace suppression list for manual SMS (`POST /telephony/sms/send`) or outbound calls. The contact page does block client-side: Make call, Send SMS and Send Email are disabled when a matching suppression row exists (`ContactDetailView.tsx`, `blockingRowFor` for calls / sms / transactional), and the prototype matches that. The gap is real everywhere else: a do-not-contact number can still be texted (unless they texted STOP) or called from the dialer with a typed number, from the inbox, from the lead page, or through the API. Only automation and sequence SMS honour the list server-side.
 - The prototype has no incoming-call, wallet-gate or microphone-blocked states; the app has all of them. (The prototype's Calls workspace does show a "Calling isn't ready." banner with Repair for admins.)
 - A comment in `voice_webhook.go` still says receiving a call costs nothing. Inbound minutes have been charged since SCRUM-1167.
 - `LogCallModal`, `Dialer` and a few other sheets still lack the `min-h-0` scroll fix, so a long sheet can show two scrollbars.

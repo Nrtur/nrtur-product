@@ -7,7 +7,7 @@ verified_on: 2026-10-06
 # Workspace settings
 
 ## What it does
-Settings is where a workspace is configured and where each person manages their own account. `/settings` is one screen with a grouped rail on the left, a per-page title bar, and the active page in the body. The page is chosen with `?tab=`. Owners and admins can rename the workspace and set its defaults, and they can invite and manage teammates. They also set the legal mailing address that automation emails need, set task defaults, and manage custom fields, tags and statuses. Owners and admins can also merge duplicates and connect email accounts. Members can open every page, but workspace pages are read-only for them, with a "Managed by your admin" notice, with three exceptions: on **Tags** members can create (not delete); **Duplicates** is fully usable by members (scan, dismiss, merge), with no notice; and **Integrations** shows no notice but hides Connect and Disconnect from members. Each user's own profile, password and sign-out live on `/profile`. Billing, phone numbers, pipeline/deal settings and notification settings sit in the same menu but are documented in their own area docs.
+Settings is where a workspace is configured and where each person manages their own account. `/settings` is one screen with a grouped rail on the left, a per-page title bar, and the active page in the body. The page is chosen with `?tab=`. Owners and admins can rename the workspace and set its defaults, and they can invite and manage teammates. They also set the legal mailing address that automation emails need, set task defaults, and manage custom fields, tags and statuses. Owners and admins can also merge duplicates and connect email accounts. Members can open every page, but workspace pages are read-only for them, with a "Managed by your admin" notice, with three exceptions: on **Tags** members can create (not delete); **Duplicates** is fully usable by members (scan, dismiss, merge), with no notice; and **Integrations** shows no notice but hides Connect and Disconnect from members (a member can still connect a mailbox from the Inbox; `POST /inbox/accounts/connect` has no role check). Each user's own profile, password and sign-out live on `/profile`. Billing, phone numbers, pipeline/deal settings and notification settings sit in the same menu but are documented in their own area docs.
 
 ## Screens
 The Settings menu, exactly as the app ships it. Every item not listed here is cut.
@@ -137,8 +137,8 @@ These rules are enforced by `internal/platform/authz/policy.go` plus service che
 
 | Area | Owner | Admin | Member |
 |---|---|---|---|
-| View any settings page | yes | yes | yes (read-only) |
-| General: edit (`workspace:manage`) | yes | yes | no |
+| View any settings page | yes | yes | yes (most read-only; see the exceptions above) |
+| General: edit (owner/admin literal check, not `workspace:manage`) | yes | yes | no |
 | Delete workspace (`workspace:delete`) | yes | no | no |
 | Team: invite, resend, revoke, list invites | yes | yes | no |
 | Team: change role, remove | everyone | members only | no |

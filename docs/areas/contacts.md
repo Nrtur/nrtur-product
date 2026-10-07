@@ -63,7 +63,7 @@ Contacts are the people a workspace sells to. The Contacts page is a searchable,
 - Owner/admin only (`config:manage`): contact-status CRUD, custom-field definitions, and suppression writes (`POST /suppressions`, `DELETE /suppressions/{id}`), which is what the communication-preference toggles call. `GET /suppressions` is open to every role.
 - Saved views: anyone can create personal or shared views. Personal views are editable/deletable by their creator only; shared views by their creator or an owner/admin.
 - Notes: edit/delete by author only (no admin override).
-- Legacy role `manager` is treated as admin by the backend.
+- Legacy `manager` role: passes capability checks like admin, but is refused wherever the backend checks for owner/admin literally (see [permissions.md](../permissions.md)).
 
 ## API
 - `GET /contacts` · `POST /contacts` · `GET /contacts/{id}` · `PUT /contacts/{id}` · `DELETE /contacts/{id}`

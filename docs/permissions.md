@@ -26,7 +26,7 @@ There is **no record-level visibility**: every member sees every contact, lead, 
 | Notes: edit or delete | author only | author only | author only |
 | Saved views: personal | creator | creator | creator |
 | Saved views: shared, edit or delete | ✓ | ✓ | creator only |
-| **Inbox**: read everything, send email and SMS, connect a mailbox, label threads, log calls, place calls | ✓ | ✓ | ✓ |
+| **Inbox**: read everything, send email and SMS, connect a mailbox (from the Inbox; Settings › Integrations hides Connect from members), label threads, log calls, place calls | ✓ | ✓ | ✓ |
 | Inbox: disconnect a mailbox; create, rename or delete labels | ✓ | ✓ | — |
 | **Phone numbers**: search, buy, assign, release | ✓ | ✓ | — |
 | **Automations and sequences**: view (read-only builder) | ✓ | ✓ | ✓ |
@@ -59,4 +59,4 @@ Plan limits are checked **before** role checks where both apply. For example, se
 - **Tag delete is not role-checked in the API.** `DELETE /tags/{id}` lets any member delete a tag. Only the UI hides the button.
 - **Legacy `manager` is half-admin.** It passes capability checks (`authz.Can`) but fails the literal owner/admin checks in team management, General settings, mailbox disconnect and pipelines/stages. Old manager rows should be migrated to admin or member.
 - **Calls have no ownership check.** Any member can edit or delete any call log entry.
-- **Admins and members on the billing page.** They are refused the subscription read, but the subscription and invoice cards still render for them, empty.
+- **Admins and members on the billing page.** The subscription and invoice cards are mounted for every role, but `GET /billing/subscription` is owner-only, so for others the request is refused and the cards render nothing (one wasted 403 per visit).

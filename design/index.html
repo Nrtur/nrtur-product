@@ -2357,7 +2357,7 @@ function useCloseGuard(dirty,onClose,escBlocked){
 }
 // ?? Tag + Status registry helpers ?????????????????????????????????????????????
 // Shared colour palette for tags + statuses (chips, dots, pickers).
-const NRTUR_TAG_PALETTE=['#2FA877','#9B7BDE','#9B7BDE','#C2568C','#E36B50','#E36B50','#D89B3E','#D89B3E','#D89B3E','#2FA877','#2FA877','#158B7E','#5E92D8','#5E92D8','#5E92D8','#87837A'];
+const NRTUR_TAG_PALETTE=['#2FA877','#9B7BDE','#C2568C','#E36B50','#D89B3E','#158B7E','#5E92D8','#87837A']; // unique swatches (duplicates gave React duplicate-key warnings in the tag colour pickers)
 // ╔══════════════════════════════════════════════════════════════════════════╗
 // ║  FOLDERS — ONE reusable grouping layer, applied to saved views, sequences, ║
 // ║  templates, and custom-field sections. Folders are organizational metadata ║
@@ -2925,38 +2925,23 @@ function NotifDrawer({close,goTo,initialTab}){
 // ?? AppSidebar ????????????????????????????????????????????????????????????????
 // Quick-add modal forms (opened from the sidebar "+" button — open in place, no navigation)
 // ── ContactFields ── the single-contact form inputs, shared by Quick Add + Add Contact page ──
-// Smart paste: turn "Jane Doe <jane@acme.com>" / "jane@acme.com" into structured
-// fields, inferring company from a non-freemail domain.
-function parseContactInput(text){
-  text=(text||'').trim();if(!text)return null;
-  const em=text.match(/[\w.+-]+@[\w-]+\.[\w.-]+/);
-  if(!em)return null;
-  const email=em[0];
-  let name=text.replace(em[0],'').replace(/[<>,;:"']/g,' ').trim();
-  const parts=name.split(/\s+/).filter(Boolean);
-  const first=parts[0]||'';const last=parts.slice(1).join(' ');
-  const domain=(email.split('@')[1]||'').toLowerCase();
-  const FREE=['gmail.com','yahoo.com','outlook.com','hotmail.com','icloud.com','proton.me','protonmail.com','aol.com','live.com','me.com'];
-  let company='';
-  if(domain&&FREE.indexOf(domain)<0){const base=domain.split('.')[0];if(base)company=base.charAt(0).toUpperCase()+base.slice(1);}
-  return{first,last,email,company,name};
-}
 function ContactFields({f,set}){
   const I_F='w-full px-3 py-2.5 rounded-xl bg-white/[0.04] border border-white/[0.10] text-[13px] text-white placeholder:text-white/25 outline-none focus:border-brand-500/40 transition-all';
   const L='text-[11px] font-medium text-white/45 uppercase tracking-[0.14em] block mb-1.5';
-  const smartPaste=(e)=>{const p=parseContactInput(e.clipboardData.getData('text'));if(!p||!p.email)return;e.preventDefault();set('first',p.first);set('last',p.last);set('email',p.email);if(p.company&&!f.company)set('company',p.company);};
   return(<React.Fragment>
-    <div className="grid grid-cols-2 gap-4 mb-1.5">
-      <div><label className={L}>First name</label><input value={f.first} onChange={e=>set('first',e.target.value)} onPaste={smartPaste} placeholder="Sarah" className={I_F}/></div>
+    <div className="grid grid-cols-2 gap-4 mb-4">
+      <div><label className={L}>First name</label><input value={f.first} onChange={e=>set('first',e.target.value)} placeholder="Sarah" className={I_F}/></div>
       <div><label className={L}>Last name</label><input value={f.last} onChange={e=>set('last',e.target.value)} placeholder="Chen" className={I_F}/></div>
       <div><label className={L}>Company</label><ContactCompanyField value={f.company} onChange={v=>set('company',v)}/></div>
       <div><label className={L}>Job title</label><input value={f.title} onChange={e=>set('title',e.target.value)} placeholder="CEO" className={I_F}/></div>
     </div>
-    <p className="text-[11px] text-white/50 mb-4">Tip: paste <span className="text-white/45">Jane Doe &lt;jane@acme.com&gt;</span> into the first-name field to autofill.</p>
-    <div className="mb-4"><label className={L}>Work email</label><input type="email" value={f.email} onChange={e=>set('email',e.target.value)} onPaste={smartPaste} placeholder="email@company.com" className={I_F}/></div>
+    <div className="mb-4"><label className={L}>Work email</label><input type="email" value={f.email} onChange={e=>set('email',e.target.value)} placeholder="email@company.com" className={I_F}/></div>
     <div className="grid grid-cols-2 gap-4">
       <div><label className={L}>Phone</label><input value={f.phone} onChange={e=>set('phone',e.target.value)} placeholder="+1 555 000 0000" className={I_F}/></div>
       <div><label className={L}>Status</label><select value={f.status} onChange={e=>set('status',e.target.value)} className={I_F+' appearance-none'} style={{colorScheme:'dark',background:'var(--s850)'}}>{CONTACT_STATUSES.map(s=>(<option key={s}>{s}</option>))}</select></div>
+      <div><label className={L}>Owner</label><select value={f.owner||'AM'} onChange={e=>set('owner',e.target.value)} className={I_F+' appearance-none'} style={{colorScheme:'dark',background:'var(--s850)'}}>{TEAM_MEMBERS.map(m=>(<option key={m.avatar} value={m.avatar}>{m.name}</option>))}</select></div>
+      <div><label className={L}>Source</label><select value={f.source||''} onChange={e=>set('source',e.target.value)} className={I_F+' appearance-none'} style={{colorScheme:'dark',background:'var(--s850)'}}><option value="">Select…</option>{CONTACT_SOURCES.map(s=>(<option key={s}>{s}</option>))}</select></div>
+      <div className="col-span-2"><label className={L}>Tags</label><input value={f.tags||''} onChange={e=>set('tags',e.target.value)} placeholder="Comma-separated, e.g. vip, q3" className={I_F}/></div>
     </div>
   </React.Fragment>);
 }
@@ -3061,7 +3046,7 @@ function RecordSheet({type='contact',variant='page',onToast,onCreate,onCreateRow
 // ── ContactCreator ── renders ONE mode (single form or multiple sheet); no in-page toggle ──
 function ContactCreator({variant='page',initialMode='single',goTo,onSingle,onBulk,onToast}){
   const mode=initialMode==='multiple'?'multiple':'single';
-  const [f,setF]=React.useState({first:'',last:'',email:'',phone:'',company:'',title:'',status:'Lead'});
+  const [f,setF]=React.useState({first:'',last:'',email:'',phone:'',company:'',title:'',status:'Lead',owner:'AM',source:'',tags:''});
   const set=(k,v)=>setF(s=>({...s,[k]:v}));
   const valid=f.first.trim()&&f.last.trim()&&/\S+@\S+\.\S+/.test(f.email); // first name, last name and email are required
   const submitSingle=()=>{if(!valid)return;onSingle&&onSingle(f);};
@@ -3075,7 +3060,7 @@ function ContactCreator({variant='page',initialMode='single',goTo,onSingle,onBul
   </div>);
 }
 // ── NewContactSplitButton ── primary "New contact" with single / multiple / import menu ──
-function NewContactSplitButton({goTo,onImport}){
+function NewContactSplitButton({goTo,onImport,blocked,blockedReason}){
   const [open,setOpen]=React.useState(false);
   const ref=React.useRef(null);
   useClickOutside(ref,()=>setOpen(false));
@@ -3085,8 +3070,8 @@ function NewContactSplitButton({goTo,onImport}){
   ];
   return(<div ref={ref} className="relative">
     <div className="flex items-stretch rounded-xl overflow-hidden shadow-brand">
-      <button onClick={()=>window.__nrturQuickAdd?window.__nrturQuickAdd('contact'):goTo('add-contact','single')} className="inline-flex items-center gap-2 px-4 py-2 text-[13px] font-medium text-white bg-brand-500 hover:bg-brand-400 transition-colors"><I.Plus size={14} stroke={2.4}/>New Contact</button>
-      <button onClick={()=>setOpen(v=>!v)} aria-label="More create options" className={['px-2 flex items-center justify-center text-white border-l border-white/20 transition-colors',open?'bg-brand-400':'bg-brand-500 hover:bg-brand-400'].join(' ')}><I.ChevronDown size={14}/></button>
+      <button disabled={!!blocked} title={blocked?blockedReason:undefined} onClick={()=>{if(blocked)return;window.__nrturQuickAdd?window.__nrturQuickAdd('contact'):goTo('add-contact','single');}} className="inline-flex items-center gap-2 px-4 py-2 text-[13px] font-medium text-white bg-brand-500 hover:bg-brand-400 transition-colors disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-brand-500"><I.Plus size={14} stroke={2.4}/>New Contact</button>
+      <button disabled={!!blocked} title={blocked?blockedReason:undefined} onClick={()=>{if(blocked)return;setOpen(v=>!v);}} aria-label="More create options" className={['px-2 flex items-center justify-center text-white border-l border-white/20 transition-colors disabled:opacity-40 disabled:cursor-not-allowed',open?'bg-brand-400':'bg-brand-500 hover:bg-brand-400'].join(' ')}><I.ChevronDown size={14}/></button>
     </div>
     {open&&(<div className="absolute right-0 top-[calc(100%+6px)] z-50 w-60 rounded-xl border border-white/[0.08] overflow-hidden py-1" style={{background:'var(--pop2)',backdropFilter:'blur(16px)',boxShadow:'0 16px 50px rgba(0,0,0,0.6)'}}>
       {items.map(it=>(<button key={it.l} onClick={()=>{setOpen(false);it.act();}} className="w-full flex items-center gap-3 px-3 py-2 text-left hover:bg-white/[0.05] transition-colors group">
@@ -3517,7 +3502,7 @@ function arBuildRecord(object,vals,fields){
   const owner=g(/owner/)||'AM';const id=Date.now()+Math.floor(Math.random()*1000);
   if(object==='company'){const name=g(/^name|company name/)||'Untitled';return{id,name,domain:g(/domain/),industry:g(/industry/)||INDUSTRIES[0],type:g(/company type|^type$/)||'Prospect',owner,ownerColor:arOwnerColor(owner),avatar:arInitials(name),color:arPick(),size:arNum(g(/employees|size/)),annualRevenue:arNum(g(/revenue/)),phone:fmtPhone(g(/phone/)),loc:g(/location|hq|headquarters/),website:g(/website/),linkedin:g(/linkedin/),desc:g(/description/),tags:g(/tags/)||[],days:0,last:'Just now',createdBy:owner,createdAt:'Just now',archived:false};}
   if(object==='deal'){const name=g(/^name|deal name/)||'Untitled deal';const company=g(/company/);const amt=arNum(g(/amount/));const stageName=g(/stage/)||'Prospecting';const keyMap={Prospecting:'prospecting',Qualified:'qualified',Proposal:'proposal',Negotiation:'negotiation',Won:'won',Lost:'lost'};const sk=keyMap[stageName]||'prospecting';return{id,name,company:company||name,value:amt!=null?('$'+amt.toLocaleString('en-US')):'$0',amount:amt,stageKey:sk,dStage:stageName,...dealStageStamp(sk,owner),pipeline:g(/pipeline/),closeDate:g(/close/),primaryContact:g(/contact/),nextAction:g(/next action/),source:g(/source/),amountType:g(/amount type/)||'One-time',tags:g(/tags/)||[],owner,ownerColor:arOwnerColor(owner),tag:'New',tagBg:'bg-emerald-500/15',tagFg:'text-emerald-300',age:'0d',score:'warm',createdBy:owner,createdAt:'Just now'};}
-  if(object==='lead'){const name=g(/^name/)||'Untitled';let status=g(/^status$/)||'New';if(typeof LEAD_STATUSES!=='undefined'&&!LEAD_STATUSES.includes(status))status='New';const num=arNum(g(/estimated value|value/));return{id,name,company:g(/company name|^company$/),companyDomain:g(/domain/),email:g(/email/),phone:fmtPhone(g(/phone/)),avatar:arInitials(name),color:arPick(),source:g(/source/)||(typeof LEAD_SOURCES!=='undefined'?LEAD_SOURCES[0]:'Web form'),status,score:(function(){try{return recomputeScore('lead',{company:g(/company name|^company$/),phone:fmtPhone(g(/phone/)),title:g(/job title|^title$/)||'',industry:g(/industry/)||'',employeesSize:arNum(g(/employee/))});}catch(e){return 0;}})(),owner,ownerColor:arOwnerColor(owner),estValue:num!=null?('$'+num.toLocaleString('en-US')):'—',estValueNum:num,title:g(/job title|^title$/)||'',industry:g(/industry/)||'',employeesSize:arNum(g(/employee/)),closeDate:g(/close/)||'',timezone:g(/timezone/)||suggestTzFromPhone(g(/phone/))||'',loc:'',tags:g(/tags/)||[],emails:[],phones:[],days:0,created:'Just now',createdBy:owner,createdAt:'Just now',converted:false,archived:false};}
+  if(object==='lead'){const name=g(/^name/)||'Untitled';let status=g(/^status$/)||'New';if(typeof LEAD_STATUSES!=='undefined'&&!LEAD_STATUSES.includes(status))status='New';const num=arNum(g(/estimated value|value/));return{id,name,company:g(/company name|^company$/),companyDomain:g(/domain/),email:g(/email/),phone:fmtPhone(g(/phone/)),avatar:arInitials(name),color:arPick(),source:g(/source/)||''/* a blank Source stays blank (LeadFormSheet: values.source || undefined) */,status,score:(function(){try{return recomputeScore('lead',{company:g(/company name|^company$/),phone:fmtPhone(g(/phone/)),title:g(/job title|^title$/)||'',industry:g(/industry/)||'',employeesSize:arNum(g(/employee/))});}catch(e){return 0;}})(),owner,ownerColor:arOwnerColor(owner),estValue:num!=null?('$'+num.toLocaleString('en-US')):'—',estValueNum:num,title:g(/job title|^title$/)||'',industry:g(/industry/)||'',employeesSize:arNum(g(/employee/)),closeDate:g(/close/)||'',timezone:g(/timezone/)||suggestTzFromPhone(g(/phone/))||'',loc:'',tags:g(/tags/)||[],emails:[],phones:[],days:0,created:'Just now',createdBy:owner,createdAt:'Just now',converted:false,archived:false};}
   const first=g(/first/)||'';const last=g(/last/)||'';const name=(first+' '+last).trim()||'Unnamed';const _cst=g(/^status$/);return{id,name,first,last,co:g(/company/),email:g(/email/),phone:fmtPhone(g(/phone/)),title:g(/job title|^title$/),avatar:arInitials(name),color:arPick(),status:'Active',cstatus:(typeof CONTACT_STATUSES!=='undefined'&&CONTACT_STATUSES.includes(_cst))?_cst:'Prospect',owner,ownerColor:arOwnerColor(owner),last:'Just now',deal:'—',days:0,timezone:g(/timezone/)||suggestTzFromPhone(g(/phone/))||'',source:g(/source/),salutation:g(/salutation/),address:g(/mailing|address/),tags:g(/tags/)||[],archived:false};
 }
 function arBuildFromSheet(object,row){
@@ -3536,6 +3521,10 @@ function AddRecordDrawer({object,close,onToast,goTo,initialMode,prefill}){
   const _dStages=_dPipe?realStagesOf(_dPipe):[];
   const fields=React.useMemo(()=>{const fl=arCreateFields(props,object).filter(f=>object!=='deal'||!['d_pipeline','d_next','d_tags','d_source','d_amttype'].includes(f.id));return object==='deal'&&_dStages.length?fl.map(f=>f.id==='d_stage'?{...f,options:_dStages.map(x=>x.name)}:f.id==='d_prob'?{...f,label:'Probability (%)'}:f):fl;},[props,object,_dPipe&&_dPipe.name]);
   const _probEdited=React.useRef(false);
+  const _bcAR=React.useContext(BillingContext);
+  const _arKind={contact:'contacts',company:'companies',lead:'leads',deal:'deals'}[object]||'contacts';
+  const _arGate=recordsCapGate(_bcAR,_arKind,((crm&&crm[_arKind])||[]).filter(x=>x&&!x.deleted&&!x.archived).length);
+  const _arBlocked=_arGate.state==='blocked';
   const primary=fields.filter(f=>f.detail!=='secondary');
   const secondary=fields.filter(f=>f.detail==='secondary');
   // Build initial values, then apply any association prefill (company/contact) coming from a
@@ -3568,12 +3557,13 @@ function AddRecordDrawer({object,close,onToast,goTo,initialMode,prefill}){
   const isReq=(f)=>f.required||stageReqIds.includes(f.id);
   const augReq=(f)=>stageReqIds.includes(f.id)&&!f.required?{...f,required:true}:f; // so the field renders its required asterisk
   const errorFor=(f)=>{const v=vals[f.id];const empty=(Array.isArray(v)?v.length===0:!String(v||'').trim());if(isReq(f)&&empty)return'Required';if(f.type==='Email'&&!empty&&!emailRe.test(v))return'Enter a valid email';return'';};
-  const nudgeFor=(f)=>{const v=vals[f.id];const empty=(Array.isArray(v)?v.length===0:!String(v||'').trim());return(f.important&&empty&&object!=='lead')?'Recommended':'';}; // the app's LeadFormSheet has no "Recommended" hint under Estimated value
+  const nudgeFor=(f)=>{const v=vals[f.id];const empty=(Array.isArray(v)?v.length===0:!String(v||'').trim());return(f.important&&empty&&object!=='lead'&&object!=='deal')?'Recommended':'';}; // the app's LeadFormSheet and DealFormSheet have no "Recommended" hint; the app's LeadFormSheet has no "Recommended" hint under Estimated value
   const allValid=fields.every(f=>!errorFor(f));
   const addCompanyRec=(name)=>{const id=Date.now()+Math.floor(Math.random()*1000);crm.setCompanies(a=>[{id,name,domain:'',industry:INDUSTRIES[0],type:'Prospect',owner:'AM',ownerColor:'#5E92D8',avatar:arInitials(name),color:arPick(),size:null,tags:[],days:0,last:'Just now',archived:false},...a]);};
   const addContactRec=(name)=>{const id=Date.now()+Math.floor(Math.random()*1000);crm.setContacts(a=>[{id,name,first:name.split(' ')[0]||name,last:name.split(' ').slice(1).join(' '),co:'',email:'',phone:'',avatar:arInitials(name),color:arPick(),status:'Active',cstatus:'Prospect',owner:'AM',ownerColor:'#5E92D8',lastAct:'Just now',deal:'—',days:0,tags:[],archived:false},...a]);};
   const persist=(rec)=>{if(object==='company')crm.setCompanies(a=>[rec,...a]);else if(object==='deal')crm.setDeals(a=>[rec,...a]);else if(object==='lead')crm.setLeads(a=>[rec,...a]);else crm.setContacts(a=>[rec,...a]);};
   const doCreate=(another)=>{
+    if(_arBlocked)return; // app: the form's Create reads the same records gate (useCapGate) — blocked on read_only, trial at the cap, or over it
     setSubmitted(true);
     if(!allValid){const firstErr=fields.find(f=>errorFor(f));if(firstErr&&secondary.includes(firstErr))setShowMore(true);return;}
     const rec=arBuildRecord(object,vals,fields);
@@ -3616,10 +3606,11 @@ function AddRecordDrawer({object,close,onToast,goTo,initialMode,prefill}){
             {showMore&&<div className="grid grid-cols-2 gap-4 mt-3 pt-4 border-t border-white/[0.06]">{secondary.map(f=>(<ARField key={f.id} f={augReq(f)} value={vals[f.id]} onChange={v=>onFieldChange(f,v)} error={submitted?errorFor(f):''} nudge={nudgeFor(f)} crm={crm} onCreateCompany={addCompanyRec} onCreateContact={addContactRec}/>))}</div>}
           </div>}
         </div>
+        <CapGateNotice gate={_arGate} goTo={goTo} className="mx-6 mt-3"/>
         {recError&&<div className="mx-6 mt-3 flex items-start gap-2 rounded-xl bg-red-500/[0.08] border border-red-500/25 px-3.5 py-2.5"><I.AlertTriangle size={14} className="text-red-300 shrink-0 mt-0.5"/><p className="text-[12.5px] text-red-200/90 leading-relaxed">{recError}</p></div>}
         <div className="flex items-center gap-3 px-6 py-4 border-t border-white/[0.07] shrink-0" style={{background:'var(--s850)'}}>
           <button onClick={close} className="px-4 py-2.5 rounded-xl text-[13px] font-medium text-white/65 bg-white/[0.04] border border-white/[0.08] hover:bg-white/[0.07] transition-all">Cancel</button>
-          <button onClick={()=>doCreate(false)} className="ml-auto inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-[13px] font-semibold text-white bg-brand-500 hover:bg-brand-400 shadow-brand transition-colors">Create {cfg.label.toLowerCase()}</button>
+          <button disabled={_arBlocked} onClick={()=>doCreate(false)} className="ml-auto inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-[13px] font-semibold text-white bg-brand-500 hover:bg-brand-400 shadow-brand transition-colors disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-brand-500">Create {cfg.label.toLowerCase()}</button>
         </div>
       </React.Fragment>):(<React.Fragment>
         <div className="flex-1 overflow-y-auto scroll-area px-6 py-5" style={{background:'var(--s850)'}}>
@@ -3893,6 +3884,8 @@ function DestinationGrid({active,query,onGo}){
   const term=(query||'').trim().toLowerCase();
   const match=(it)=>{if(!term)return true;const m=navDestMeta(it);return (it.label||'').toLowerCase().includes(term)||(m.desc||'').toLowerCase().includes(term)||navMoreSection(it).toLowerCase().includes(term);};
   const groups={};all.filter(match).forEach(it=>{const s=navMoreSection(it);(groups[s]=groups[s]||[]).push(it);});
+  const _secIdx=(it)=>{const sec=NAV_MORE_SECTIONS.find(x=>x.ids.indexOf(it.id)>=0);return sec?sec.ids.indexOf(it.id):999;}; // cards follow NAV_MORE_SECTIONS.ids order (FE destinations.ts), not the rail order
+  Object.keys(groups).forEach(k=>{groups[k]=groups[k].map((it,i)=>({it,i})).sort((x,y)=>(_secIdx(x.it)-_secIdx(y.it))||(x.i-y.i)).map(x=>x.it);});
   const sections=NAV_MORE_ORDER.filter(s=>groups[s]&&groups[s].length);
   if(sections.length===0)return(<div className="flex flex-col items-center justify-center text-center py-14 px-6"><span className="w-11 h-11 rounded-2xl bg-white/[0.04] text-white/30 flex items-center justify-center mb-3"><I.Search size={18}/></span><p className="text-[13px] font-medium text-white/70">No destinations found</p><p className="text-[11.5px] text-white/40 mt-0.5">Try a different search term.</p></div>);
   const card=(it)=>{const Ic=navIco(it.icon);const a=navIsActive(it,active);const m=navDestMeta(it);return(
@@ -4257,9 +4250,9 @@ function SettingsSubNav({active,goTo}){
             const cls=a?(t.danger?'bg-red-500/12 text-red-200 ring-1 ring-red-500/25':'bg-brand-500/15 text-brand-200 ring-1 ring-brand-500/25')
               :(t.danger?'text-red-300/80 hover:text-red-200 hover:bg-red-500/10':'text-white/65 hover:text-white hover:bg-white/[0.05]');
             return(
-            <button key={t.label} role="menuitem" onClick={()=>{goTo(t.page);setOpen(null);}} title={t.external?'Opens in the Calendar':undefined}
+            <button key={t.label} role="menuitem" onClick={()=>{goTo(t.page);setOpen(null);}}
               className={['relative flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-[13px] transition-all duration-150',cls].join(' ')}>
-              <t.Icon size={15} stroke={2}/><span className="font-medium flex-1 truncate text-left">{t.label}</span>{t.external&&<I.ExternalLink size={11} className="text-white/30 shrink-0"/>}
+              <t.Icon size={15} stroke={2}/><span className="font-medium flex-1 truncate text-left">{t.label}</span>
             </button>
           );})}
         </div>
@@ -4891,7 +4884,7 @@ function DashboardSkeleton({goTo}){
 // ?? Dashboard widgets ?????????????????????????????????????????????????????????
 const WACCENT={brand:'bg-brand-500/10 ring-brand-500/20 text-brand-300',emerald:'bg-emerald-500/10 ring-emerald-500/20 text-emerald-300',amber:'bg-amber-500/10 ring-amber-500/20 text-amber-300',violet:'bg-violet-500/10 ring-violet-500/20 text-violet-300',blue:'bg-blue-500/10 ring-blue-500/20 text-blue-300',red:'bg-red-500/10 ring-red-500/20 text-red-300'};
 function dashStages(){const a=STAGES_DATA.map(s=>{const sd=allDeals().filter(x=>x.stageKey===s.key);const v=sd.reduce((acc,d)=>acc+parseMoney(d.value),0);return {name:s.name,count:sd.length,val:Math.round(v/1000),color:s.color};});const mx=Math.max(1,...a.map(x=>x.val));return a.map(x=>({...x,fill:Math.round(x.val/mx*100)}));}
-const DASH_ACT=[{kind:'email',label:'EMAIL SENT',title:'Sent proposal to Summit Digital',sub:'James Rivera · Email',time:'12m',chip:'bg-brand-500/15 ring-brand-500/25 text-brand-300'},{kind:'deal',label:'DEAL UPDATED',title:'Forge & Co moved to Won',sub:'Alex Morgan · Pipeline',time:'2h',chip:'bg-emerald-500/15 ring-emerald-500/25 text-emerald-300'},{kind:'note',label:'NOTE',title:'Called Sarah, ready to proceed',sub:'Sarah Chen · Note',time:'5h',chip:'bg-amber-500/15 ring-amber-500/25 text-amber-300'},{kind:'call',label:'CALL',title:'Outbound call with Priya Nair',sub:'Jamie Kim · Phone',time:'8h',chip:'bg-blue-500/15 ring-blue-500/25 text-blue-300'},{kind:'new',label:'CONTACT CREATED',title:'Barrett Digital added',sub:'Jamie Kim · Web',time:'1d',chip:'bg-violet-500/15 ring-violet-500/25 text-violet-300'},{kind:'email',label:'EMAIL RECEIVED',title:'Reply from Helix Partners',sub:'Alex Morgan · Email',time:'1d',chip:'bg-brand-500/15 ring-brand-500/25 text-brand-300'},{kind:'task',label:'TASK COMPLETED',title:'Send pricing sheet to Nova Growth',sub:'James Rivera · Task',time:'2d',chip:'bg-emerald-500/15 ring-emerald-500/25 text-emerald-300'},{kind:'sms',label:'SMS SENT',title:'Booking confirmation to Luca Bianchi',sub:'Alex Morgan · SMS',time:'3d',chip:'bg-blue-500/15 ring-blue-500/25 text-blue-300'}];
+const DASH_ACT=[{kind:'email',label:'EMAIL SENT',title:'Sent proposal to Summit Digital',sub:'James Rivera · Email',time:'12m',chip:'bg-brand-500/15 ring-brand-500/25 text-brand-300'},{kind:'deal',label:'DEAL UPDATED',title:'Forge & Co moved to Won',sub:'Alex Morgan · Pipeline',time:'2h',chip:'bg-emerald-500/15 ring-emerald-500/25 text-emerald-300'},{kind:'note',label:'NOTE',title:'Called Sarah, ready to proceed',sub:'Sarah Chen · Note',time:'5h',chip:'bg-amber-500/15 ring-amber-500/25 text-amber-300'},{kind:'call',label:'CALL',title:'Outbound call with Priya Nair',sub:'Jamie Kim · Phone',time:'8h',chip:'bg-blue-500/15 ring-blue-500/25 text-blue-300'},{kind:'new',label:'CONTACT CREATED',title:'Barrett Digital added',sub:'Jamie Kim · Web',time:'1d',chip:'bg-violet-500/15 ring-violet-500/25 text-violet-300'},{kind:'email',label:'EMAIL RECEIVED',title:'Reply from Helix Partners',sub:'Alex Morgan · Email',time:'1d',chip:'bg-brand-500/15 ring-brand-500/25 text-brand-300'},{kind:'task',label:'TASK COMPLETED',title:'Send pricing sheet to Nova Growth',sub:'James Rivera · Task',time:'2d',chip:'bg-emerald-500/15 ring-emerald-500/25 text-emerald-300'},{kind:'sms',label:'SMS SENT',title:'Follow-up reminder to Luca Bianchi',sub:'Alex Morgan · SMS',time:'3d',chip:'bg-blue-500/15 ring-blue-500/25 text-blue-300'}];
 const WIDGET_DEFS={
   'pipeline-value':{name:'Pipeline Value',desc:'Total open pipeline',Icon:I.GitBranch,cat:'Pipeline',size:1,type:'stat',d:{value:'$324k',accent:'brand',Icon:I.GitBranch}},
   'weighted-forecast':{name:'Weighted Forecast',desc:'Probability-weighted revenue',Icon:I.TrendUp,cat:'Pipeline',size:1,type:'stat',d:{value:'$218k',accent:'emerald',Icon:I.TrendUp}},
@@ -4966,7 +4959,7 @@ function dashStatLive(id,data){
     const amt=(d)=>(typeof d.amount==='number'?d.amount:parseMoney(d.value))||0;
     const open=deals.filter(d=>d.stageKey!=='won'&&d.stageKey!=='lost');
     if(id==='pipeline-value')return fmtK(Math.round(open.reduce((a,d)=>a+amt(d),0)));
-    if(id==='weighted-forecast')return fmtK(Math.round(open.reduce((a,d)=>a+amt(d)*((d.probability||0)/100),0)));
+    if(id==='weighted-forecast')return fmtK(Math.round(open.reduce((a,d)=>a+amt(d)*(dealEffProb(d)/100),0))); // the deal's own probability, else its stage default (BE forecast.sql), same rule as the Pipeline forecast view
     if(id==='win-rate'){const {won:w,lost:l}=winRateParts(deals);return (w+l)?Math.round(w/(w+l)*100)+'%':'—';}
     if(id==='avg-cycle'){const ds=deals.filter(d=>d.stageKey==='won').map(d=>{const a=omDate(d.createdAt),b=omDate(d.closeDate);return (a&&b)?Math.max(0,Math.round((b-a)/86400000)):null;}).filter(x=>x!=null);return ds.length?Math.round(ds.reduce((a,b)=>a+b,0)/ds.length)+'d':'—';}
     if(id==='calls-logged')return String((_liveCalls||(typeof CALLS_DATA!=='undefined'?CALLS_DATA:[])).length); // the live store, so a logged call actually moves the KPI (CALLS_DATA is a frozen seed)
@@ -5012,7 +5005,8 @@ function DashboardPage({goTo}){
   const _now=new Date();const _greet=_now.getHours()<12?'Good morning':_now.getHours()<18?'Good afternoon':'Good evening';const _dateStr=_now.toLocaleDateString(undefined,{month:'long',day:'numeric',year:'numeric'});
   const _bc=React.useContext(BillingContext);
   // useCapGate("contacts"): a read-only workspace blocks every create; the button stays visible, disabled, with the reason as a tooltip.
-  const _capReason=(_bc&&(_bc.billingState==='trial-expired'||_bc.billingState==='cancelled'||_bc.billingState==='unpaid'))?'This workspace is read-only — nothing is deleted, but nothing new can be added until a plan is chosen.':null;
+  const _dashRecGate=recordsCapGate(_bc,'contacts',((crm&&crm.contacts)||[]).filter(x=>x&&!x.deleted&&!x.archived).length); // same records gate as the Contacts page
+  const _capReason=_dashRecGate.state==='blocked'?_dashRecGate.reason:null;
   if(loading)return <DashboardSkeleton goTo={goTo}/>;
   const dashData={contacts:effScopeRows('Contacts',crm.contacts.filter(c=>!c.deleted),c=>c.owner),leads:effScopeRows('Leads',crm.leads.filter(l=>!l.deleted),l=>l.owner),companies:effScopeRows('Companies',crm.companies.filter(c=>!c.deleted),c=>c.owner)};
   const visibleLayout=DEFAULT_LAYOUT.filter(it=>widgetAllowsRole(it.id));
@@ -5037,7 +5031,7 @@ function DashboardPage({goTo}){
 // ?? Contacts data ?????????????????????????????????????????????????????????????
 const CONTACTS_DATA=[
   {id:120,name:'Derek Sloane',co:'Halcyon Media',email:'derek@halcyon.co',phone:'+1 555-620-7781',avatar:'DS',color:'#D34222',status:'Lead',owner:'JK',ownerColor:'#9B7BDE',lastAct:'3 weeks ago',deal:'—',tag:'cold',loc:'Portland, OR',cstatus:'Lost',days:21,dnc:false,archived:false,deleted:true,deletedAt:Date.now()-2*864e5,deletedBy:'Alex Morgan'},
-  {id:1,name:'Sarah Chen',timezone:'America/New_York',co:'Meridian Agency',email:'sarah@meridian.co',phone:'+1 555-234-8901',avatar:'SC',color:'#3475CE',status:'Active',owner:'AM',ownerColor:'#5E92D8',lastAct:'2h ago',deal:'$39.4k',tag:'top-lead',loc:'San Francisco, CA',cstatus:'Customer',days:0,dnc:false,archived:false,first:'Sarah',last:'Chen',title:'CEO',tags:['agency','top-lead','q2-focus'],source:'Referral',salutation:'Ms.',emails:['s.chen@meridian.co'],phones:['+1 555-234-0000'],address:{street:'500 Howard St',city:'San Francisco',state:'CA',zip:'94105',country:'USA'},linkedin:'linkedin.com/in/sarahchen',lastActivity:'2h ago',lastContacted:'Yesterday · 2:30 PM',createdBy:'AM',createdAt:'Apr 2, 2026',qual:{formName:'Request a Demo',status:'qualified',answers:[{q:'Company size',a:'51-200'},{q:'What would you like to see?',a:'Scaling our outbound with your CRM.'}],event:'30 Min Intro Call',rep:'Alex Morgan'}},
+  {id:1,name:'Sarah Chen',timezone:'America/New_York',co:'Meridian Agency',email:'sarah@meridian.co',phone:'+1 555-234-8901',avatar:'SC',color:'#3475CE',status:'Active',owner:'AM',ownerColor:'#5E92D8',lastAct:'2h ago',deal:'$39.4k',tag:'top-lead',loc:'San Francisco, CA',cstatus:'Customer',days:0,dnc:false,archived:false,first:'Sarah',last:'Chen',title:'CEO',tags:['agency','top-lead','q2-focus'],source:'Referral',salutation:'Ms.',emails:['s.chen@meridian.co'],phones:['+1 555-234-0000'],address:{street:'500 Howard St',city:'San Francisco',state:'CA',zip:'94105',country:'USA'},linkedin:'linkedin.com/in/sarahchen',lastActivity:'2h ago',lastContacted:'Yesterday · 2:30 PM',createdBy:'AM',createdAt:'Apr 2, 2026'},
   {id:2,name:'James Rivera',co:'Summit Digital',email:'james@summit.co',phone:'+1 555-312-4400',avatar:'JR',color:'#855ED7',status:'Hot',owner:'JK',ownerColor:'#9B7BDE',lastAct:'5h ago',deal:'$31k',tag:'agency',loc:'New York, NY',cstatus:'Prospect',days:0,dnc:false,archived:false,first:'James',last:'Rivera',title:'VP Marketing',tags:['agency'],source:'LinkedIn',salutation:'Mr.',emails:[],phones:[],address:{city:'New York',state:'NY',country:'USA'},linkedin:'linkedin.com/in/jamesrivera',lastActivity:'5h ago',lastContacted:'2 days ago',createdBy:'JK',createdAt:'Mar 18, 2026'},
   {id:3,name:'Maria Lopez',co:'Bloom Creative',email:'maria@bloom.co',phone:'+1 555-198-7730',avatar:'ML',color:'#BF4C85',status:'Warm',owner:'SC',ownerColor:'#C2568C',lastAct:'1d ago',deal:'$18k',tag:'q2-focus',loc:'Austin, TX',cstatus:'Prospect',days:1,dnc:false,archived:false,first:'Maria',last:'Lopez',title:'Creative Director',tags:['q2-focus'],source:'Website',salutation:'Mrs.',emails:['maria.lopez@bloom.co'],phones:['+1 555-198-0000'],address:{street:'12 Congress Ave',city:'Austin',state:'TX',zip:'73301',country:'USA'},linkedin:'',lastActivity:'1d ago',lastContacted:'Last week',createdBy:'SC',createdAt:'Feb 27, 2026'},
   {id:4,name:'Ravi Lee',co:'Vertex Labs',email:'ravi@vertex.co',phone:'+1 555-441-6623',avatar:'RL',color:'#25855E',status:'New',owner:'RL',ownerColor:'#2FA877',lastAct:'2d ago',deal:'$6.2k',tag:'new-lead',loc:'Los Angeles, CA',cstatus:'Prospect',days:2,dnc:true,archived:false},
@@ -5050,14 +5044,14 @@ const CONTACTS_DATA=[
   {id:101,name:'Sarah Chen',co:'Meridian Agency',email:'Sarah@Meridian.co',phone:'+1 (555) 234 8901',avatar:'SC',color:'#25855E',status:'Active',owner:'JK',ownerColor:'#9B7BDE',lastAct:'1w ago',deal:'$24k',tag:'agency',loc:'San Francisco, CA',cstatus:'Customer',days:7,dnc:false,archived:false,first:'Sarah',last:'Chen',title:'Chief Executive',tags:['agency','duplicate-import'],source:'Web form',createdBy:'JK',createdAt:'May 21, 2026'},
   {id:102,name:'Maria Lopez',co:'Bloom Creative',email:'m.lopez@bloom.co',phone:'+1 555-444-1212',avatar:'ML',color:'#BF4C85',status:'Warm',owner:'AM',ownerColor:'#5E92D8',lastAct:'3d ago',deal:'$18k',tag:'q2-focus',loc:'Austin, TX',cstatus:'Prospect',days:3,dnc:false,archived:false,first:'Maria',last:'Lopez',title:'Creative Director',tags:['q2-focus','referral'],source:'Referral',createdBy:'AM',createdAt:'May 30, 2026'},
   {id:205,name:'Sofia Marchetti',timezone:'Europe/London',first:'Sofia',last:'Marchetti',co:'Craftly',companyId:12,email:'sofia@craftly.co',phone:'+1 555-228-6610',title:'Founder',avatar:'SM',color:'#BF4C85',status:'Active',cstatus:'Prospect',owner:'SC',ownerColor:'#C2568C',deal:'$9k',lastActivity:'2d ago',lastContacted:'2d ago',days:2,source:'Event',tags:['saastr'],emails:['sofia@craftly.co'],phones:[],createdBy:'SC',createdAt:'2d ago',archived:false,fromLeadId:3},
-  {id:207,name:'Olivia Bennett',first:'Olivia',last:'Bennett',co:'Brightwave Studio',companyId:9,email:'olivia@brightwave.io',phone:'+1 555-610-2210',title:'Marketing Director',avatar:'OB',color:'#3475CE',status:'Active',cstatus:'Prospect',owner:'AM',ownerColor:'#5E92D8',deal:'$18k',lastActivity:'2h ago',lastContacted:'2h ago',days:0,source:'Web form',tags:['inbound','qualified'],emails:['olivia.b@brightwave.io'],phones:[],createdBy:'AM',createdAt:'2h ago',archived:false,fromLeadId:1,qual:{formName:'Request a Demo',status:'qualified',answers:[{q:'Company size',a:'51-200'},{q:'What would you like to see?',a:'Pipeline + automations for a 40-person team'}],event:'Product Demo',rep:'Sarah Chen'}},
-  // ── Seeded ad-captured contacts (Meta / Google) — show attribution, Source filtering, and link from the ad-lead feed ──
-  {id:9301,name:'Brandon Tucker',co:'Tucker Renovations',email:'brandon.tucker@gmail.com',phone:'+1 555-318-2204',avatar:'BT',color:'#3475CE',status:'New',owner:'AM',ownerColor:'#5E92D8',lastAct:'6m ago',deal:'-',tag:'meta-lead',loc:'Phoenix, AZ',cstatus:'Prospect',days:0,dnc:false,archived:false,first:'Brandon',last:'Tucker',title:'Owner',score:48,tags:['meta-lead','ad-lead','spring-promo-2026'],source:'Meta Ads',createdBy:'nrtur',createdAt:'6m ago',adPlatform:'meta',adSourceKey:'meta-ads',adSourceLabel:'Meta Lead Ad — Spring Promo 2026',adCampaign:'Spring Promo 2026',adAdset:'Lookalike 1% — US',adFormName:'Spring Promo — Demo Request',utmSource:'fb',utmMedium:'paid_social',utmCampaign:'spring_promo_2026',utmContent:'carousel_a',fbclid:'IwAR2_a91kZ_demo_fbclid_8x2',adTs:6,adSms:true,adEnrolled:true},
-  {id:9302,name:'Priya Anand',co:'Anand Law',email:'priya@anandlaw.com',phone:'+1 555-902-7781',avatar:'PA',color:'#fbbc04',status:'Warm',owner:'JK',ownerColor:'#9B7BDE',lastAct:'48m ago',deal:'-',tag:'google-lead',loc:'Seattle, WA',cstatus:'Prospect',days:0,dnc:false,archived:false,first:'Priya',last:'Anand',title:'Partner',score:55,tags:['google-lead','ad-lead','search-brand'],source:'Google Ads',createdBy:'nrtur',createdAt:'48m ago',adPlatform:'google',adSourceKey:'google-ads',adSourceLabel:'Google Ad — Search — Brand',adCampaign:'Search — Brand',adAdset:'Exact — bloom crm',adFormName:'Search — Free Consultation',utmSource:'google',utmMedium:'cpc',utmCampaign:'search_brand',utmTerm:'bloom crm',gclid:'Cj0KCQ_demo_gclid_qz7',adTs:48,adSms:true,adEnrolled:true},
-  {id:9303,name:'Carlos Mendez',co:'',email:'carlos.mendez@outlook.com',phone:'+1 555-771-9930',avatar:'CM',color:'#3475CE',status:'Warm',owner:'SC',ownerColor:'#C2568C',lastAct:'2h ago',deal:'-',tag:'real-estate-lead',loc:'Austin, TX',cstatus:'Prospect',days:0,dnc:false,archived:false,first:'Carlos',last:'Mendez',title:'',score:64,tags:['real-estate-lead','ad-lead','listings-q2'],source:'Meta Ads',createdBy:'nrtur',createdAt:'2h ago',adPlatform:'meta',adSourceKey:'meta-ads',adSourceLabel:'Meta Lead Ad — Listings — Q2',adCampaign:'Listings — Q2',adAdset:'Buyers — 30mi radius',adFormName:'Real Estate — Buyer Intake',utmSource:'ig',utmMedium:'paid_social',utmCampaign:'listings_q2',utmContent:'reels_b',fbclid:'IwAR0_demo_fbclid_re3',adTs:140,adEnrolled:true},
-  {id:9304,name:'Dana Whitfield',co:'Whitfield & Co',email:'dana@whitfieldco.com',phone:'+1 555-447-1120',avatar:'DW',color:'#25855E',status:'Active',owner:'AM',ownerColor:'#5E92D8',lastAct:'5h ago',deal:'$12k',tag:'meta-lead',loc:'Denver, CO',cstatus:'Customer',days:0,dnc:false,archived:false,first:'Dana',last:'Whitfield',title:'Owner',score:73,tags:['meta-lead','ad-lead','spring-promo-2026'],source:'Meta Ads',createdBy:'nrtur',createdAt:'5h ago',adPlatform:'meta',adSourceKey:'meta-ads',adSourceLabel:'Meta Lead Ad — Spring Promo 2026',adCampaign:'Spring Promo 2026',adAdset:'Interest — SMB owners',adFormName:'Spring Promo — Demo Request',utmSource:'fb',utmMedium:'paid_social',utmCampaign:'spring_promo_2026',utmContent:'single_image_c',fbclid:'IwAR9_demo_fbclid_dn4',adTs:300},
-  {id:9305,name:'Tariq Hassan',co:'Nimbus Apps',email:'tariq@nimbusapps.co',phone:'+1 555-118-2245',avatar:'TH',color:'#fbbc04',status:'Active',owner:'RL',ownerColor:'#2FA877',lastAct:'1d ago',deal:'$9k',tag:'google-lead',loc:'Boston, MA',cstatus:'Customer',days:1,dnc:false,archived:false,first:'Tariq',last:'Hassan',title:'CTO',score:80,tags:['google-lead','ad-lead','yt-demo'],source:'Google Ads',createdBy:'nrtur',createdAt:'1d ago',adPlatform:'google',adSourceKey:'google-ads',adSourceLabel:'Google Ad — YouTube — Demo',adCampaign:'YouTube — Demo',adAdset:'In-stream — skippable',adFormName:'Search — Free Consultation',utmSource:'youtube',utmMedium:'video',utmCampaign:'yt_demo',utmContent:'15s_cut',gclid:'Cj0KCQ_demo_gclid_yt2',adTs:1500},
-  {id:9306,name:'Sandra Iyer',co:'Vertex HQ',email:'sandra.iyer@vertexhq.com',phone:'+1 555-771-3320',avatar:'SI',color:'#3475CE',status:'Active',owner:'AM',ownerColor:'#5E92D8',lastAct:'3d ago',deal:'$21k',tag:'google-lead',loc:'New York, NY',cstatus:'Customer',days:3,dnc:false,archived:false,first:'Sandra',last:'Iyer',title:'VP Ops',score:77,tags:['google-lead','ad-lead','search-brand'],source:'Google Ads',createdBy:'nrtur',createdAt:'3d ago',adPlatform:'google',adSourceKey:'google-ads',adSourceLabel:'Google Ad — Search — Brand',adCampaign:'Search — Brand',adAdset:'Exact — bloom crm',adFormName:'Search — Free Consultation',utmSource:'google',utmMedium:'cpc',utmCampaign:'search_brand',utmTerm:'bloom crm',gclid:'Cj0KCQ_demo_gclid_si1',adTs:4320},
+  {id:207,name:'Olivia Bennett',first:'Olivia',last:'Bennett',co:'Brightwave Studio',companyId:9,email:'olivia@brightwave.io',phone:'+1 555-610-2210',title:'Marketing Director',avatar:'OB',color:'#3475CE',status:'Active',cstatus:'Prospect',owner:'AM',ownerColor:'#5E92D8',deal:'$18k',lastActivity:'2h ago',lastContacted:'2h ago',days:0,source:'Web form',tags:['inbound','qualified'],emails:['olivia.b@brightwave.io'],phones:[],createdBy:'AM',createdAt:'2h ago',archived:false,fromLeadId:1},
+  // ── More seeded contacts (Source is free text, e.g. Meta Ads / Google Ads) ──
+  {id:9301,name:'Brandon Tucker',co:'Tucker Renovations',email:'brandon.tucker@gmail.com',phone:'+1 555-318-2204',avatar:'BT',color:'#3475CE',status:'New',owner:'AM',ownerColor:'#5E92D8',lastAct:'6m ago',deal:'-',tag:'renovation',loc:'Phoenix, AZ',cstatus:'Prospect',days:0,dnc:false,archived:false,first:'Brandon',last:'Tucker',title:'Owner',score:48,tags:['renovation','spring-2026'],source:'Meta Ads',createdBy:'AM',createdAt:'6m ago'},
+  {id:9302,name:'Priya Anand',co:'Anand Law',email:'priya@anandlaw.com',phone:'+1 555-902-7781',avatar:'PA',color:'#fbbc04',status:'Warm',owner:'JK',ownerColor:'#9B7BDE',lastAct:'48m ago',deal:'-',tag:'legal',loc:'Seattle, WA',cstatus:'Prospect',days:0,dnc:false,archived:false,first:'Priya',last:'Anand',title:'Partner',score:55,tags:['legal','consultation'],source:'Google Ads',createdBy:'JK',createdAt:'48m ago'},
+  {id:9303,name:'Carlos Mendez',co:'',email:'carlos.mendez@outlook.com',phone:'+1 555-771-9930',avatar:'CM',color:'#3475CE',status:'Warm',owner:'SC',ownerColor:'#C2568C',lastAct:'2h ago',deal:'-',tag:'real-estate',loc:'Austin, TX',cstatus:'Prospect',days:0,dnc:false,archived:false,first:'Carlos',last:'Mendez',title:'',score:64,tags:['real-estate','buyer'],source:'Meta Ads',createdBy:'SC',createdAt:'2h ago'},
+  {id:9304,name:'Dana Whitfield',co:'Whitfield & Co',email:'dana@whitfieldco.com',phone:'+1 555-447-1120',avatar:'DW',color:'#25855E',status:'Active',owner:'AM',ownerColor:'#5E92D8',lastAct:'5h ago',deal:'$12k',tag:'smb',loc:'Denver, CO',cstatus:'Customer',days:0,dnc:false,archived:false,first:'Dana',last:'Whitfield',title:'Owner',score:73,tags:['smb','spring-2026'],source:'Meta Ads',createdBy:'AM',createdAt:'5h ago'},
+  {id:9305,name:'Tariq Hassan',co:'Nimbus Apps',email:'tariq@nimbusapps.co',phone:'+1 555-118-2245',avatar:'TH',color:'#fbbc04',status:'Active',owner:'RL',ownerColor:'#2FA877',lastAct:'1d ago',deal:'$9k',tag:'saas',loc:'Boston, MA',cstatus:'Customer',days:1,dnc:false,archived:false,first:'Tariq',last:'Hassan',title:'CTO',score:80,tags:['saas','demo'],source:'Google Ads',createdBy:'RL',createdAt:'1d ago'},
+  {id:9306,name:'Sandra Iyer',co:'Vertex HQ',email:'sandra.iyer@vertexhq.com',phone:'+1 555-771-3320',avatar:'SI',color:'#3475CE',status:'Active',owner:'AM',ownerColor:'#5E92D8',lastAct:'3d ago',deal:'$21k',tag:'enterprise',loc:'New York, NY',cstatus:'Customer',days:3,dnc:false,archived:false,first:'Sandra',last:'Iyer',title:'VP Ops',score:77,tags:['enterprise','annual'],source:'Google Ads',createdBy:'AM',createdAt:'3d ago'},
 ];
 
 const CONTACT_STATUSES=['Lead','Prospect','Customer','Lost'];
@@ -5066,7 +5060,7 @@ const CONTACT_STATUSES=['Lead','Prospect','Customer','Lost'];
 const CONTACT_SOURCES=['Website','Referral','LinkedIn','Cold outreach','Event','Other'];
 // ── Phone numbers (managed telephony: numbers are bought in-app) ──
 // Seed: the workspace owns one local number.
-const PHONE_NUMBERS_SEED=[{id:'pn_1',number:'+1 (415) 555-0100',label:'Main line',country:'US',type:'local',caps:{voice:true,sms:true,mms:true},assignedTo:null,isDefault:true,monthly:1.15,purchasedAt:'Mar 2026',status:'active'}];
+const PHONE_NUMBERS_SEED=[{id:'pn_1',number:'+1 (415) 555-0100',label:'Main line',country:'US',type:'local',caps:{voice:true,sms:true,mms:true},assignedTo:null,isDefault:true,monthly:5.00,purchasedAt:'Mar 2026',status:'active'}];
 // Prepaid wallet (rate card v1): texts $0.020/segment, MMS $0.050, calls $0.030/min. Owners top up on a paid plan.
 const WALLET_RATES={sms:0.02,mms:0.05,callMin:0.03};
 const WALLET_SEED={balance:23.84,shortfalls:[],ledger:[
@@ -5232,7 +5226,7 @@ function importFields(object,props){
   if(secs){const known=new Set(base.map(f=>f.label.toLowerCase()));secs.flatMap(s=>s.fields).forEach(f=>{if(f.id&&f.id.indexOf('np_')===0&&!known.has((f.label||'').toLowerCase())){base.push({key:'custom_'+f.id,label:f.label,custom:true});}});}
   return base;
 }
-const IMPORT_OBJ={contact:{label:'Contact',noun:'contacts',Icon:I.UserPlus,c:'#5E92D8',unique:'email',uniqueLabel:'Primary email'},company:{label:'Company',noun:'companies',Icon:I.Building,c:'#5E92D8',unique:'domain',uniqueLabel:'Domain'},deal:{label:'Deal',noun:'deals',Icon:I.GitBranch,c:'#9B7BDE',unique:null,uniqueLabel:'None'},lead:{label:'Lead',noun:'leads',Icon:I.Target,c:'#2FA877',unique:null,uniqueLabel:'None',createOnly:true}}; // lead imports are create-only: no duplicate strategy (the backend skips and reports a duplicate row at the write)
+const IMPORT_OBJ={contact:{label:'Contact',noun:'contacts',Icon:I.UserPlus,c:'#5E92D8',unique:'email',uniqueLabel:'email, then phone'},company:{label:'Company',noun:'companies',Icon:I.Building,c:'#5E92D8',unique:'domain',uniqueLabel:'domain, then name'},deal:{label:'Deal',noun:'deals',Icon:I.GitBranch,c:'#9B7BDE',unique:null,uniqueLabel:'None'},lead:{label:'Lead',noun:'leads',Icon:I.Target,c:'#2FA877',unique:null,uniqueLabel:'None',createOnly:true}}; // lead imports are create-only: no duplicate strategy (the backend skips and reports a duplicate row at the write)
 function impNorm(s){return String(s||'').toLowerCase().replace(/[^a-z0-9]/g,'');}
 function impOwner(v){if(!v)return TEAM_MEMBERS[0].avatar;const s=String(v).toLowerCase();const m=TEAM_MEMBERS.find(u=>u.avatar.toLowerCase()===s||u.name.toLowerCase()===s||u.name.toLowerCase().split(' ')[0]===s);return m?m.avatar:TEAM_MEMBERS[0].avatar;}
 function impTags(v){return v?String(v).split(/[;,|]/).map(t=>t.trim()).filter(Boolean):[];}
@@ -6301,6 +6295,7 @@ function SettingsScoringPage({goTo}){
         <I.Lock size={14} className="text-white/45 shrink-0 mt-0.5"/>
         <p className="text-[12.5px] text-white/70 leading-relaxed"><span className="font-semibold text-white/90">View only.</span> Your role can see the weights but can’t change them — only an owner, admin, or manager can edit scoring rules.</p>
       </div>}
+      {!scoreGateReason&&<React.Fragment>{/* gated: GET /lead-scoring-rules answers 422, so the app renders only the refusal notice — no scorecard */}
 
       {/* The budget: what the rule set can actually award, against the engine's hard 100 clamp. */}
       <div className="rounded-2xl border border-white/[0.07] bg-white/[0.03] px-4 py-3.5 flex flex-col gap-3">
@@ -6426,6 +6421,7 @@ function SettingsScoringPage({goTo}){
           onPoints={v=>set(['behavior','demo_request_points'],v)} onCap={v=>set(['behavior','demo_request_cap'],v)} disabled={!canEdit} accent={grpAccent('behavior')}
           rowMax={num(bh.demo_request_cap)} groupMax={M.behavior} dead={num(bh.demo_request_cap)===0} deadWhy="Cap is 0 — this signal contributes nothing."/>
       </div>
+      </React.Fragment>}
 
     </div>
     {confirmNode}
@@ -6599,6 +6595,8 @@ function ContactsPage({goTo,nav}){
   const activeViewObj=views.find(v=>v.key===activeKey);
   React.useEffect(()=>{const v=views.find(x=>x.key===activeKey);setWorkFilter(v&&v.filter?JSON.parse(JSON.stringify(v.filter)):{match:'AND',conds:[]});setWorkSort(v&&v.sort?{...v.sort}:{key:null,dir:null});setCols(v&&v.columns?v.columns.slice():DEFCOLS);/* eslint-disable-next-line */},[activeKey]);
   const {confirmNode,openConfirm}=useConfirm();
+  const _bcRec=React.useContext(BillingContext);const _crmRec=React.useContext(CrmDataContext)||{};useRecordsCapDemo(); // records cap gate (app: ContactsTopBar useCapGate('contacts'))
+  const _recGate=recordsCapGate(_bcRec,'contacts',(_crmRec.contacts||[]).filter(x=>x&&!x.deleted&&!x.archived).length);
   if(loading)return(
     <div className="h-full flex" style={{background:'var(--s950)'}}><AppSidebar active="contacts" goTo={goTo}/><div className="flex-1 flex flex-col min-w-0"><AppTopbar goTo={goTo} title="Contacts" noSearch/><div className="flex-1 flex min-h-0"><div className="w-[220px] shrink-0 border-r border-white/[0.05] p-4 flex flex-col gap-2" style={{background:'var(--s900)'}}>{[...Array(8)].map((_,i)=>(<Skel key={i} w={(120+(i%3)*20)+'px'} h="16px" r="6px"/>))}</div><div className="flex-1 overflow-y-auto scroll-area">{[...Array(8)].map((_,i)=>(<div key={i} className="flex items-center gap-4 px-7 py-4 border-b border-white/[0.03]"><Skel w="36px" h="36px" r="50%"/><div className="flex flex-col gap-1.5 flex-1"><Skel w={(110+i*7)+'px'} h="12px"/><Skel w="90px" h="10px"/></div><Skel w="60px" h="20px" r="9999px"/><Skel w="55px" h="11px"/></div>))}</div></div><AppFooter/></div></div>
   );
@@ -6654,12 +6652,14 @@ function ContactsPage({goTo,nav}){
           </div>}
           rightSlot={<>
             {(effCanObject('Contacts','create')||effCanExport())&&<div className="flex items-center gap-1 p-1 rounded-xl bg-white/[0.04] border border-white/[0.08]">
-              {effCanObject('Contacts','create')&&<button onClick={()=>setImportModal(true)} title="Import CSV" className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[12.5px] font-medium text-white/65 hover:text-white hover:bg-white/[0.06] transition-all"><I.Upload size={13}/>Import</button>}
+              {effCanObject('Contacts','create')&&<button disabled={_recGate.state==='blocked'} onClick={()=>{if(_recGate.state==='blocked')return;setImportModal(true);}} title={_recGate.state==='blocked'?_recGate.reason:'Import CSV'} className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[12.5px] font-medium text-white/65 hover:text-white hover:bg-white/[0.06] transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-transparent"><I.Upload size={13}/>Import</button>}
               {effCanExport()&&<button onClick={()=>showToast('Exported '+exportListCSV('contact',list)+' contacts to CSV')} title="Export CSV" className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[12.5px] font-medium text-white/65 hover:text-white hover:bg-white/[0.06] transition-all"><I.Download size={13}/>Export</button>}
             </div>}
-            {effCanObject('Contacts','create')&&<NewContactSplitButton goTo={goTo} onImport={()=>setImportModal(true)}/>}
+            {effCanObject('Contacts','create')&&<NewContactSplitButton goTo={goTo} onImport={()=>setImportModal(true)} blocked={_recGate.state==='blocked'} blockedReason={_recGate.reason}/>}
           </>} noSearch/>
         <PageNotices page="contacts" goTo={goTo} className="px-7 pt-3 pb-1"/>
+        {effCanObject('Contacts','create')&&<CapGateNotice gate={_recGate} goTo={goTo} className="mx-7 mt-3"/>}
+        {effCanObject('Contacts','create')&&<RecordsCapDemoToggle/>}
         <div className="flex-1 flex min-h-0">
           <OmViewRail views={views} activeKey={activeKey} onSelect={selectView} onEdit={(v)=>{setEditView(v);setSaveOpen(true);}} onDelete={deleteView} onSaveView={()=>{setEditView(null);setSaveOpen(true);}} countFor={countFor} dirty={dirty} readOnlyModified={readOnlyModified} onSaveChanges={saveChanges} bottomViews={[{key:'archived',label:'Archived',Icon:I.Archive}]}/>
           <div className="flex-1 flex flex-col min-w-0">
@@ -7119,29 +7119,12 @@ function actByName(name){const m=(typeof TEAM_MEMBERS!=='undefined'?TEAM_MEMBERS
 function actRel(min){min=Math.max(0,Math.round(min||0));if(min<1)return'Just now';if(min<60)return min+'m ago';const h=Math.floor(min/60);if(h<24)return h+'h ago';const d=Math.floor(h/24);if(d===1)return'Yesterday';if(d<7)return d+'d ago';const w=Math.floor(d/7);return w+'w ago';}
 let _actSeq=0;
 function mkAct(type,o){o=o||{};const m=ACT_META[type]||ACT_META.note;const ts=o.ts==null?0:o.ts;return{id:o.id||('a'+(++_actSeq)),type,cat:m.cat,label:o.label||m.label,chip:m.chip,Icon:m.Icon,ic:m.ic,title:o.title||'',body:o.body||'',actor:o.actor||actActor(o.by||'AM'),ts,timeLabel:o.timeLabel||actRel(ts),payload:o.payload||null,source:o.source||null};}
-function actFromQual(q){if(!q)return mkAct('form',{ts:90,title:'Qualification form'});const ok=q.status==='qualified',bad=q.status==='disqualified';return mkAct('form',{ts:90,by:q.rep?actByName(q.rep):'AM',label:q.funnel?'FUNNEL':ok?'QUALIFIED':bad?'REVIEW':'FORM',title:q.funnel?('Funnel submitted: '+(q.formName||'funnel')):(q.formName?('Form submitted: '+q.formName):'Form submitted'),body:((q.answers||[]).filter(a=>a.a).map(a=>a.q+': '+a.a).join(' · ')||'Submitted the form.')+(q.source?(' · Source: '+q.source):'')});}
 // ── Activity outcome / playbook option lists ──
 const ACT_CALL_OUTCOMES=['Discovery','Follow-up','Demo','Negotiation','Check-in','Deal nurturing','Support','Other'];
-const ACT_MEETING_OUTCOMES=['Discovery','Demo','Negotiation','Onboarding','Check-in','QBR','Support','Other'];
-const ACT_PLAYBOOKS=['Discovery','Demo','Follow-up','Negotiation','Onboarding','Check-in','Support'];
 // Per-record activity generators (deterministic, representative demo mix)
 function actContactOwn(c){
   if(!c)return[];
   const own=c.owner||'AM';const A=actActor(own).name;const them=c.name||'Them';
-  // Ad-captured contacts get a lean, authentic timeline anchored on the capture event ("Lead from [source]"),
-  // not the generic demo history — derived from the contact's own attribution fields (Part C.1).
-  if(c.adPlatform){
-    const at=c.adTs!=null?c.adTs:6;
-    const cid=c.gclid?('GCLID '+String(c.gclid)):c.fbclid?('FBCLID '+String(c.fbclid)):'';
-    const feed=[
-      mkAct('form',{ts:at,by:'nrtur',label:'AD LEAD',title:'Lead from '+(c.adSourceLabel||c.source||'ad platform'),body:[c.adCampaign&&('Campaign: '+c.adCampaign),c.adFormName&&('Form: '+c.adFormName),c.adAdset&&('Ad set: '+c.adAdset),cid].filter(Boolean).join(' · ')||'Captured from a connected ad platform.'}),
-      mkAct('created',{ts:at+1,by:'nrtur',label:'CONTACT CREATED',title:'Contact created',body:'Source: '+(c.source||'Ad')+'.'}),
-    ];
-    if(c.adSms)feed.unshift(mkAct('sms',{ts:Math.max(0,at-1),by:'nrtur',title:'Speed-to-lead SMS sent',body:'Hi '+(((c.first||c.name||'there')+'').split(' ')[0])+', thanks for reaching out — when works for a quick call this week?'}));
-    if(c.adEnrolled)feed.unshift(mkAct('sequence',{ts:Math.max(0,at-2),by:'nrtur',title:'Enrolled in sequence',body:'Speed-to-lead follow-up sequence.',payload:{seq:'Speed-to-lead',step:'1 of 3'}}));
-    if(c.dnc)feed.unshift(mkAct('dnc',{ts:Math.max(0,at-3),by:own,title:'Marketing emails turned OFF',body:'Do-not-contact enabled.',payload:{channels:['Email','SMS','Calls','Push','In-app'],from:'On',to:'Off'}}));
-    return feed;
-  }
   const out=[
     mkAct('email',{ts:120,by:own,title:'Re: '+(c.co?(c.co+' — next steps'):'next steps'),body:'Thanks for the note — Thursday after 2pm works on my end. Could you also share the security overview ahead of time? Our IT lead will want to skim it before the call.',payload:{dir:'in',subject:'Re: '+(c.co?(c.co+' — next steps'):'next steps'),thread:[
       {from:them,ts:120,snippet:'Thanks for the note — Thursday after 2pm works on my end.'},
@@ -7149,30 +7132,25 @@ function actContactOwn(c){
       {from:them,ts:1500,snippet:'Could we find time this week for a quick walkthrough?'},
     ]}}),
     mkAct('call',{ts:1500,by:own,title:'Outbound call · Connected — '+them,body:'Walked through pricing on the annual plan; sending the proposal next.'}),
-    mkAct('meeting',{ts:2880,by:own,title:'Discovery meeting · '+them,body:'45-min intro with the buying team.'}),
     mkAct('mms',{ts:900,by:own,title:'Text thread with '+them,body:'4 messages · 2 photos'}),
     mkAct('note',{ts:1560,by:own,title:'Very interested in annual plan',body:'Wants to move forward with the annual retainer. Budget confirmed with finance; champion is '+them+'. Watch-out: needs SSO before a wider rollout.'}),
     mkAct('task',{ts:300,by:own,label:'TASK DUE',title:'Prepare proposal draft',body:'Draft the annual proposal incl. sandbox + SSO notes.',payload:{due:'Tomorrow, 5:00 PM',priority:'High',assignee:A,related:them}}),
     mkAct('task',{ts:2400,by:own,label:'TASK DONE',title:'Send follow-up email ✓',body:'Completed — recap + next steps sent.',payload:{due:'Yesterday',priority:'Medium',assignee:A,done:true}}),
-    mkAct('field',{ts:4320,by:own,title:'Status changed',body:'Moved forward after the discovery call.',payload:{field:'Status',from:'New',to:'Qualified'}}),
+    mkAct('field',{ts:4320,by:own,title:'Status changed',body:'Moved forward after the discovery call.',payload:{field:'Status',from:'Lead',to:'Prospect'}}),
     mkAct('field',{ts:8600,by:own,title:'Owner changed',body:'Reassigned for territory coverage.',payload:{field:'Owner',from:'Unassigned',to:A}}),
     mkAct('tag',{ts:4400,by:own,title:'Tag added',body:'Added "'+((c.tags&&c.tags[0])||'top-lead')+'".',payload:{tag:(c.tags&&c.tags[0])||'top-lead'}}),
     mkAct('sequence',{ts:5760,by:'nrtur',title:'Enrolled in sequence',body:'Auto-enrolled after qualifying.',payload:{seq:'New Lead Nurture',step:'1 of 4'}}),
     mkAct('created',{ts:20160,by:own,label:'CONTACT CREATED',title:'Contact created',body:'Source: '+(c.source||'Referral')+'.'}),
   ];
-  if(c.dnc)out.unshift(mkAct('dnc',{ts:55,by:own,title:'Marketing emails turned OFF',body:'Do-not-contact enabled by '+A+'.',payload:{channels:['Email','SMS','Calls','Push','In-app'],from:'On',to:'Off'}}));
-  if(c.qual)out.unshift(actFromQual(c.qual));
+  if(c.dnc)out.unshift(mkAct('dnc',{ts:55,by:own,title:'Marketing emails turned OFF',body:'Do-not-contact enabled by '+A+'.',payload:{channels:['Email','SMS','Calls'],from:'On',to:'Off'}}));
   return out;
 }
 function actDealOwn(d){
   if(!d)return[];
   const own=d.owner||'AM';const A=actActor(own).name;const val=d.value||'';const them=d.primaryContact||d.company||'the buyer';
   const out=[
-    mkAct('email',{ts:1440,by:own,title:'Proposal sent',body:'Attached the proposal PDF — scope, annual pricing & a 90-day rollout roadmap. Included a sandbox link and the SSO setup checklist your IT lead asked about.',payload:{dir:'out',subject:'Proposal — '+(d.company||d.name||''),thread:[{from:A,ts:1440,snippet:'Attached the proposal PDF — scope, pricing & roadmap.'},{from:them,ts:1200,snippet:'Got it — reviewing with the team, will revert by EOW.'}]}}),
-    mkAct('meeting',{ts:2880,by:own,title:'Demo call held · '+(d.company||them),body:'45-min product demo with the buying team. Strong interest in automations.'}),
-    mkAct('call',{ts:5200,by:own,title:'Negotiation call · '+them,body:'Talked through annual pricing and procurement steps.'}),
-    mkAct('sms',{ts:3600,by:own,title:'Text thread with '+them,body:'3 messages'}),
-    mkAct('stage',{ts:7200,by:own,title:'Deal moved — Qualified → Proposal',body:'Advanced after the demo call.',payload:{field:'Stage',from:'Qualified',to:'Proposal'}}),
+    mkAct('note',{ts:1440,by:own,title:'Proposal sent',body:'Sent the proposal with scope, annual pricing and a 90-day rollout plan. Reviewing with their team; reply expected by end of week.'}),
+    mkAct('stage',{ts:7200,by:own,title:'Deal moved — Qualified → Proposal',body:'',payload:{field:'Stage',from:'Qualified',to:'Proposal'}}),
     mkAct('deal',{ts:9000,by:own,label:'DEAL VALUE',title:'Deal value updated',body:(val?('Set to '+val+' '):'')+'after scoping the annual plan.',payload:{field:'Value',from:'—',to:val||'—'}}),
     mkAct('deal',{ts:20160,by:own,label:'DEAL CREATED',title:'Deal created — '+(d.name||d.company||''),body:'Opened at '+(val||'—')+' · '+(d.stageName||'Qualified')+'.'}),
   ];
@@ -7185,10 +7163,7 @@ function actCompanyOwn(co){
   const own=co.owner||'AM';const A=actActor(own).name;const them=(co.name||'the account')+' team';
   return [
     mkAct('note',{ts:200,by:own,title:'Account review',body:(co.name||'Account')+' — '+(co.type||'Prospect')+(co.industry?(' · '+co.industry):'')+'. Strong expansion potential; multiple active stakeholders. Renewal is healthy and there\'s appetite for a second team.'}),
-    mkAct('meeting',{ts:7000,by:own,title:'QBR · '+(co.name||'Account'),body:'Quarterly business review with the account team.'}),
-    mkAct('sms',{ts:5000,by:own,title:'Text thread with '+(co.name||'account'),body:'3 messages'}),
-    mkAct('field',{ts:4320,by:own,title:'Company type changed',body:'Upgraded after closing the first deal.',payload:{field:'Type',from:'Prospect',to:(co.type||'Customer')}}),
-    mkAct('created',{ts:43200,by:own,label:'COMPANY CREATED',title:'Company created',body:'Added by '+A+(co.createdAt?(' · '+co.createdAt):'')+'.'}),
+    mkAct('task',{ts:4320,by:own,label:'TASK DUE',title:'Plan renewal check-in',body:'Confirm stakeholders and timing for the renewal conversation.',payload:{due:'Next week',priority:'Medium',assignee:A,related:co.name||'Account'}}),
   ];
 }
 function actLeadOwn(l){
@@ -7200,7 +7175,7 @@ function actLeadOwn(l){
     mkAct('note',{ts:900,by:own,title:'Note added',body:'Intro call booked for next week. Wants to see pricing for the team before committing.'}),
     ...(st!=='New'?[mkAct('field',{ts:1500,by:own,label:'STATUS CHANGE',title:'Status changed — New → '+st,body:'',payload:{field:'Status',from:'New',to:st}})]:[]),
     mkAct('field',{ts:2100,by:'nrtur',label:'ASSIGNMENT',title:'Assigned to '+A,body:'',payload:{field:'Owner',from:'—',to:A}}),
-    mkAct('created',{ts:2400,by:'nrtur',label:'LEAD CREATED',title:'Lead created',body:'Source: '+(l.source||'Web form')+'.'}),
+    mkAct('created',{ts:2400,by:'nrtur',label:'LEAD CREATED',title:'Lead created',body:l.source?('Source: '+l.source+'.'):''}),
   ];
   if(l.converted){
     if(l.convDeal)out.unshift(mkAct('deal',{ts:30,by:own,label:'DEAL CREATED',title:'Deal created — '+l.convDeal,body:'Created on conversion.'}));
@@ -7227,16 +7202,7 @@ function buildActivityFeed(kind,rec,ctx){
     } else if(kind==='company'&&rec){
       feed=actCompanyOwn(rec); // the company's OWN activity only — linked contacts' and deals' events stay on their records
     } else if(kind==='deal'&&rec){
-      feed=actDealOwn(rec);
-      const person=(rec.primaryContactId!=null?contacts.find(c=>c.id===rec.primaryContactId&&!c.deleted):null)||contacts.find(c=>c.name===rec.primaryContact&&!c.deleted)||(rec.companyId!=null?contacts.find(c=>c.companyId===rec.companyId&&!c.deleted):null)||contacts.find(c=>c.co===rec.company&&!c.deleted);
-      if(person)feed=feed.concat(tagSrc(actContactOwn(person).slice(0,4),{type:'contact',id:person.id,label:person.name,color:person.color||'#8FB4EA'}));
-      // The originating lead's history rolls up onto the DEAL too (mirrors the contact branch at kind==='contact'),
-      // so a converted lead's pre-conversion calls/emails/notes are visible from ALL THREE views — lead, contact AND
-      // deal. Resolved by the lead's convertedToDealId back-link (fallback: the deal's fromLeadId), never by name.
-      const _dLead=leads.find(L=>L&&L.convertedToDealId!=null&&L.convertedToDealId===rec.id)||(rec.fromLeadId!=null?leads.find(L=>L&&L.id===rec.fromLeadId):null);
-      if(_dLead)feed=feed.concat(tagSrc(actLeadOwn(_dLead),{type:'lead',id:_dLead.id,label:'from lead · '+_dLead.name,color:'#5FD09B'}));
-      const co=(rec.companyId!=null?companies.find(x=>x.id===rec.companyId):null)||companies.find(x=>x.name===rec.company);
-      if(co)feed=feed.concat(tagSrc(actCompanyOwn(co).slice(0,2),{type:'company',id:co.id,label:co.name,color:'#3475CE'}));
+      feed=actDealOwn(rec); // GET /deals/{id}/activities: the deal's OWN events only (stage, value, notes, created, won/lost); no roll-up from linked records
     } else if(kind==='lead'&&rec){
       feed=actLeadOwn(rec);
     }
@@ -7287,22 +7253,12 @@ function ActCallExpanded({e}){
   </div>);
 }
 function ActMeetingExpanded({e}){
+  // Read-only: the app's meeting payload has no outcome or playbook (MeetingPayloadPanel.tsx), and nothing in the backend writes meetings today.
   const p=e.payload||{};
-  const [outcome,setOutcome]=React.useState(p.outcome||'Demo');
-  const [playbook,setPlaybook]=React.useState(p.playbook||'Demo');
-  const [notes,setNotes]=React.useState(p.notes||'');
-  const setOut=(v)=>{setOutcome(v);window.__nrturToast&&window.__nrturToast('Meeting outcome saved','success');};
-  return(<div className="mt-1.5 flex flex-col gap-3.5">
-    <div className="flex flex-col gap-1.5 text-[12.5px] text-white/65">
-      {p.start&&<div className="flex items-center gap-2"><I.Clock size={12} className="text-white/40 shrink-0"/>{p.start}{p.dur&&<span className="text-white/50">· {p.dur}</span>}</div>}
-      {(p.location||p.join)&&<div className="flex items-center gap-2 flex-wrap"><I.MapPin size={12} className="text-white/40 shrink-0"/>{p.location||'Online'}{p.join&&<a href={'https://'+p.join} target="_blank" rel="noreferrer" onClick={_actStop()} className="inline-flex items-center gap-1 text-brand-300 hover:text-brand-200 transition-colors">Join<I.ArrowUpRight size={11}/></a>}</div>}
-    </div>
-    <div className="flex items-center gap-2 flex-wrap">
-      <ActSelect value={outcome} options={ACT_MEETING_OUTCOMES} onChange={setOut} Icon={I.Target}/>
-      <ActSelect value={playbook} options={ACT_PLAYBOOKS} onChange={setPlaybook} Icon={I.Calendar}/>
-    </div>
-    {p.agenda&&p.agenda.length>0&&<div><p className="text-[10px] font-medium text-white/40 uppercase tracking-[0.12em] mb-1.5">Agenda</p><ul className="flex flex-col gap-1">{p.agenda.map((a,i)=>(<li key={i} className="flex gap-2 text-[12.5px] text-white/65 leading-relaxed"><span className="text-emerald-300 mt-0.5 shrink-0">•</span>{a}</li>))}</ul></div>}
-    <div><p className="text-[10px] font-medium text-white/40 uppercase tracking-[0.12em] mb-1.5">Notes</p><textarea value={notes} onChange={ev=>setNotes(ev.target.value)} onClick={_actStop()} placeholder="Add note…" rows={2} className="w-full rounded-xl bg-white/[0.04] border border-white/[0.08] focus:border-brand-500/40 outline-none px-3 py-2.5 text-[13px] text-white placeholder:text-white/30 resize-y"/></div>
+  return(<div className="mt-1.5 flex flex-col gap-1.5 text-[12.5px] text-white/65">
+    {p.start&&<div className="flex items-center gap-2"><I.Clock size={12} className="text-white/40 shrink-0"/>{p.start}{p.dur&&<span className="text-white/50">· {p.dur}</span>}</div>}
+    {p.location&&<div className="flex items-center gap-2"><I.MapPin size={12} className="text-white/40 shrink-0"/>{p.location}</div>}
+    {p.notes&&<p className="leading-relaxed">{p.notes}</p>}
   </div>);
 }
 function ActEmailExpanded({e}){
@@ -7519,7 +7475,7 @@ function ActivityTimeline({kind,rec,ctx,goTo,extra,onAddNote,onEmail,onLogCall,o
   const _noteEdit=React.useMemo(()=>noteEdit?{onEdit:(id,body)=>_crm.updateActivity&&_crm.updateActivity(id,{body}),onDelete:(id)=>{_crm.removeActivity&&_crm.removeActivity(id);window.__nrturToast&&window.__nrturToast('Note deleted','success');}}:null,[noteEdit,_crm]);
   const [filter,setFilter]=React.useState('all');
   const recId=rec&&rec.id;
-  const base=React.useMemo(()=>buildActivityFeed(kind,rec,ctx||{}),[kind,recId,ctx&&ctx.contacts,ctx&&ctx.companies,ctx&&ctx.deals,ctx&&ctx.leads,rec&&rec.dnc,rec&&rec.qual]);
+  const base=React.useMemo(()=>buildActivityFeed(kind,rec,ctx||{}),[kind,recId,ctx&&ctx.contacts,ctx&&ctx.companies,ctx&&ctx.deals,ctx&&ctx.leads,rec&&rec.dnc]);
   // R10-5/37: sort by absolute recency — persisted rows carry `at` (wall-clock); seeded rows derive it
   // from their relative ts (minutes-ago). Most-recent first, stable across ts:0 ties.
   const items=React.useMemo(()=>{const now=Date.now();const rec=(a)=>a.at!=null?a.at:(now-(a.ts||0)*60000);return [...(extra||[]),...base].filter(a=>!cats||cats.includes(a.cat)).slice().sort((a,b)=>rec(b)-rec(a));},[base,extra,cats&&cats.join()]); // cats: restrict to these categories (the deal page shows its own notes, tasks and deal events)
@@ -7670,24 +7626,43 @@ function ConvertedFromLeadCard({lead,goTo}){
   </div>);
 }
 // In-app softphone dock (the app's global dialer), opened from a record's "Make call" with the number prefilled.
+// App Softphone.tsx: the live call (ActiveCall) has Mute, Keypad (DTMF) and a quick note; any connected call then opens
+// the post-call notes form (PostCallNotesModal), where the user picks the outcome. Nothing hard-codes an outcome.
+// Caller ID defaults to the default number, else the first (DialPad.tsx).
 function SoftphoneDock({name,phone,onClose,onEnded}){
   const nums=(_livePhoneNumbers||[]).filter(n=>!n.released&&n.status==='active'&&n.caps&&n.caps.voice);
-  const [from,setFrom]=React.useState((nums[0]||{}).number||'');
+  const [from,setFrom]=React.useState((nums.find(n=>n.isDefault)||nums[0]||{}).number||'');
   const [to,setTo]=React.useState(phone||'');
-  const [st,setSt]=React.useState('idle'); // idle | live | ended
+  const [st,setSt]=React.useState('idle'); // idle | live | notes | ended
   const [sec,setSec]=React.useState(0);
+  const [muted,setMuted]=React.useState(false);
+  const [padOpen,setPadOpen]=React.useState(false);
+  const [digits,setDigits]=React.useState('');
+  const [quick,setQuick]=React.useState('');
   React.useEffect(()=>{if(st!=='live')return;const t=setInterval(()=>setSec(x=>x+1),1000);return()=>clearInterval(t);},[st]);
   const mmss=(n)=>Math.floor(n/60)+':'+String(n%60).padStart(2,'0');
-  const hang=()=>{setSt('ended');onEnded&&onEnded(mmss(sec));};
-  return(<div role="dialog" aria-label="Softphone" className="fixed bottom-6 right-6 z-[175] w-[300px] rounded-2xl border border-white/[0.10] overflow-hidden" style={{background:'var(--pop)',boxShadow:'0 24px 70px rgba(0,0,0,0.6)'}}>
-    <div className="flex items-center justify-between px-4 py-3 border-b border-white/[0.07]"><p className="text-[13px] font-semibold text-white flex items-center gap-2"><I.Phone size={13} className="text-brand-300"/>Softphone</p><button onClick={()=>{if(st==='live')hang();onClose();}} aria-label="Close" className="text-white/40 hover:text-white"><I.X size={14}/></button></div>
-    <div className="p-4 flex flex-col gap-3">
+  const hang=()=>{setPadOpen(false);setSt('notes');};
+  const finish=(data)=>{setSt('ended');onEnded&&onEnded({duration:mmss(sec),outcome:'',notes:quick,...(data||{})});};
+  const CTRL='flex-1 flex flex-col items-center gap-1 py-2 rounded-xl text-[11px] font-medium border transition-all';
+  return(<div role="dialog" aria-label="Softphone" className="fixed bottom-6 right-6 z-[175] w-[320px] max-h-[calc(100vh-48px)] flex flex-col rounded-2xl border border-white/[0.10] overflow-hidden" style={{background:'var(--pop)',boxShadow:'0 24px 70px rgba(0,0,0,0.6)'}}>
+    <div className="flex items-center justify-between px-4 py-3 border-b border-white/[0.07] shrink-0"><p className="text-[13px] font-semibold text-white flex items-center gap-2"><I.Phone size={13} className="text-brand-300"/>Softphone</p><button onClick={()=>{if(st==='live'){hang();return;}if(st==='notes'){finish(null);}onClose();}} aria-label="Close" className="text-white/40 hover:text-white"><I.X size={14}/></button></div>
+    <div className="p-4 flex flex-col gap-3 overflow-y-auto scroll-area">
       <div><p className="text-[14px] font-medium text-white truncate">{name}</p>{st==='idle'?<input value={to} onChange={e=>setTo(e.target.value)} aria-label="Number to call" className="mt-1 w-full px-3 py-2 rounded-lg bg-white/[0.04] border border-white/[0.10] text-[13px] text-white font-mono outline-none focus:border-brand-500/40"/>:<p className="text-[12px] text-white/50 font-mono mt-0.5">{to}</p>}</div>
       {st==='idle'&&<label className="block"><span className="text-[10.5px] font-medium text-white/45 uppercase tracking-[0.14em]">Caller ID</span><select value={from} onChange={e=>setFrom(e.target.value)} className="mt-1 w-full px-3 py-2 rounded-lg text-[12.5px] text-white outline-none border border-white/[0.10]" style={{background:'var(--s850)',colorScheme:'dark'}}>{nums.map(n=>(<option key={n.number} value={n.number}>{n.number}</option>))}</select></label>}
-      {st==='live'&&<p className="text-center text-[22px] font-semibold text-white tabular-nums">{mmss(sec)}</p>}
+      {st==='live'&&<React.Fragment>
+        <p className="text-center text-[22px] font-semibold text-white tabular-nums" aria-label="Call duration">{mmss(sec)}</p>
+        {digits&&<p className="text-center text-[12px] font-mono text-white/50 truncate">{digits}</p>}
+        <div className="flex gap-2">
+          <button onClick={()=>setMuted(m=>!m)} aria-pressed={muted} className={CTRL+' '+(muted?'bg-amber-500/15 border-amber-500/30 text-amber-200':'bg-white/[0.04] border-white/[0.08] text-white/70 hover:bg-white/[0.07]')}>{muted?<I.MicOff size={14}/>:<I.Mic size={14}/>}{muted?'Unmute':'Mute'}</button>
+          <button onClick={()=>setPadOpen(o=>!o)} aria-pressed={padOpen} className={CTRL+' '+(padOpen?'bg-brand-500/15 border-brand-500/30 text-brand-200':'bg-white/[0.04] border-white/[0.08] text-white/70 hover:bg-white/[0.07]')}><I.Hash size={14}/>Keypad</button>
+        </div>
+        {padOpen&&<div className="grid grid-cols-3 gap-1.5">{['1','2','3','4','5','6','7','8','9','*','0','#'].map(k=>(<button key={k} onClick={()=>setDigits(d=>(d+k).slice(-24))} className="py-2 rounded-lg bg-white/[0.04] border border-white/[0.08] text-[15px] font-medium text-white hover:bg-white/[0.08] transition-all">{k}</button>))}</div>}
+        <input value={quick} onChange={e=>setQuick(e.target.value)} placeholder="Quick note..." aria-label="Quick note" className="w-full px-3 py-2 rounded-lg bg-white/[0.04] border border-white/[0.10] text-[12.5px] text-white outline-none focus:border-brand-500/40 placeholder:text-white/30"/>
+      </React.Fragment>}
+      {st==='notes'&&<CallEnrichmentForm compact duration={mmss(sec)} onSave={(d)=>finish({outcome:d.outcome,reason:d.reason,decision:d.decision,notes:[quick,d.notes].filter(x=>x&&x.trim()).join(' — ')})} onSkip={()=>finish(null)}/>}
       {st==='ended'&&<p className="text-center text-[12.5px] text-white/60">Call ended · {mmss(sec)} — logged to the timeline.</p>}
       {st==='idle'&&<button disabled={!to.trim()} onClick={()=>{setSec(0);setSt('live');}} className="w-full inline-flex items-center justify-center gap-2 py-2.5 rounded-xl text-[13px] font-semibold text-white bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 transition-all"><I.Phone size={13}/>Call</button>}
-      {st==='live'&&<button onClick={hang} className="w-full inline-flex items-center justify-center gap-2 py-2.5 rounded-xl text-[13px] font-semibold text-white bg-red-500 hover:bg-red-600 transition-all"><I.Phone size={13}/>Hang up</button>}
+      {st==='live'&&<button onClick={hang} className="w-full inline-flex items-center justify-center gap-2 py-2.5 rounded-xl text-[13px] font-semibold text-white bg-red-500 hover:bg-red-600 transition-all"><I.Phone size={13}/>End call</button>}
       {st==='ended'&&<button onClick={onClose} className="w-full py-2.5 rounded-xl text-[13px] font-medium text-white/70 bg-white/[0.04] border border-white/[0.08] hover:bg-white/[0.07] transition-all">Close</button>}
     </div>
   </div>);
@@ -7859,7 +7834,7 @@ function ContactDetailPage({goTo,nav}){
       </div>
       {editOpen&&<RecordEditDrawer object="contact" title={'Edit '+c.name} Icon={I.UserPlus} groups={editGroups} record={crec} onSave={onEditSave} onClose={()=>setEditOpen(false)}/>}
       {callModal&&<LogCallModal close={()=>setCallModal(false)} contactName={c.name} contactId={c.id} onSave={onLogCall}/>}
-      {dialOpen&&<SoftphoneDock name={c.name} phone={c.phone} onClose={()=>setDialOpen(false)} onEnded={(dur)=>onLogCall({direction:'out',outcome:'Answered',duration:dur,notes:''})}/>}
+      {dialOpen&&<SoftphoneDock name={c.name} phone={c.phone} onClose={()=>setDialOpen(false)} onEnded={(r)=>onLogCall({direction:'out',outcome:r.outcome||'',duration:r.duration,notes:r.notes||''})}/>}
       {smsOpen&&<SmsNewMessageModal initialTo={c.phone||''} close={()=>setSmsOpen(false)} onSend={({body})=>{setExtra(x=>[{...mkAct('sms',{ts:0,by:CURRENT_USER.avatar,title:'Text to '+c.name,body}),..._commDeal()},...x]);setSmsOpen(false);window.__nrturToast&&window.__nrturToast('Message sent','success');}}/>}
       {taskOpen&&<TaskFormModal initial={{type:'task',allDay:true,priority:'Medium',contact:c.name,linkType:'contact',company:c.co}} onClose={()=>setTaskOpen(false)} onSave={(ev)=>{calAddItem(ev);setExtra(x=>[mkAct('task',{ts:0,by:'AM',title:ev.title||'Task created',body:(ev.date?('Due '+ev.date):'Added to tasks.')}),...x]);setTaskOpen(false);}}/>}
       {seqEnrollOpen&&<SequenceEnrollModal recipients={[{id:c.id,name:c.name,email:c.email,phone:c.phone,timezone:c.timezone,company:c.co||c.company||'',type:'contact'}]} onClose={()=>setSeqEnrollOpen(false)}/>}
@@ -7874,7 +7849,7 @@ function AddContactPage({goTo,nav}){
   const showToast=(m)=>{setToast(m);setTimeout(()=>setToast(''),2400);};
   // Build a real contact record from the form (mirrors the quick-add shape) and persist it — the single-add used to
   // just goTo('contact-detail') and create nothing.
-  const createReal=(form)=>{const id=Date.now()+Math.floor(Math.random()*1000);const name=(((form.first||'')+' '+(form.last||'')).trim())||form.first||'New contact';crm.setContacts(a=>[{id,name,first:form.first||name,last:form.last||'',co:form.company||'',company:form.company||'',email:form.email||'',phone:form.phone||'',title:form.title||'',avatar:arInitials(name),color:arPick(),status:'Active',cstatus:form.status||'Lead',owner:'AM',ownerColor:'#5E92D8',lastAct:'Just now',deal:'—',days:0,tags:[],archived:false},...a]);return id;};
+  const createReal=(form)=>{const id=Date.now()+Math.floor(Math.random()*1000);const name=(((form.first||'')+' '+(form.last||'')).trim())||form.first||'New contact';crm.setContacts(a=>[{id,name,first:form.first||name,last:form.last||'',co:form.company||'',company:form.company||'',email:form.email||'',phone:form.phone||'',title:form.title||'',avatar:arInitials(name),color:arPick(),status:'Active',cstatus:form.status||'Lead',owner:form.owner||'AM',ownerColor:((TEAM_MEMBERS.find(m=>m.avatar===(form.owner||'AM'))||{}).color)||'#5E92D8',source:form.source||'',lastAct:'Just now',deal:'—',days:0,tags:String(form.tags||'').split(',').map(x=>x.trim()).filter(Boolean),archived:false},...a]);return id;};
   const onSingle=(form)=>{const id=createReal(form);showToast('Contact created');setTimeout(()=>goTo('contact-detail',id),450);};
   const onBulk=(n)=>{showToast(n+(n===1?' contact':' contacts')+' added');setTimeout(()=>goTo('contacts'),700);};
   const title=initialMode==='multiple'?'Add multiple contacts':'Add a contact';
@@ -7905,7 +7880,7 @@ function AddContactPage({goTo,nav}){
 const STAGES_DATA=[
   {key:'prospecting',name:'Prospecting',color:'#87837A',count:8,value:'$42k',deals:[
     {id:120,company:'Northpeak Co',value:'$4,000',owner:'AM',ownerColor:'#5E92D8',tag:'Lost',tagBg:'bg-red-500/15',tagFg:'text-red-300',age:'4w',score:'cold',name:'Northpeak — Pilot',amount:4000,pipeline:'Sales Pipeline',primaryContact:'Greg Mason',dealTags:['cold'],deleted:true,deletedAt:Date.now()-14*864e5,deletedBy:'Jamie Kim'},
-    {id:1,company:'Meridian Agency',value:'$8,400',owner:'SC',ownerColor:'#5E92D8',tag:'Follow up',tagBg:'bg-blue-500/15',tagFg:'text-blue-300',age:'5d',score:'cold',name:'Meridian — Managed CRM',amount:8400,pipeline:'Sales Pipeline',closeDate:'2026-07-15',primaryContact:'Sarah Chen',primaryContactId:1,nextAction:'Email / follow-up',dealTags:['inbound'],source:'Meta Ads',amountType:'One-time',forecast:'Pipeline',additionalContacts:[{contact:'James Rivera',role:'Champion'}],createdBy:'SC',createdAt:'Apr 1, 2026',lastActivity:'5d ago',adSourceKey:'meta-ads',adPlatform:'meta',adCampaign:'Spring Promo 2026',fbclid:'IwAR2_a91kZ_demo_fbclid_8x2'},
+    {id:1,company:'Meridian Agency',value:'$8,400',owner:'SC',ownerColor:'#5E92D8',tag:'Follow up',tagBg:'bg-blue-500/15',tagFg:'text-blue-300',age:'5d',score:'cold',name:'Meridian — Managed CRM',amount:8400,pipeline:'Sales Pipeline',closeDate:'2026-07-15',primaryContact:'Sarah Chen',primaryContactId:1,nextAction:'Email / follow-up',dealTags:['inbound'],source:'Meta Ads',amountType:'One-time',forecast:'Pipeline',additionalContacts:[{contact:'James Rivera',role:'Champion'}],createdBy:'SC',createdAt:'Apr 1, 2026',lastActivity:'5d ago'},
     {id:2,company:'Bloom Creative',value:'$12,000',owner:'JK',ownerColor:'#9B7BDE',tag:'New lead',tagBg:'bg-emerald-500/15',tagFg:'text-emerald-300',age:'2d',score:'warm'},
     {id:3,company:'Vertex Labs',value:'$6,200',owner:'RL',ownerColor:'#2FA877',tag:'Call booked',tagBg:'bg-violet-500/15',tagFg:'text-violet-300',age:'1d',score:'hot'},
     {id:206,company:'Craftly',companyId:12,name:'Craftly — Onboarding',value:'$9,000',amount:9000,owner:'SC',ownerColor:'#C2568C',tag:'Converted',tagBg:'bg-emerald-500/15',tagFg:'text-emerald-300',age:'2d',score:'warm',pipeline:'Sales Pipeline',primaryContact:'Sofia Marchetti',primaryContactId:205,source:'Event',dealTags:['saastr'],createdBy:'SC',createdAt:'2d ago',lastActivity:'2d ago',fromLeadId:3},
@@ -7924,9 +7899,9 @@ const STAGES_DATA=[
     {id:31,company:'Northwind Co',value:'$58,000',owner:'AM',ownerColor:'#5E92D8',tag:'Won!',tagBg:'bg-emerald-500/15',tagFg:'text-emerald-300',age:'3d',score:'won',createdAt:'Mar 12, 2026',closeDate:'2026-05-30'},
     {id:32,company:'Apex Labs',value:'$41,000',owner:'SC',ownerColor:'#C2568C',tag:'Won!',tagBg:'bg-emerald-500/15',tagFg:'text-emerald-300',age:'6d',score:'won',createdAt:'Apr 18, 2026',closeDate:'2026-06-08'},
     {id:33,company:'Bluewave',value:'$73,000',owner:'MR',ownerColor:'#D89B3E',tag:'Won!',tagBg:'bg-emerald-500/15',tagFg:'text-emerald-300',age:'1w',score:'won',createdAt:'Feb 25, 2026',closeDate:'2026-06-02'},
-    {id:9404,company:'Whitfield & Co',name:'Whitfield & Co — Managed CRM',value:'$12,000',amount:12000,owner:'AM',ownerColor:'#5E92D8',tag:'Won!',tagBg:'bg-emerald-500/15',tagFg:'text-emerald-300',age:'5h',score:'won',pipeline:'Sales Pipeline',primaryContact:'Dana Whitfield',primaryContactId:9304,dealTags:['ad-lead'],createdAt:'May 20, 2026',closeDate:'2026-06-18',source:'Meta Ads',adSourceKey:'meta-ads',adPlatform:'meta',adCampaign:'Spring Promo 2026',adAdset:'Interest — SMB owners',adSourceLabel:'Meta Lead Ad — Spring Promo 2026',adFormName:'Spring Promo — Demo Request',utmSource:'fb',utmMedium:'paid_social',utmCampaign:'spring_promo_2026',fbclid:'IwAR9_demo_fbclid_dn4'},
-    {id:9405,company:'Nimbus Apps',name:'Nimbus Apps — Platform',value:'$9,000',amount:9000,owner:'RL',ownerColor:'#2FA877',tag:'Won!',tagBg:'bg-emerald-500/15',tagFg:'text-emerald-300',age:'1d',score:'won',pipeline:'Sales Pipeline',primaryContact:'Tariq Hassan',primaryContactId:9305,dealTags:['ad-lead'],createdAt:'May 28, 2026',closeDate:'2026-06-20',source:'Google Ads',adSourceKey:'google-ads',adPlatform:'google',adCampaign:'YouTube — Demo',adAdset:'In-stream — skippable',adSourceLabel:'Google Ad — YouTube — Demo',adFormName:'Search — Free Consultation',utmSource:'youtube',utmMedium:'video',utmCampaign:'yt_demo',gclid:'Cj0KCQ_demo_gclid_yt2'},
-    {id:9406,company:'Vertex HQ',name:'Vertex HQ — Annual',value:'$21,000',amount:21000,owner:'AM',ownerColor:'#5E92D8',tag:'Won!',tagBg:'bg-emerald-500/15',tagFg:'text-emerald-300',age:'3d',score:'won',pipeline:'Sales Pipeline',primaryContact:'Sandra Iyer',primaryContactId:9306,dealTags:['ad-lead'],createdAt:'May 15, 2026',closeDate:'2026-06-12',source:'Google Ads',adSourceKey:'google-ads',adPlatform:'google',adCampaign:'Search — Brand',adAdset:'Exact — bloom crm',adSourceLabel:'Google Ad — Search — Brand',adFormName:'Search — Free Consultation',utmSource:'google',utmMedium:'cpc',utmCampaign:'search_brand',gclid:'Cj0KCQ_demo_gclid_si1'}]},
+    {id:9404,company:'Whitfield & Co',name:'Whitfield & Co — Managed CRM',value:'$12,000',amount:12000,owner:'AM',ownerColor:'#5E92D8',tag:'Won!',tagBg:'bg-emerald-500/15',tagFg:'text-emerald-300',age:'5h',score:'won',pipeline:'Sales Pipeline',primaryContact:'Dana Whitfield',primaryContactId:9304,dealTags:['inbound'],createdAt:'May 20, 2026',closeDate:'2026-06-18',source:'Meta Ads'},
+    {id:9405,company:'Nimbus Apps',name:'Nimbus Apps — Platform',value:'$9,000',amount:9000,owner:'RL',ownerColor:'#2FA877',tag:'Won!',tagBg:'bg-emerald-500/15',tagFg:'text-emerald-300',age:'1d',score:'won',pipeline:'Sales Pipeline',primaryContact:'Tariq Hassan',primaryContactId:9305,dealTags:['inbound'],createdAt:'May 28, 2026',closeDate:'2026-06-20',source:'Google Ads'},
+    {id:9406,company:'Vertex HQ',name:'Vertex HQ — Annual',value:'$21,000',amount:21000,owner:'AM',ownerColor:'#5E92D8',tag:'Won!',tagBg:'bg-emerald-500/15',tagFg:'text-emerald-300',age:'3d',score:'won',pipeline:'Sales Pipeline',primaryContact:'Sandra Iyer',primaryContactId:9306,dealTags:['inbound'],createdAt:'May 15, 2026',closeDate:'2026-06-12',source:'Google Ads'}]},
   {key:'lost',name:'Lost',color:'#F0947F',count:3,value:'$76k',deals:[
     {id:34,company:'Cedar Systems',value:'$31,000',owner:'JK',ownerColor:'#9B7BDE',tag:'Lost',tagBg:'bg-red-500/15',tagFg:'text-red-300',age:'2w',score:'lost',createdAt:'Feb 10, 2026',closeDate:'2026-05-20'},
     {id:35,company:'Quill Media',value:'$18,000',owner:'MR',ownerColor:'#D89B3E',tag:'Lost',tagBg:'bg-red-500/15',tagFg:'text-red-300',age:'3w',score:'lost',createdAt:'Mar 5, 2026',closeDate:'2026-05-12'},
@@ -8000,7 +7975,8 @@ function KanbanBoard({columns,renderCard,onMove,canDrag,dragEnabled,wrapClass,bo
     {trailing?trailing:null}
   </div></div>);
 }
-function PipelineSwitcher({pipelines,activeId,onSwitch,onNew}){
+function PipelineSwitcher({pipelines,activeId,onSwitch,onNew,newGate,goTo}){
+  const _newBlocked=!!(newGate&&newGate.state==='blocked'); // app PipelineSwitcher.tsx: useCapGate('pipelines') — New pipeline disabled on blocked, notice beside it
   const [open,setOpen]=React.useState(false);
   const list=pipelines||[];
   const active=list.find(p=>p.id===activeId)||list[0]||{name:'Pipeline'};
@@ -8013,8 +7989,8 @@ function PipelineSwitcher({pipelines,activeId,onSwitch,onNew}){
     </button>
     {open&&(<div className="absolute left-0 top-[calc(100%+8px)] z-50 w-64 rounded-xl border border-white/[0.10] p-1.5 shadow-[0_12px_50px_rgba(0,0,0,0.55)]" style={{background:'var(--pop)'}}>
       <p className="px-2.5 pt-1.5 pb-1 text-[10px] font-medium uppercase tracking-[0.14em] text-white/50">Switch pipeline</p>
-      {list.map(p=>{const on=p.id===activeId;return(<button key={p.id} onClick={()=>{onSwitch(p.id);setOpen(false);}} className={['w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-[13px] transition-all',on?'bg-brand-500/12 text-white':'text-white/75 hover:bg-white/[0.05]'].join(' ')}><I.GitBranch size={13} className={on?'text-brand-300':'text-white/40'}/><span className="flex-1 text-left truncate">{p.name}</span><span className="text-[9px] font-medium px-1.5 py-0.5 rounded-full bg-white/[0.05] text-white/40 shrink-0">{'Deals'}</span>{p.stages&&<span className="text-[10px] font-semibold tabular-nums text-white/40">{p.stages.length}</span>}{on&&<I.Check size={13} className="text-brand-300"/>}</button>);})}
-      {onNew&&<React.Fragment><div className="h-px bg-white/[0.06] my-1.5 mx-1"/><button onClick={()=>{onNew();setOpen(false);}} className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-[13px] text-brand-300 hover:bg-brand-500/10 transition-all"><I.Plus size={13} stroke={2.4}/>New pipeline</button></React.Fragment>}
+      {list.map(p=>{const on=p.id===activeId;return(<button key={p.id} onClick={()=>{onSwitch(p.id);setOpen(false);}} className={['w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-[13px] transition-all',on?'bg-brand-500/12 text-white':'text-white/75 hover:bg-white/[0.05]'].join(' ')}><I.GitBranch size={13} className={on?'text-brand-300':'text-white/40'}/><span className="flex-1 text-left truncate">{p.name}</span>{p.isDefault&&<span className="text-[9px] font-semibold uppercase tracking-wider px-1 py-0.5 rounded text-white/45 shrink-0">Default</span>}{p.stages&&<span className="text-[10px] font-semibold tabular-nums text-white/40">{p.stages.length}</span>}{on&&<I.Check size={13} className="text-brand-300"/>}</button>);})}
+      {onNew&&<React.Fragment><div className="h-px bg-white/[0.06] my-1.5 mx-1"/><button disabled={_newBlocked} onClick={()=>{if(_newBlocked)return;onNew();setOpen(false);}} className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-[13px] text-brand-300 hover:bg-brand-500/10 transition-all disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent"><I.Plus size={13} stroke={2.4}/>New pipeline</button>{newGate&&newGate.state!=='open'&&<CapGateNotice gate={newGate} goTo={goTo} className="mx-1 mt-1"/>}</React.Fragment>}
     </div>)}
   </div>);
 }
@@ -9767,6 +9743,10 @@ function PipelinePage({goTo,nav}){
   const dealInActivePipe=(d)=>{const dp=d.pipeline||_defPipe;return dp===active.name||(!_realPipeNames.includes(dp)&&active.id===_defP.id);}; // a deal sits in exactly one pipeline; legacy/renamed pipeline values fall back to the default board so deals are never invisible
   const dealsFor=(stage)=>{let arr=stage.real?_deals.filter(d=>d.stageKey===stage.key&&!d.deleted&&!d.archived&&dealInActivePipe(d)):(stage.demo||[]);arr=omApplyFilter(arr,workFilter,dealFields);const _dq=dealSearch.trim().toLowerCase();if(_dq)arr=arr.filter(d=>String((searchCompany?d.company:(d.name||d.company))||'').toLowerCase().includes(_dq));arr=omSortRows(arr,workSort,'deal',dealFields);return arr;};
   React.useEffect(()=>{if(!pipeMenu)return;const fn=e=>{if(!e.target.closest('[data-pipe-menu]'))setPipeMenu(false);};document.addEventListener('mousedown',fn);return()=>document.removeEventListener('mousedown',fn);},[pipeMenu]);
+  const _bcPipe=React.useContext(BillingContext);const _crmPipe=React.useContext(CrmDataContext)||{};useRecordsCapDemo();
+  const [pipeCapDemo,setPipeCapDemo]=React.useState('plan'); // prototype demo: preview the pipelines cap on Solo (1) / Team (3)
+  const _dealGate=recordsCapGate(_bcPipe,'deals',(_crmPipe.deals||[]).filter(x=>x&&!x.deleted&&!x.archived).length); // app DealsToolbar / DealFormSheet useCapGate('deals')
+  const _dealBlocked=_dealGate.state==='blocked';
   if(loading)return(<div className="h-full flex" style={{background:'var(--s950)'}}><AppSidebar active="pipeline" goTo={goTo}/><div className="flex-1 flex flex-col min-w-0"><AppTopbar goTo={goTo} title="Pipeline"/><div className="flex-1 p-6 flex gap-4">{[...Array(5)].map((_,col)=>(<div key={col} className="flex-1 rounded-2xl bg-white/[0.025] border border-white/[0.05] p-3 flex flex-col gap-3"><Skel w="70px" h="11px"/>{[...Array(3)].map((_,card)=>(<div key={card} className="rounded-xl bg-white/[0.03] border border-white/[0.06] p-3 flex flex-col gap-2.5"><Skel w="80%" h="12px"/><Skel w="55%" h="10px"/></div>))}</div>))}</div><AppFooter/></div></div>);
   const allVisible=active.stages.flatMap(dealsFor);
   // KPIs/sub-header describe the WHOLE pipeline (the app reads them from /deals/forecast, which ignores board filters).
@@ -9832,7 +9812,7 @@ function PipelinePage({goTo,nav}){
                 <input autoFocus={focusName} onFocus={()=>{if(focusName)setFocusName(false);}} value={active.name} onChange={e=>renamePipeline(e.target.value)} onKeyDown={e=>{if(e.key==='Enter')e.currentTarget.blur();}} onBlur={e=>{if(!e.target.value.trim())renamePipeline('Untitled pipeline');}} placeholder="Pipeline name" title="Rename this pipeline" className="bg-transparent text-white text-[21px] font-semibold tracking-tight leading-none outline-none border-b border-white/15 focus:border-brand-500/60 pb-0.5 w-[220px] max-w-[40vw]"/>
               </div>
               ):(
-              <PipelineSwitcher pipelines={allPipelines} activeId={activeId} onSwitch={setActiveId} onNew={_isAdmin?()=>setNewPipeOpen(true):undefined}/>
+              <PipelineSwitcher pipelines={allPipelines} activeId={activeId} onSwitch={setActiveId} onNew={_isAdmin?()=>setNewPipeOpen(true):undefined} newGate={pipelinesCapGate(_bcPipe,pipeCapDemo==='plan'?null:pipeCapDemo,(allPipelines||[]).length)} goTo={goTo}/>
               )}
               {_isAdmin&&<button onClick={()=>setEditStages(v=>!v)} title={editStages?'Done editing stages':'Edit stages & pipeline'} aria-label={editStages?'Done editing':'Edit stages'} aria-pressed={editStages} className={['inline-flex items-center justify-center w-8 h-8 rounded-lg border transition-all',editStages?'text-emerald-300 bg-emerald-500/12 border-emerald-500/25 hover:bg-emerald-500/[0.16]':'text-white/55 hover:text-white bg-white/[0.04] border-white/[0.08] hover:bg-white/[0.07]'].join(' ')}>{editStages?<I.Check size={15} stroke={2.6}/>:<I.Settings size={15}/>}</button>}
               {editStages&&(<React.Fragment>
@@ -9854,13 +9834,15 @@ function PipelinePage({goTo,nav}){
                   <div className="px-1 pb-1.5 text-[10px] font-medium text-white/40 uppercase tracking-[0.14em]">View options</div>
                   <div className="flex flex-col gap-1.5 items-stretch [&>*]:w-full">
                     <OmBoardSort fields={BOARD_SORT_FIELDS} sort={workSort} onChange={setWorkSort}/>
-                    <button onClick={()=>{setImportDeals(true);setViewOptsOpen(false);}} className="w-full inline-flex items-center gap-2 px-3 py-2 rounded-lg text-[12.5px] font-medium text-white/70 hover:text-white bg-white/[0.04] border border-white/[0.08] hover:border-white/[0.18] transition-all"><I.Upload size={13}/>Import deals</button>
+                    <button disabled={_dealBlocked} title={_dealBlocked?_dealGate.reason:undefined} onClick={()=>{if(_dealBlocked)return;setImportDeals(true);setViewOptsOpen(false);}} className="w-full inline-flex items-center gap-2 px-3 py-2 rounded-lg text-[12.5px] font-medium text-white/70 hover:text-white bg-white/[0.04] border border-white/[0.08] hover:border-white/[0.18] transition-all disabled:opacity-50 disabled:cursor-not-allowed"><I.Upload size={13}/>Import deals</button>
                   </div>
                 </AnchoredMenu>
               </div>
             </div>
-            <button onClick={()=>window.__nrturQuickAdd?window.__nrturQuickAdd('deal','single',{pipeline:active.name}):goTo('add-deal')} className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-[13px] font-medium text-white bg-brand-500 hover:bg-brand-400 shadow-brand hover:-translate-y-0.5 transition-all"><I.Plus size={14} stroke={2.4}/>New Deal</button>
+            <button disabled={_dealBlocked} title={_dealBlocked?_dealGate.reason:undefined} onClick={()=>{if(_dealBlocked)return;window.__nrturQuickAdd?window.__nrturQuickAdd('deal','single',{pipeline:active.name}):goTo('add-deal');}} className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-[13px] font-medium text-white bg-brand-500 hover:bg-brand-400 shadow-brand hover:-translate-y-0.5 transition-all disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-brand-500 disabled:hover:translate-y-0"><I.Plus size={14} stroke={2.4}/>New Deal</button>
           </>}/>
+        <CapGateNotice gate={_dealGate} goTo={goTo} className="mx-7 mt-3 mb-1"/>
+        {_isAdmin&&<PreviewStateToggle label="Pipelines cap" options={[{k:'plan',l:'Current plan'},{k:'solo',l:'Solo (1)'},{k:'team',l:'Team (3)'}]} value={pipeCapDemo} onChange={setPipeCapDemo}/>}
         <div className="shrink-0 border-b border-white/[0.05] px-7 py-2 flex items-center gap-x-6 gap-y-1 flex-wrap overflow-x-auto scroll-area" style={{background:'var(--s900)'}}>
           {METRICS.map(m=>(<div key={m.label} className="flex items-center gap-2 shrink-0"><span className="text-[10px] uppercase tracking-[0.14em] text-white/40 font-medium">{m.label}</span><span className="text-[14px] font-semibold text-white tabular-nums">{m.value}</span><span className={['text-[10px] font-medium inline-flex items-center gap-0.5',m.up==null?'text-white/40':(m.up?'text-emerald-400':'text-red-400')].join(' ')}>{m.up==null?null:(m.up?<I.TrendUp size={8} stroke={2.6}/>:<I.TrendDown size={8} stroke={2.6}/>)}{m.delta}</span></div>))}
           <div className="flex items-center gap-2 shrink-0"><span className="text-[10px] uppercase tracking-[0.14em] text-brand-300/70 font-medium">Forecast</span><span className="text-[14px] font-semibold text-white tabular-nums">{fmtK(fc_weightedTotal)}</span><span className="text-[10px] text-brand-300/70">weighted</span></div>
@@ -9889,9 +9871,9 @@ function PipelinePage({goTo,nav}){
                       {_isAdmin&&<button onClick={()=>{setStageMenu(null);setEditStages(true);}} className={ON}><I.Edit size={13}/>Edit stages</button>}
                     </div>);})()}
                   </div></div>)}
-                  <div className="flex items-center justify-between mt-1.5 gap-2"><span className="text-[12px] font-semibold text-white tabular-nums">{sval}</span>{editStages?(<label className="flex items-center gap-1.5 shrink-0" title="Win probability at this stage"><input type="range" min="0" max="100" value={stage.prob} onChange={e=>setProb(stage.id,e.target.value)} style={{accentColor:stage.color,width:64}}/><span className="text-[10px] text-white/55 tabular-nums w-8 text-right">{stage.prob}%</span></label>):(<span className="text-[10px] text-white/50 font-medium">{stage.prob}% close</span>)}</div>
+                  <div className="flex items-center justify-between mt-1.5 gap-2"><span className="text-[12px] font-semibold text-white tabular-nums">{editStages?(_all+' deal'+(_all===1?'':'s')):sval}</span>{editStages?(<label className="flex items-center gap-1.5 shrink-0" title="Win probability at this stage"><input type="range" min="0" max="100" value={stage.prob} onChange={e=>setProb(stage.id,e.target.value)} style={{accentColor:stage.color,width:64}}/><span className="text-[10px] text-white/55 tabular-nums w-8 text-right">{stage.prob}%</span></label>):(<span className="text-[10px] text-white/50 font-medium">{stage.prob}% close</span>)}</div>
                 </div>),
-            footer:(!_term&&<button onClick={()=>window.__nrturQuickAdd?window.__nrturQuickAdd('deal','single',{stage:stage.name,pipeline:active.name}):goTo('add-deal')} className="w-full border border-dashed border-white/[0.10] hover:border-white/[0.22] hover:bg-white/[0.02] rounded-xl py-3 text-[11px] text-white/50 hover:text-white/65 transition-all flex items-center justify-center gap-1.5"><I.Plus size={11} stroke={2.4}/>Add deal</button>)});})}
+            footer:(!_term&&!_dealBlocked&&<button onClick={()=>window.__nrturQuickAdd?window.__nrturQuickAdd('deal','single',{stage:stage.name,pipeline:active.name}):goTo('add-deal')} className="w-full border border-dashed border-white/[0.10] hover:border-white/[0.22] hover:bg-white/[0.02] rounded-xl py-3 text-[11px] text-white/50 hover:text-white/65 transition-all flex items-center justify-center gap-1.5"><I.Plus size={11} stroke={2.4}/>Add deal</button>)});})}
           colClass={(col,ci,ov)=>['pipe-col '+(col.si===Math.min(mobStage,active.stages.length-1)?'pipe-col-active ':'')+'w-[290px] shrink-0 flex flex-col rounded-2xl bg-white/[0.018] border overflow-hidden transition-colors',editStages&&dragOver===col.si?'border-brand-500/50 ring-1 ring-brand-500/30':'border-white/[0.05]'].join(' ')}
           colProps={(col)=>editStages?{onDragOver:(e=>{e.preventDefault();if(dragOver!==col.si)setDragOver(col.si);}),onDrop:(e=>{e.preventDefault();onDropStage(col.si);}),onDragEnd:(()=>{dragRef.current=null;setDragOver(null);})}:{}}
           trailing={editStages&&_isAdmin?<button onClick={addStageInline} className="w-[150px] shrink-0 self-start mt-0 rounded-2xl border border-dashed border-white/[0.10] hover:border-brand-500/40 hover:bg-white/[0.02] text-white/50 hover:text-white/70 transition-all flex flex-col items-center justify-center gap-2 py-8"><I.Plus size={18} stroke={2.2}/><span className="text-[12px] font-medium">Add stage</span></button>:null}
@@ -10143,7 +10125,7 @@ const SALES_PROB={prospecting:15,qualified:40,proposal:55,negotiation:70,won:100
 // the deal detail can resolve ANY pipeline's stages. Every workspace is seeded with one default pipeline.
 function defaultPipelinesSeed(){
   const base=[
-    {id:1,name:'Sales Pipeline',isDefault:true,stages:STAGES_DATA.map(s=>({id:'st_'+s.key,key:s.key,real:true,name:s.name,color:s.color,prob:SALES_PROB[s.key]||50}))},
+    {id:1,name:'Sales Pipeline',isDefault:true,stages:STAGES_DATA.map(s=>({id:'st_'+s.key,key:s.key,real:true,name:s.name,color:s.color,prob:SALES_PROB[s.key]??50}))},
   ];
   const ex=onbExtraPipeline();return ex?[...base,ex]:base;
 }
@@ -10154,6 +10136,7 @@ function realStagesOf(p){return ((p&&p.stages)||[]).filter(s=>s.real);}
 // deal.pipeline is now a denormalized display name only. Name is the fallback for legacy/unbackfilled deals.
 function dealPrimaryPipeId(deal){const pl=((deal&&deal.stagePlacements)||[]).find(p=>p.primary);return pl?pl.pipelineId:null;}
 function pipelineFor(deal){const ps=livePipelines();const real=ps.filter(p=>realStagesOf(p).length);const pid=dealPrimaryPipeId(deal);if(pid!=null){const byId=real.find(p=>p.id===pid)||ps.find(p=>p.id===pid);if(byId)return byId;}const dp=deal&&deal.pipeline;return real.find(p=>p.name===dp)||real[0]||ps[0];}
+function dealEffProb(d){if(d&&d.probability!=null)return d.probability;const p=pipelineFor(d);const st=((p&&p.stages)||[]).find(x=>x.key===(d&&d.stageKey))||pipelineStageByKey(d&&d.stageKey);return (st&&st.prob)||0;}
 function pipelineStageByKey(key){const ps=livePipelines();for(const p of ps){const s=(p.stages||[]).find(x=>x.key===key);if(s)return s;}return STAGE_BY_KEY[key]||null;}
 // D3 storage: stagePlacements[{pipelineId,stageKey,primary}] — single primary placement today; the
 // decided multi-placement model extends this array without changing the shape.
@@ -10353,6 +10336,8 @@ function CompaniesPage({goTo,nav}){
   const activeViewObj=views.find(v=>v.key===activeKey);
   React.useEffect(()=>{const v=views.find(x=>x.key===activeKey);setWorkFilter(v&&v.filter?JSON.parse(JSON.stringify(v.filter)):{match:'AND',conds:[]});setWorkSort(v&&v.sort?{...v.sort}:{key:null,dir:null});setCols(v&&v.columns?v.columns.slice():DEFCOLS);},[activeKey]);
   const {confirmNode,openConfirm}=useConfirm();
+  const _bcRec=React.useContext(BillingContext);const _crmRec=React.useContext(CrmDataContext)||{};useRecordsCapDemo(); // records cap gate (app: CompaniesTopBar useCapGate('companies'))
+  const _recGate=recordsCapGate(_bcRec,'companies',(_crmRec.companies||[]).filter(x=>x&&!x.deleted&&!x.archived).length);
   if(loading)return(
     <div className="h-full flex" style={{background:'var(--s950)'}}><AppSidebar active="contacts" goTo={goTo}/><div className="flex-1 flex flex-col min-w-0"><AppTopbar goTo={goTo} title="Companies" noSearch/><div className="flex-1 flex min-h-0"><div className="w-[220px] shrink-0 border-r border-white/[0.05] p-4 flex flex-col gap-2" style={{background:'var(--s900)'}}>{[...Array(8)].map((_,i)=>(<Skel key={i} w={(120+(i%3)*20)+'px'} h="16px" r="6px"/>))}</div><div className="flex-1 overflow-y-auto scroll-area">{[...Array(8)].map((_,i)=>(<div key={i} className="flex items-center gap-4 px-7 py-4 border-b border-white/[0.03]"><Skel w="36px" h="36px" r="10px"/><div className="flex flex-col gap-1.5 flex-1"><Skel w={(110+i*7)+'px'} h="12px"/><Skel w="90px" h="10px"/></div><Skel w="60px" h="20px" r="9999px"/><Skel w="55px" h="11px"/></div>))}</div></div><AppFooter/></div></div>
   );
@@ -10400,12 +10385,14 @@ function CompaniesPage({goTo,nav}){
           </div>}
           rightSlot={<>
             {(effCanObject('Companies','create')||effCanExport())&&<div className="flex items-center gap-1 p-1 rounded-xl bg-white/[0.04] border border-white/[0.08]">
-              {effCanObject('Companies','create')&&<button onClick={()=>setImportModal(true)} title="Import CSV" className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[12.5px] font-medium text-white/65 hover:text-white hover:bg-white/[0.06] transition-all"><I.Upload size={13}/>Import</button>}
+              {effCanObject('Companies','create')&&<button disabled={_recGate.state==='blocked'} onClick={()=>{if(_recGate.state==='blocked')return;setImportModal(true);}} title={_recGate.state==='blocked'?_recGate.reason:'Import CSV'} className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[12.5px] font-medium text-white/65 hover:text-white hover:bg-white/[0.06] transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-transparent"><I.Upload size={13}/>Import</button>}
               {effCanExport()&&<button onClick={()=>showToast('Exported '+exportListCSV('company',list)+' companies to CSV')} title="Export CSV" className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[12.5px] font-medium text-white/65 hover:text-white hover:bg-white/[0.06] transition-all"><I.Download size={13}/>Export</button>}
             </div>}
-            {effCanObject('Companies','create')&&<button onClick={()=>window.__nrturQuickAdd?window.__nrturQuickAdd('company'):goTo('add-company')} className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-[13px] font-medium text-white bg-brand-500 hover:bg-brand-400 shadow-brand hover:-translate-y-0.5 transition-all"><I.Plus size={14} stroke={2.4}/>New Company</button>}
+            {effCanObject('Companies','create')&&<button disabled={_recGate.state==='blocked'} title={_recGate.state==='blocked'?_recGate.reason:undefined} onClick={()=>{if(_recGate.state==='blocked')return;window.__nrturQuickAdd?window.__nrturQuickAdd('company'):goTo('add-company');}} className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-[13px] font-medium text-white bg-brand-500 hover:bg-brand-400 shadow-brand hover:-translate-y-0.5 transition-all disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-brand-500 disabled:hover:translate-y-0"><I.Plus size={14} stroke={2.4}/>New Company</button>}
           </>} noSearch/>
         <PageNotices page="companies" goTo={goTo} className="px-7 pt-3 pb-1"/>
+        {effCanObject('Companies','create')&&<CapGateNotice gate={_recGate} goTo={goTo} className="mx-7 mt-3"/>}
+        {effCanObject('Companies','create')&&<RecordsCapDemoToggle/>}
         <div className="flex-1 flex min-h-0">
           <OmViewRail views={views} activeKey={activeKey} onSelect={selectView} countFor={countFor} bottomViews={[{key:'archived',label:'Archived',Icon:I.Archive}]}/>
           <div className="flex-1 flex flex-col min-w-0">
@@ -10462,9 +10449,9 @@ function CompanyDetailPage({goTo,nav}){
   const [peopleOpen,setPeopleOpen]=React.useState(false); // panels collapsed by default — header counts tell the story
   const [coDealsOpen,setCoDealsOpen]=React.useState(false);
   React.useEffect(()=>{setShowAllPeople(false);setShowAllCoDeals(false);setPeopleOpen(false);setCoDealsOpen(false);},[co&&co.id]);
-  const coPrimary=[{key:'name',label:'Name',type:'text',required:true},{key:'domain',label:'Website',type:'text'},{key:'industry',label:'Industry',type:'select',options:INDUSTRIES},{key:'type',label:'Company type',type:'pill',options:COMPANY_TYPES},{key:'owner',label:'Owner',type:'owner'},{key:'size',label:'Employees size',type:'number'},{key:'annualRevenue',label:'Annual revenue',type:'currency',sensitive:true},{key:'loc',label:'Location / HQ',type:'text'},{key:'tags',label:'Tags',type:'tags'}];
+  const coPrimary=[{key:'name',label:'Name',type:'text',required:true},{key:'domain',label:'Website',type:'text'},{key:'industry',label:'Industry',type:'select',options:INDUSTRIES},{key:'owner',label:'Owner',type:'owner'},{key:'size',label:'Employees',type:'number'},{key:'annualRevenue',label:'Annual revenue',type:'currency',sensitive:true},{key:'loc',label:'Location / HQ',type:'text'},{key:'tags',label:'Tags',type:'tags'}];
   const coSecondary=[{key:'website',label:'Website',type:'url',linkKind:'url'},{key:'parent',label:'Parent company',type:'lookup',readOnly:true},{key:'linkedin',label:'LinkedIn',type:'url',linkKind:'url'},{key:'desc',label:'Description',type:'text'},{key:'billing',label:'Billing address',type:'address'},{key:'shipping',label:'Shipping address',type:'address',readOnly:true},{key:'lastActivity',label:'Last activity',type:'datetime'}];
-  const coMeta=[{key:'createdBy',label:'Created by',type:'user'},{key:'createdAt',label:'Created at',type:'datetime'}];
+  const coMeta=[{key:'createdBy',label:'Created by',type:'text'},{key:'createdAt',label:'Created at',type:'datetime'}];
   const extra=(crm.activities||[]).filter(a=>a.subjectType==='company'&&a.subjectId===(co||{}).id); // R3: persisted, keyed by record
   const setExtra=(u)=>{const _a=(typeof u==='function'?u([]):u)||[];if(_a[0])crm.addActivity('company',(co||{}).id,_a[0]);};
   const addNote=(text,payload)=>setExtra(x=>[mkAct('note',{ts:0,by:CURRENT_USER_CODE,title:'Note added',body:text,payload}),...x]);
@@ -10536,7 +10523,7 @@ function CompanyDetailPage({goTo,nav}){
               <ActivityTimeline kind="company" rec={co} ctx={actCtx} goTo={goTo} extra={extra} richComposer noteEdit onAddNote={effCanObject('Companies','edit')?addNote:undefined} onSchedule={effCanObject('Companies','edit')?()=>setSchedOpen(true):undefined} notePlaceholder={'Add a note about '+co.name+'...'}/>
             </div>
           </div>
-          <RecordMetaFooter record={co} meta={coMeta}/>
+          <RecordMetaFooter record={{...co,createdBy:'—'}} meta={coMeta}/>{/* app: the company "Created by" always reads — (companies.md Known gaps) */}
         </div>
         {editOpen&&<RecordEditDrawer object="company" title={'Edit '+co.name} Icon={I.Building} groups={editGroups} record={co} onSave={onEditSave} onClose={()=>setEditOpen(false)}/>}
         {schedOpen&&<TaskFormModal initial={{type:'task',allDay:true,priority:'Medium',company:co.name}} onClose={()=>setSchedOpen(false)} onSave={(ev)=>{calAddItem(ev);setExtra(x=>[mkAct('task',{ts:0,by:co.owner||'AM',title:ev.title||'Task created',body:(ev.date?('Due '+ev.date):'Added to tasks.')}),...x]);setSchedOpen(false);}}/>}
@@ -10587,7 +10574,7 @@ const LEAD_SOURCES=['Web form','Referral','Cold outreach','Event','Ad','LinkedIn
 function leadScoreBucket(score){const b=(typeof leadScoringRulesLive==='function'?leadScoringRulesLive().bands:null)||{warm_min:34,hot_min:67};if(score>=(b.hot_min!=null?b.hot_min:67))return{k:'hot',c:'#F0947F',l:'Hot'};if(score>=(b.warm_min!=null?b.warm_min:34))return{k:'warm',c:'#E9B968',l:'Warm'};return{k:'cold',c:'#8FB4EA',l:'Cold'};} // cutoffs come from the workspace rules (score_band), never hardcoded
 const LEADS_DATA=[
   {signals:{email_opened:1,link_clicked:0,page_visit:0,demo_request:0},industry:'Retail',employeesSize:120,id:120,name:'Greg Mason',avatar:'GM',color:'#9D6C20',email:'greg@northpeak.io',phone:'+1 555-770-3321',company:'Northpeak Co',title:'Operations Lead',source:'Cold outreach',status:'Unqualified',score:28,estValue:'$4k',owner:'AM',ownerColor:'#5E92D8',created:'4 weeks ago',days:26,loc:'Boise, ID',tags:['cold'],archived:false,converted:false,deleted:true,deletedAt:Date.now()-26*864e5,deletedBy:'Alex Morgan',estValueNum:4000},
-  {signals:{email_opened:4,link_clicked:2,page_visit:1,demo_request:0},id:1,name:'Olivia Bennett',timezone:'America/Denver',avatar:'OB',color:'#3475CE',email:'olivia@brightwave.io',phone:'+1 555-610-2210',company:'Brightwave Studio',title:'Marketing Director',source:'Web form',status:'Qualified',score:82,estValue:'$18k',owner:'AM',ownerColor:'#5E92D8',created:'2h ago',days:0,loc:'Denver, CO',tags:['inbound','qualified'],archived:false,converted:true,convertedAt:'2h ago',convertedToContactId:207,convertedToCompanyId:9,convertedToDealId:208,convContact:'Olivia Bennett',convCompany:'Brightwave Studio',convDeal:'Brightwave Studio · $18,000',estValueNum:18000,emails:['olivia.b@brightwave.io'],phones:[],createdBy:'AM',createdAt:'2h ago',companyDomain:'brightwave.io',industry:'Software',employeesSize:24,qual:{formName:'Request a Demo',status:'qualified',answers:[{q:'Company size',a:'51-200'},{q:'What would you like to see?',a:'Pipeline + automations for a 40-person team'}],event:'Product Demo',rep:'Sarah Chen'}},
+  {signals:{email_opened:4,link_clicked:2,page_visit:1,demo_request:0},id:1,name:'Olivia Bennett',timezone:'America/Denver',avatar:'OB',color:'#3475CE',email:'olivia@brightwave.io',phone:'+1 555-610-2210',company:'Brightwave Studio',title:'Marketing Director',source:'Web form',status:'Qualified',score:82,estValue:'$18k',owner:'AM',ownerColor:'#5E92D8',created:'2h ago',days:0,loc:'Denver, CO',tags:['inbound','qualified'],archived:false,converted:true,convertedAt:'2h ago',convertedToContactId:207,convertedToCompanyId:9,convertedToDealId:208,convContact:'Olivia Bennett',convCompany:'Brightwave Studio',convDeal:'Brightwave Studio · $18,000',estValueNum:18000,emails:['olivia.b@brightwave.io'],phones:[],createdBy:'AM',createdAt:'2h ago',companyDomain:'brightwave.io',industry:'Software',employeesSize:24},
   {signals:{email_opened:0,link_clicked:0,page_visit:0,demo_request:0},id:2,name:'Daniel Okonkwo',avatar:'DO',color:'#855ED7',email:'daniel@lumen.io',phone:'+1 555-441-9087',company:'Lumen Labs',title:'Head of Growth',source:'Referral',status:'Working',score:74,estValue:'$32k',owner:'JK',ownerColor:'#9B7BDE',created:'1d ago',days:1,loc:'Austin, TX',tags:['referral'],archived:false,converted:false,estValueNum:32000,emails:[],phones:['+1 555-441-0000'],createdBy:'JK',createdAt:'1d ago',companyDomain:'lumen.io',industry:'Software',employeesSize:60},
   {signals:{email_opened:3,link_clicked:1,page_visit:1,demo_request:0},id:3,name:'Sofia Marchetti',avatar:'SM',color:'#BF4C85',email:'sofia@craftly.co',phone:'+1 555-228-6610',company:'Craftly',title:'Founder',source:'Event',status:'Nurturing',score:58,estValue:'$9k',owner:'SC',ownerColor:'#C2568C',created:'2d ago',days:2,loc:'New York, NY',tags:['saastr'],archived:false,converted:true,convertedAt:'2d ago',convertedToContactId:205,convertedToCompanyId:12,convertedToDealId:206,convContact:'Sofia Marchetti',convCompany:'Craftly',convDeal:'Craftly · $9,000',estValueNum:9000,emails:['sofia@craftly.co'],phones:[],createdBy:'SC',createdAt:'2d ago',companyDomain:'craftly.co',industry:'Retail',employeesSize:8},
   {signals:{email_opened:2,link_clicked:0,page_visit:1,demo_request:0},industry:'Retail',employeesSize:15,id:4,name:'Marcus Webb',avatar:'MW',color:'#25855E',email:'marcus@northpeak.com',phone:'+1 555-770-4521',company:'Northpeak',title:'VP Sales',source:'Cold outreach',status:'New',score:41,estValue:'$15k',owner:'RL',ownerColor:'#2FA877',created:'3d ago',days:3,loc:'Seattle, WA',tags:['outbound'],archived:false,converted:false},
@@ -10620,14 +10607,6 @@ function buildConvertRecords(lead,payload){
   const contactId=base+1,companyId=base+2,dealId=base+3; // Wave 3: precompute ids so the three records are born id-linked
   const owner=lead.owner||'AM';const ownerColor=lead.ownerColor||arOwnerColor(owner);
   const tags=Array.isArray(lead.tags)?lead.tags.slice():[];
-  // Origin attribution travels with the person through convert (lead → contact → deal).
-  // Gate = adPlatform (AdAttributionCard's own render gate); click-ids copied conditionally (no undefined keys).
-  // RULE: live ad touches LAST-TOUCH overwrite (ingestAdLead dedupe spreads attr onto existing contacts);
-  // convert is a MIGRATION of an old touch, so it only BACKFILLS a contact with no attribution yet.
-  const _adAttr=lead.adPlatform?{adPlatform:lead.adPlatform,adSourceKey:lead.adSourceKey,adSourceLabel:lead.adSourceLabel,adCampaign:lead.adCampaign,adAdset:lead.adAdset,adFormName:lead.adFormName,utmSource:lead.utmSource,utmMedium:lead.utmMedium,utmCampaign:lead.utmCampaign,...(lead.fbclid?{fbclid:lead.fbclid}:{}),...(lead.gclid?{gclid:lead.gclid}:{}),...(lead.adTs!=null?{adTs:lead.adTs}:{})}:{};
-  // History flags (adSms/adEnrolled) are REAL events that happened to this lead — carry them onto the
-  // NEW contact only. Never onto a reused contact (would fabricate SMS/sequence timeline rows) or the deal.
-  const _adHist=lead.adPlatform?{...(lead.adSms!=null?{adSms:lead.adSms}:{}),...(lead.adEnrolled!=null?{adEnrolled:lead.adEnrolled}:{})}:{};
   const c=payload.contact||{};
   const cname=((c.first||'')+' '+(c.last||'')).trim()||lead.name||'Unnamed';
   // Resolve the target company FIRST, deduping against existing companies by name — reuse instead of minting a duplicate.
@@ -10643,10 +10622,10 @@ function buildConvertRecords(lead,payload){
   const contactReused=!!_existingC;
   const effContactId=_existingC?_existingC.id:contactId;
   const contact=_existingC
-    ?{..._existingC,companyId:_existingC.companyId||effCompanyId,co:_existingC.co||coNameFinal,email:_existingC.email||(c.email||''),phone:_existingC.phone||lead.phone||'',title:_existingC.title||c.title||'',tags:Array.from(new Set([...(_existingC.tags||[]),...tags])),lastActivity:'Just now',lastContacted:'Just now',qual:_existingC.qual||lead.qual||null,dnc:_existingC.dnc||!!lead.dnc,fromLeadId:_existingC.fromLeadId||lead.id,...(_existingC.adPlatform?{}:_adAttr)}
-    :{id:contactId,name:cname,first:c.first||'',last:c.last||'',co:coNameFinal,companyId:effCompanyId,email:c.email||'',phone:lead.phone||'',title:c.title||'',avatar:arInitials(cname),color:lead.color||arPick(),status:'Active',cstatus:'Prospect',owner,ownerColor,deal:lead.estValue||'—',lastActivity:'Just now',lastContacted:'Just now',days:0,source:lead.source||'',tags:tags.slice(),emails:Array.isArray(lead.emails)?lead.emails.slice():[],phones:Array.isArray(lead.phones)?lead.phones.slice():[],createdBy:owner,createdAt:'Just now',archived:false,qual:lead.qual||null,dnc:!!lead.dnc,fromLeadId:lead.id,..._adAttr,..._adHist}; // carry the DNC opt-out so a suppressed lead can't become mailable again on convert (email/phone-list suppression already carries by identity)
+    ?{..._existingC,companyId:_existingC.companyId||effCompanyId,co:_existingC.co||coNameFinal,email:_existingC.email||(c.email||''),phone:_existingC.phone||lead.phone||'',title:_existingC.title||c.title||'',tags:Array.from(new Set([...(_existingC.tags||[]),...tags])),lastActivity:'Just now',lastContacted:'Just now',dnc:_existingC.dnc||!!lead.dnc,fromLeadId:_existingC.fromLeadId||lead.id}
+    :{id:contactId,name:cname,first:c.first||'',last:c.last||'',co:coNameFinal,companyId:effCompanyId,email:c.email||'',phone:lead.phone||'',title:c.title||'',avatar:arInitials(cname),color:lead.color||arPick(),status:'Active',cstatus:'Prospect',owner,ownerColor,deal:lead.estValue||'—',lastActivity:'Just now',lastContacted:'Just now',days:0,source:lead.source||'',tags:tags.slice(),emails:Array.isArray(lead.emails)?lead.emails.slice():[],phones:Array.isArray(lead.phones)?lead.phones.slice():[],createdBy:owner,createdAt:'Just now',archived:false,dnc:!!lead.dnc,fromLeadId:lead.id}; // carry the DNC opt-out so a suppressed lead can't become mailable again on convert (email/phone-list suppression already carries by identity)
   let deal=null;
-  if(payload.makeDeal){const d=payload.deal||{};const amt=parseInt(String(d.value||'').replace(/[^0-9]/g,''),10)||0;const pipeline=d.pipeline||'Sales Pipeline';const dname=(d.name||'').trim()||((lead.company?lead.company+' — ':'')+(lead.name||''));deal={id:dealId,company:coNameFinal||cname,companyId:effCompanyId,name:dname,value:'$'+amt.toLocaleString('en-US'),amount:amt,stageKey:'prospecting',dStage:'Prospecting',...dealStageStamp('prospecting',owner),pipeline,closeDate:d.close||'',primaryContact:contact.name,primaryContactId:effContactId,nextAction:'',source:lead.source||'',owner,ownerColor,tag:'Converted',tagBg:'bg-emerald-500/15',tagFg:'text-emerald-300',age:'0d',score:'warm',tags:tags.slice(),dealTags:tags.slice(),amountType:'One-time',forecast:'Pipeline',additionalContacts:[],additionalContactIds:[],createdBy:owner,createdAt:'Just now',lastActivity:'Just now',fromLeadId:lead.id,..._adAttr};normalizeDealPipeline(deal,owner);}
+  if(payload.makeDeal){const d=payload.deal||{};const amt=parseInt(String(d.value||'').replace(/[^0-9]/g,''),10)||0;const pipeline=d.pipeline||'Sales Pipeline';const dname=(d.name||'').trim()||((lead.company?lead.company+' — ':'')+(lead.name||''));deal={id:dealId,company:coNameFinal||cname,companyId:effCompanyId,name:dname,value:'$'+amt.toLocaleString('en-US'),amount:amt,stageKey:'prospecting',dStage:'Prospecting',...dealStageStamp('prospecting',owner),pipeline,closeDate:d.close||'',primaryContact:contact.name,primaryContactId:effContactId,nextAction:'',source:lead.source||'',owner,ownerColor,tag:'Converted',tagBg:'bg-emerald-500/15',tagFg:'text-emerald-300',age:'0d',score:'warm',tags:tags.slice(),dealTags:tags.slice(),amountType:'One-time',forecast:'Pipeline',additionalContacts:[],additionalContactIds:[],createdBy:owner,createdAt:'Just now',lastActivity:'Just now',fromLeadId:lead.id};normalizeDealPipeline(deal,owner);}
   return {contact,company,deal,companyId:effCompanyId,contactReused};
 }
 function CvtField({label,children,wide}){return(<div className={wide?'col-span-2':''}><label className="text-[11px] text-white/45 block mb-1.5">{label}</label>{children}</div>);}
@@ -10755,7 +10734,7 @@ function ConvertLeadModal({lead,close,onConfirm}){
 const LEAD_COLS=[
   {key:'name',label:'Lead',w:'1.7fr',def:true,cell:(l,x)=>(<button onClick={()=>x.goTo('lead-detail',l.id)} className="flex items-center gap-3 min-w-0 text-left w-full"><div className="w-9 h-9 rounded-full flex items-center justify-center text-[11px] font-semibold text-white shrink-0" style={{background:l.color}}>{l.avatar}</div><div className="min-w-0"><p className="text-[13px] font-medium text-white leading-tight truncate">{l.name}</p><p className="text-[11px] text-white/45 truncate mt-0.5">{l.email}</p></div></button>)},
   {key:'company',label:'Company',w:'1.3fr',def:true,cell:(l)=>(<div className="min-w-0"><p className="text-[13px] text-white/75 truncate">{l.company}</p><p className="text-[11px] text-white/40 truncate">{l.title}</p></div>)},
-  {key:'source',label:'Source',w:'100px',def:true,cell:(l)=>(<p className="text-[12px] text-white/55 truncate">{l.source}</p>)},
+  {key:'source',label:'Source',w:'100px',def:true,cell:(l)=>(<p className="text-[12px] text-white/55 truncate">{l.source||'—'}</p>)},
   {key:'status',label:'Status',w:'130px',def:true,cell:(l,x)=>(<LeadStatusDropdown value={l.status} onChange={s=>x.onStatus(l.id,s)} disabled={x.readOnly||!!l.converted||!!l.archived}/>)},
   {key:'score',label:'Score',w:'110px',def:true,cell:(l)=>(<ScoreBadge score={l.score}/>)},
   {key:'owner',label:'Owner',w:'60px',def:true,cell:(l,x)=>(<ContactOwnerDropdown owner={{avatar:l.owner,color:l.ownerColor}} onChange={m=>x.onOwner(l.id,m)} disabled={x.readOnly}/>)},
@@ -11075,7 +11054,12 @@ function ProviderBadge({provider}){
 function MailboxConnectModal({close,onConnected}){
   const ma=React.useContext(MailAccountsContext);
   const _held=((ma&&ma.accounts)||[]).length;
-  const [step,setStep]=React.useState(_held>=2?'limit':'provider');   // provider|redirect|sync|done|error|limit
+  // The cap is the plan's mailbox allowance (min of the hold and included + purchased; Team/Pro/Business include 1 per
+  // accepted user) — the same number Billing › Plan usage prints. BE inbox CheckConnectCap refuses only at that cap.
+  const _bcMb=React.useContext(BillingContext);const _crmMb=React.useContext(CrmDataContext)||{};
+  const _mbCap=(()=>{const b=_bcMb||{};const st=b.billingState;const sub=b.sub||BILLING_SUB_SEED;const ro=capWorkspaceReadOnly(b);const tier=ro?'read_only':(st==='trial'?'trial':sub.tier);const acc=(_crmMb.members||[]).filter(m=>m.status==='Active').length;const c=billingCaps(tier,acc,(st==='trial'||ro)?{}:sub.addons);return{limit:c.mailboxes,hold:c.mailHold};})();
+  const _mbAtHold=_mbCap.limit>=_mbCap.hold; // at the most the plan holds → the plan grid, not the add-on door
+  const [step,setStep]=React.useState(_held>=_mbCap.limit?'limit':'provider');   // provider|redirect|sync|done|error|limit
   const [prov,setProv]=React.useState(null);
   const [acct,setAcct]=React.useState(null);
   useEscKey(close);
@@ -11119,7 +11103,7 @@ function MailboxConnectModal({close,onConnected}){
           {step==='limit'&&(<div className="py-6 text-center">
             <div className="w-12 h-12 rounded-2xl bg-amber-500/12 ring-1 ring-amber-500/25 text-amber-300 flex items-center justify-center mx-auto mb-4"><I.Mail size={20}/></div>
             <p className="text-[14px] font-medium text-white">You’ve used every mailbox on your plan</p>
-            <p className="text-[12px] text-white/45 mt-1 max-w-[340px] mx-auto leading-relaxed">{isOwner?'Add an extra mailbox for $5 a month, up to your plan’s limit.':'Ask your workspace owner to add a mailbox.'}</p>
+            <p className="text-[12px] text-white/45 mt-1 max-w-[340px] mx-auto leading-relaxed">{isOwner?(_mbAtHold?'Your plan holds no more mailboxes. Choose a bigger plan to connect another.':'Add an extra mailbox for $5 a month, up to your plan’s limit.'):'Ask your workspace owner to add a mailbox.'}</p>
           </div>)}
         </div>
         <div className="flex gap-3 px-5 py-4 border-t border-white/[0.07] shrink-0" style={{background:'var(--s850)'}}>
@@ -11128,7 +11112,7 @@ function MailboxConnectModal({close,onConnected}){
           {step==='sync'&&<button disabled className="flex-1 py-2.5 rounded-xl text-[13px] font-medium text-white/40 bg-white/[0.06] cursor-not-allowed">Connecting…</button>}
           {step==='done'&&<button onClick={()=>{onConnected&&onConnected(acct);close();}} className={BTN1}>Done</button>}
           {step==='error'&&(<><button onClick={()=>{setProv(null);setStep('provider');}} className={BTN2}>Choose provider</button><button onClick={()=>setStep('redirect')} className={BTN1}>Try again</button></>)}
-          {step==='limit'&&(isOwner?(<><button onClick={close} className={BTN2}>Cancel</button><button onClick={()=>setStep('provider')} className={BTN1}>Add a mailbox · $5/mo</button></>):<button onClick={close} className={BTN2}>Close</button>)}
+          {step==='limit'&&(isOwner?(<><button onClick={close} className={BTN2}>Cancel</button>{_mbAtHold?<button onClick={()=>{close();window.__nrturGoTo&&window.__nrturGoTo('settings-billing');}} className={BTN1}>See plans</button>:<button onClick={()=>setStep('provider')} className={BTN1}>Add a mailbox · $5/mo</button>}</>):<button onClick={close} className={BTN2}>Close</button>)}
         </div>
       </div>
     </div>
@@ -13153,7 +13137,7 @@ const SEQ_DATA=[
   {id:3,name:'Re-engagement (30d)',channel:'sms',steps:2,enrolled:0,active:false,lastRun:'1w ago',sent:88,delivered:86,replied:6,bounced:2,unsub:4,atStep:[0,0]},
   {id:4,name:'Post-close Check-in',channel:'sms',steps:2,enrolled:29,active:true,lastRun:'1d ago',sent:63,delivered:62,replied:11,bounced:1,unsub:1,atStep:[16,9]},
 ];
-// ?? SMS Templates ????????????????????????????????????????????????????????????
+// ?? Merge tags ????????????????????????????????????????????????????????????????
 const MERGE_TAGS=[
   {token:'{{first_name}}',desc:"Contact's first name"},
   {token:'{{last_name}}',desc:"Contact's last name"},
@@ -13797,7 +13781,7 @@ function propSeed(){
       {g:'Basic information',open:true,fields:[
         F({id:'c_first',label:'First name',type:'Text',create:true,detail:'primary',col:true,required:true,system:true}),
         F({id:'c_last',label:'Last name',type:'Text',create:true,detail:'primary',col:true,required:true,system:true}),
-        F({id:'c_email',label:'Primary email',type:'Email',create:true,required:true,detail:'primary',col:true,system:true}),
+        F({id:'c_email',label:'Primary email',type:'Email',create:true,required:true,detail:'primary',col:false,system:true}),
         F({id:'c_phone',label:'Phone',type:'Phone',create:true,detail:'primary',system:true}),
         F({id:'c_title',label:'Job title',type:'Text',create:true,detail:'primary',suggest:COMMON_JOB_TITLES}),
         F({id:'c_salutation',label:'Salutation',type:'Single select',detail:'secondary',options:['Mr.','Mrs.','Ms.','Dr.']}),
@@ -13819,12 +13803,12 @@ function propSeed(){
         F({id:'co_name',label:'Name',type:'Text',create:true,detail:'primary',col:true,required:true,system:true}),
         F({id:'co_domain',label:'Domain',type:'Text',create:true,detail:'primary',col:true,required:false,unique:true,system:true}),
         F({id:'co_industry',label:'Industry',type:'Single select',create:true,detail:'primary',col:true,options:INDUSTRIES}),
-        F({id:'co_type',label:'Company type',type:'Single select',create:true,detail:'primary',options:COMPANY_TYPES}),
+        F({id:'co_type',label:'Company type',type:'Single select',create:true,detail:'primary',col:true,options:COMPANY_TYPES}),
       ]},
       {g:'Firmographics',open:true,fields:[
         F({id:'co_owner',label:'Owner',type:'Lookup',create:true,detail:'primary',col:true}),
-        F({id:'co_size',label:'Employees size',type:'Number',create:true,detail:'primary',col:true}),
-        F({id:'co_rev',label:'Annual revenue',type:'Currency',detail:'primary',col:true,important:true}),
+        F({id:'co_size',label:'Employees',type:'Number',create:true,detail:'primary',col:false}),
+        F({id:'co_rev',label:'Annual revenue',type:'Currency',detail:'primary',col:false,important:true}),
         F({id:'co_phone',label:'Phone',type:'Phone',create:true,detail:'primary'}),
         F({id:'co_loc',label:'Headquarters',type:'Text',create:true,detail:'primary'}),
         F({id:'co_tags',label:'Tags',type:'Multi select',create:true,detail:'primary'}),
@@ -14266,8 +14250,8 @@ function BuyNumberModal({close,onBuy,refuse,isOwner,lineCap}){
   useEscKey(close);
   const search=()=>{const ac=(area.replace(/\D/g,'')||'415').slice(0,3);
     const list=type==='tollfree'
-      ?['833','844','855','866'].map((p,i)=>({number:'+1 ('+p+') 555-02'+(10+i),monthly:2.15}))
-      :[0,1,2,3,4,5].map(i=>({number:'+1 ('+ac+') 555-01'+(10+i),monthly:1.15,locality:ac==='415'?'San Francisco, CA':ac==='212'?'New York, NY':'United States'}));
+      ?['833','844','855','866'].map((p,i)=>({number:'+1 ('+p+') 555-02'+(10+i),monthly:5.00}))
+      :[0,1,2,3,4,5].map(i=>({number:'+1 ('+ac+') 555-01'+(10+i),monthly:5.00,locality:ac==='415'?'San Francisco, CA':ac==='212'?'New York, NY':'United States'}));
     setResults(list);setPick(null);};
   const confirm=()=>{if(!pick)return;if(refuse&&!addonBought){setOffer(true);return;}onBuy({type,number:pick.number,monthly:pick.monthly});};
   const _kind=type==='tollfree'?'toll-free line':'local line';const _kp=type==='tollfree'?8:5;
@@ -14971,8 +14955,6 @@ function SequenceBuilderPage({goTo,channel,nav}){
   // Template starters from the New-sequence drawer: goTo(builder,{starter:name}) — hydrate the promised steps.
   const _starter=(!_edit&&!_seed&&nav&&typeof nav==='object'&&nav.starter)?(((typeof SEQ_STARTERS!=='undefined'&&SEQ_STARTERS[_chKey])||[]).find(t=>t.name===nav.starter)||null):null;
   const _starterSteps=_starter?_starter.steps.map((s,i)=>{const m=/^Wait\s+(\d+)\s+(day|days|hour|hours)/i.exec(s.when||'');const delay=(i===0||!m)?null:{n:parseInt(m[1],10),unit:/hour/i.test(m[2])?'hours':'days'};return isSms?{id:i+1,body:s.text,delay}:{id:i+1,subject:s.text,body:'Hi {{first_name}},\n\n'+s.text+'\n\nBest,\nAlex',delay};}):null;
-  // "Use" on an SMS template: goTo('sms-sequence-builder',{tplBody,tplName}) — seed step 1 with the template.
-  const _tplSeed=(!_edit&&!_seed&&!_starter&&isSms&&nav&&typeof nav==='object'&&nav.tplBody)?{name:nav.tplName,body:nav.tplBody}:null;
   // "Connected" means the workspace owns an active SMS-capable number — smsComplianceState().
   const [isConnected,setIsConnected]=React.useState(()=>{try{return smsComplianceState().ok;}catch(e){return true;}});
   // SMS sequences send from the workspace messaging service — shown in the phone preview, not chosen per sequence.
@@ -14981,14 +14963,13 @@ function SequenceBuilderPage({goTo,channel,nav}){
   // Per-step config now lives in a side drawer (not inline in the card). draft = editable copy.
   const [activeNodeId,setActiveNodeId]=React.useState(null);
   const [draft,setDraft]=React.useState(null);
-  const [name,setName]=React.useState(_edit?_edit.name:_seed?_seed.name:(nav&&typeof nav==='object'&&nav.name)?nav.name:_starter?_starter.name:_tplSeed&&_tplSeed.name?_tplSeed.name+' sequence':(isSms?'New SMS Sequence':'New Email Sequence'));
+  const [name,setName]=React.useState(_edit?_edit.name:_seed?_seed.name:(nav&&typeof nav==='object'&&nav.name)?nav.name:_starter?_starter.name:(isSms?'New SMS Sequence':'New Email Sequence'));
   const [steps,setSteps]=React.useState(()=>{
     if(_edit&&Array.isArray(_edit.stepData)&&_edit.stepData.length)return _edit.stepData;
     if(_starterSteps&&_starterSteps.length)return _starterSteps;
     if(_seed&&_seed.steps>0)return Array.from({length:_seed.steps},(_,i)=>isSms
       ?{id:i+1,body:'Step '+(i+1)+' of “'+_seed.name+'” — placeholder copy; edit to replace.',delay:i===0?null:{n:2,unit:'days'}}
       :{id:i+1,subject:_seed.name+' — step '+(i+1),body:'Hi {{first_name}},\n\nStep '+(i+1)+' of the original “'+_seed.name+'” sequence. Edit to replace this placeholder.',delay:i===0?null:{n:2,unit:'days'}});
-    if(_tplSeed)return[{id:1,body:_tplSeed.body,delay:null},{id:2,body:'Just floating this back up, {{first_name}}.',delay:{n:2,unit:'days'}}];
     // App blankDraft: "Start from scratch" opens with ONE empty message step (no placeholder copy).
     return isSms?[{id:1,body:'',delay:null}]:[{id:1,subject:'',body:'',delay:null}];});
   const [activated,setActivated]=React.useState(_edit?!!_edit.active:_seed?!!_seed.active:false);
@@ -15688,6 +15669,48 @@ function CapGateBox({reason,remedy,goTo,className}){
 }
 const CAP_READ_ONLY_REASON='This workspace is read-only — nothing is deleted, but nothing new can be added until a plan is chosen.';
 function capWorkspaceReadOnly(bc){const b=bc&&bc.billingState;return b==='trial-expired'||b==='cancelled'||b==='unpaid';}
+// Records caps (app: billing/lib/capGate.ts, per kind since SCRUM-1127): contacts / companies / leads / deals each read their OWN cap.
+// read_only blocks everything. A trial AT its cap, or ANY tier OVER it, is blocked. A paid tier at the cap only warns
+// ("Upgrade to keep growing") and the save still succeeds; the 80% band warns. A warning never disables a control.
+// Prototype demo: _recordsCapDemo forces the count to 85% / the limit / past it (the "Records cap" toggle on Contacts and Companies).
+let _recordsCapDemo='plan';
+const REC_CAP_NOUN={contacts:['contact','contacts'],companies:['company','companies'],leads:['lead','leads'],deals:['deal','deals']};
+function recordsCapGate(bc,kind,used){
+  if(capWorkspaceReadOnly(bc))return{state:'blocked',reason:CAP_READ_ONLY_REASON};
+  const tier=bc&&bc.billingState==='trial'?'trial':(((bc&&bc.sub)||BILLING_SUB_SEED).tier);
+  const limit=(BILLING_LIMITS[tier]||{}).records;
+  if(!limit||!isFinite(limit))return{state:'open',reason:null};
+  let u=used||0;const d=_recordsCapDemo;
+  if(d==='near')u=Math.ceil(limit*0.85);else if(d==='at')u=limit;else if(d==='over')u=limit+12;
+  const n=(x)=>Number(x).toLocaleString('en-US');const nn=REC_CAP_NOUN[kind]||[kind,kind];const withNoun=(x)=>n(x)+' '+(x===1?nn[0]:nn[1]);
+  if(u>limit)return{state:'blocked',reason:'You’re over your plan’s limit — you can’t add new ones until you’re back under '+n(limit)+'.'};
+  if(u>=limit)return tier==='trial'?{state:'blocked',reason:'You’ve reached your plan’s limit of '+withNoun(limit)+'.'}:{state:'warn',reason:'You’re at '+n(u)+' of '+withNoun(limit)+'. Upgrade to keep growing.'};
+  if(u/limit>=0.8)return{state:'warn',reason:'You’ve used '+n(u)+' of '+withNoun(limit)+'.'};
+  return{state:'open',reason:null};
+}
+// App CapGateNotice: warn = one amber status line (control stays enabled); blocked = the boxed notice with the owner's remedy.
+function CapGateNotice({gate,goTo,className}){
+  if(!gate||gate.state==='open'||!gate.reason)return null;
+  if(gate.state==='warn')return(<div role="status" className={'flex items-center gap-2 text-[12px] text-amber-200 '+(className||'')}><I.AlertTriangle size={13} className="shrink-0 text-amber-300"/><span className="min-w-0">{gate.reason}</span></div>);
+  return <CapGateBox reason={gate.reason} goTo={goTo} className={className}/>;
+}
+// Pipelines cap (catalog ResPipelines: Trial 25 / Solo 1 / Team 3 / Pro 25 / Business 100) — a non-record cap, so it blocks AT the limit.
+function pipelinesCapGate(bc,tierOverride,used){
+  if(capWorkspaceReadOnly(bc))return{state:'blocked',reason:CAP_READ_ONLY_REASON};
+  const tier=tierOverride||(bc&&bc.billingState==='trial'?'trial':(((bc&&bc.sub)||BILLING_SUB_SEED).tier));
+  const limit=(BILLING_LIMITS[tier]||{}).pipelines;
+  if(limit==null||!isFinite(limit))return{state:'open',reason:null};
+  const w=(x)=>x+' pipeline'+(x===1?'':'s');
+  if(used>limit)return{state:'blocked',reason:'You’re over your plan’s limit — you can’t add new ones until you’re back under '+limit+'.'};
+  if(used>=limit)return{state:'blocked',reason:'You’ve reached your plan’s limit of '+w(limit)+'.'};
+  if(limit>0&&used/limit>=0.8)return{state:'warn',reason:'You’ve used '+used+' of '+w(limit)+'.'};
+  return{state:'open',reason:null};
+}
+function RecordsCapDemoToggle(){
+  const [v,setV]=React.useState(_recordsCapDemo);
+  return <PreviewStateToggle label="Records cap" options={[{k:'plan',l:'Plan usage'},{k:'near',l:'80%'},{k:'at',l:'At limit'},{k:'over',l:'Over limit'}]} value={v} onChange={(k)=>{_recordsCapDemo=k;setV(k);try{window.dispatchEvent(new CustomEvent('nrtur:records-cap'));}catch(e){}}}/>;
+}
+function useRecordsCapDemo(){const [,b]=React.useState(0);React.useEffect(()=>{const fn=()=>b(x=>x+1);window.addEventListener('nrtur:records-cap',fn);return()=>window.removeEventListener('nrtur:records-cap',fn);},[]);}
 function SettingsAutomationsPage({goTo}){
   const {automations:autos,setAutomations:setAutos,autoLogs}=React.useContext(CrmDataContext); // P0-1: shared store — cards reflect REAL runtime runs
   const fldAuto=useFolders('automations',{folders:[{id:'af_sales',name:'Sales',color:'#54CD95',scope:'team'},{id:'af_life',name:'Lifecycle',color:'#5FD09B',scope:'personal'}],members:{9501:'af_sales',2:'af_sales',5:'af_life'}});
@@ -15913,15 +15936,7 @@ function SettingsSequencesPage({goTo}){
     </div>
   );
 }
-// ?? Calendar ?????????????????????????????????????????????????????????????????
-const EVENT_TYPES={
-  meeting: {label:'Meeting',        color:'#25855E',bg:'rgba(47,168,119,0.15)', border:'rgba(47,168,119,0.35)'},
-  call:    {label:'Call',           color:'#25855E',bg:'rgba(47,168,119,0.18)', border:'rgba(47,168,119,0.35)'},
-  followup:{label:'Follow-up',      color:'#9D6C20',bg:'rgba(216,155,62,0.22)', border:'rgba(216,155,62,0.35)'},
-  demo:    {label:'Demo',           color:'#855ED7',bg:'rgba(155,123,222,0.15)', border:'rgba(155,123,222,0.35)'},
-  proposal:{label:'Proposal Review',color:'#3475CE',bg:'rgba(94,146,216,0.15)', border:'rgba(94,146,216,0.35)'},
-  task:    {label:'Task',           color:'#87837A',bg:'rgba(135,131,122,0.15)',border:'rgba(135,131,122,0.35)'},
-};
+// ?? Task store (shared CalendarContext; tasks only — the calendar is cut) ?????
 const CAL_DAYS=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 const CAL_MONTHS=['January','February','March','April','May','June','July','August','September','October','November','December'];
 const CAL_TASK_PRIORITY=['Low','Medium','High'];
@@ -15936,11 +15951,6 @@ function calSeedEvents(){
   const E=(o)=>({contact:null,linkType:null,company:null,deal:null,reminder:'',repeat:'Never',allDay:false,notes:'',done:false,...o});
   return [
     E({id:'ct90',title:'Archive 2025 tax documents',type:'task',date:at(d-1,0,0),end:null,company:'Bloom Creative',allDay:true,priority:'Low',assignee:'AM',deleted:true,deletedAt:Date.now()-1*864e5,deletedBy:'Alex Morgan'}),
-    E({id:'cs1',title:'Intro call — Sarah Chen',type:'call',date:at(d,10,0),end:at(d,10,30),contact:'Sarah Chen',linkType:'contact',company:'Meridian Agency',deal:'Meridian Agency · $24k',reminder:'30'}),
-    E({id:'cs2',title:'Product demo — Summit Digital',type:'demo',date:at(d,14,0),end:at(d,15,0),contact:'James Rivera',linkType:'contact',company:'Summit Digital',deal:'Summit Digital · $31,000',reminder:'60',notes:'Walk through the rollout plan and pricing.'}),
-    E({id:'cs3',title:'Qualify lead — Olivia Bennett',type:'call',date:at(d+1,9,0),end:at(d+1,9,30),contact:'Olivia Bennett',linkType:'lead',company:'Brightwave Studio',reminder:'15'}),
-    E({id:'cs4',title:'Team pipeline review',type:'meeting',date:at(d+1,11,0),end:at(d+1,12,0),repeat:'Weekly',reminder:'30'}),
-    E({id:'cs5',title:'Proposal review — Atlas Consult',type:'proposal',date:at(d+2,15,0),end:at(d+2,16,0),contact:'Priya Nair',linkType:'contact',company:'Atlas Consult',deal:'Atlas Consult · $18,000',reminder:'60'}),
     E({id:'ct1',title:'Send contract to Forge & Co',type:'task',date:at(d,0,0),end:null,contact:'Emily Tran',linkType:'contact',company:'Forge & Co',deal:'Forge & Co · $44,000',allDay:true,priority:'High',assignee:'AM',reminder:'0',subtasks:[{id:'ct1s1',title:'Draft from contract template',done:true},{id:'ct1s2',title:'Internal legal review',done:false},{id:'ct1s3',title:'Send for e-signature',done:false}]}),
     E({id:'ct2',title:'Follow up with Marcus Rios',type:'task',date:at(d+1,0,0),end:null,contact:'Marcus Rios',linkType:'contact',company:'Kapoor & Assoc',allDay:true,priority:'Medium',assignee:'SC'}),
     E({id:'ct3',title:'Prep Q3 proposal deck',type:'task',date:at(d+3,0,0),end:null,allDay:true,priority:'Low',assignee:'AM',subtasks:[{id:'ct3s1',title:'Pull Q2 metrics',done:false},{id:'ct3s2',title:'Outline narrative',done:false}]}),
@@ -15949,7 +15959,6 @@ function calSeedEvents(){
     E({id:'ct6',title:'Call back Olivia Bennett',type:'task',date:at(d-1,0,0),end:null,contact:'Olivia Bennett',linkType:'lead',company:'Brightwave Studio',allDay:true,priority:'Medium',assignee:'AM'}),
     E({id:'ct7',title:'Confirm renewal terms — Atlas Consult',type:'task',date:at(d-3,0,0),end:null,contact:'Priya Nair',linkType:'contact',company:'Atlas Consult',deal:'Atlas Consult · $18,000',allDay:true,priority:'Medium',assignee:'JK'}),
     E({id:'ct8',title:'Log notes from kickoff call',type:'task',date:at(d-1,0,0),end:null,contact:'Marcus Rios',linkType:'contact',company:'Kapoor & Assoc',allDay:true,priority:'Low',assignee:'AM',done:true}),
-    E({id:'cs6',title:'Quarterly check-in — Meridian',type:'meeting',date:at(d+5,10,0),end:at(d+5,11,0),contact:'Sarah Chen',linkType:'contact',company:'Meridian Agency',reminder:'30'}),
   ];
 }
 // ── TaskRecordPicker ── searchable single-select for linking a task to one record (lead/contact/company) ──
@@ -16075,7 +16084,7 @@ function TaskFormModal({initial,onClose,onSave,onDelete}){
           </div>
           <div>
             <label className={L}>Assignee</label>
-            <div className="relative"><select value={assignee} onChange={e=>setAssignee(e.target.value)} className={INP+' appearance-none'} style={{colorScheme:'dark',background:'var(--s850)'}}>{TEAM_MEMBERS.map(mm=>(<option key={mm.avatar} value={mm.avatar}>{mm.name}{mm.avatar==='AM'?' (me)':''}</option>))}</select><I.UserCog size={13} className="absolute right-3 top-1/2 -translate-y-1/2 text-white/30 pointer-events-none"/></div>
+            <div className="relative"><select value={assignee} onChange={e=>setAssignee(e.target.value)} className={INP+' appearance-none'} style={{colorScheme:'dark',background:'var(--s850)'}}><option value="">Unassigned</option>{TEAM_MEMBERS.map(mm=>(<option key={mm.avatar} value={mm.avatar}>{mm.name}{mm.avatar==='AM'?' (me)':''}</option>))}</select><I.UserCog size={13} className="absolute right-3 top-1/2 -translate-y-1/2 text-white/30 pointer-events-none"/></div>
           </div>
         </div>
         {!showLink?(
@@ -16191,7 +16200,7 @@ function TasksPage({goTo,nav}){
   const [quickAssignee,setQuickAssignee]=React.useState(_liveTaskDefaults.assignee==='unassigned'?'':'AM');
   const [quickDate,setQuickDate]=React.useState(()=>{const off={today:0,tomorrow:1,'3d':3,'1w':7}[_liveTaskDefaults.due];return calToDateInput(off==null?now:calAddDays(now,off));});
   const [quickLink,setQuickLink]=React.useState(''); // optional "Link to…" record ('contact:Name' | 'company:Name' | 'lead:Name')
-  const quickAdd=()=>{const t=quickTitle.trim();if(!t)return;const [Y,M,D]=quickDate.split('-').map(Number);const _ci=quickLink.indexOf(':');const lt=_ci>0?quickLink.slice(0,_ci):'';const ln=_ci>0?quickLink.slice(_ci+1):'';const link=lt==='company'?{company:ln,contact:null,linkType:null}:lt?{contact:ln,linkType:lt,company:null}:{};addItem({type:'task',title:t,priority:quickPrio,assignee:quickAssignee,allDay:true,date:new Date(Y,M-1,D,0,0),done:false,...link,...(lt?calLinkIds(lt,ln):{})});setQuickTitle('');addToast('Task added');}; // priority, due, assignee and link stay set; only the title clears
+  const quickAdd=()=>{const t=quickTitle.trim();if(!t)return;const [Y,M,D]=quickDate.split('-').map(Number);const _ci=quickLink.indexOf(':');const lt=_ci>0?quickLink.slice(0,_ci):'';const ln=_ci>0?quickLink.slice(_ci+1):'';const _qd=lt==='deal'?calDealById(ln):null;const link=lt==='deal'?{deal:_qd?((_qd.name||_qd.company)+' · '+_qd.value):null,dealId:_qd?_qd.id:null,contact:null,linkType:null,company:null}:lt==='company'?{company:ln,contact:null,linkType:null}:lt?{contact:ln,linkType:lt,company:null}:{};addItem({type:'task',title:t,priority:quickPrio,assignee:quickAssignee,allDay:true,date:new Date(Y,M-1,D,0,0),done:false,...link,...(lt&&lt!=='deal'?calLinkIds(lt,ln):{})});setQuickTitle('');addToast('Task added');}; // priority, due, assignee and link stay set; only the title clears
   const groups=(()=>{const list=pageList;const sd=(arr)=>arr.slice().sort((a,b)=>a.date-b.date);const inWeek=(t)=>t.date<calAddDays(startToday,7);if(filter==='today'){return [['Overdue',sd(list.filter(isOverdue)),'#F0947F'],['Today',sd(list.filter(t=>isToday(t)&&!t.done)),'#E9B968']].filter(x=>x[1].length);}if(filter==='upcoming'){return [['This week',sd(list.filter(t=>isUpcoming(t)&&inWeek(t))),'#8FB4EA'],['Later',sd(list.filter(t=>isUpcoming(t)&&!inWeek(t))),'#87837A']].filter(x=>x[1].length);}if(filter==='all'){const g={Overdue:[],Today:[],Upcoming:[],Done:[]};list.forEach(t=>{if(t.done)g.Done.push(t);else if(isOverdue(t))g.Overdue.push(t);else if(isToday(t))g.Today.push(t);else g.Upcoming.push(t);});return [['Overdue',sd(g.Overdue),'#F0947F'],['Today',sd(g.Today),'#E9B968'],['Upcoming',sd(g.Upcoming),'#87837A'],['Done',sd(g.Done),'#5FD09B']].filter(x=>x[1].length);}return null;})();
   const COL='30px 30px minmax(0,1fr) 138px 92px 32px 64px';
   const [dragId,setDragId]=React.useState(null);
@@ -16303,7 +16312,7 @@ function TasksPage({goTo,nav}){
                     <div className="inline-flex items-center p-0.5 rounded-lg bg-white/[0.04] border border-white/[0.08]">{['Low','Medium','High'].map(p=>{const on=quickPrio===p;const ACT={Low:'bg-emerald-500/20 text-emerald-300 ring-1 ring-emerald-500/30',Medium:'bg-amber-500/20 text-amber-300 ring-1 ring-amber-500/30',High:'bg-red-500/20 text-red-300 ring-1 ring-red-500/30'};return(<button key={p} onClick={()=>setQuickPrio(p)} title={p+' priority'} className={['px-2.5 py-1 rounded-md text-[12px] font-medium transition-all cursor-pointer',on?ACT[p]:'text-white/45 hover:text-white/75'].join(' ')}>{p}</button>);})}</div>
                     <span className="text-[11px] text-white/40 ml-1">Due</span>
                     <div className="relative"><input type="date" value={quickDate} onChange={e=>setQuickDate(e.target.value)} title="Due date" className="appearance-none pl-6 pr-2 py-1 rounded-md bg-white/[0.04] border border-white/[0.08] text-[12px] text-white/75 outline-none focus:border-brand-500/40 cursor-pointer" style={{colorScheme:'dark'}}/><I.Calendar size={11} className="absolute left-1.5 top-1/2 -translate-y-1/2 text-white/35 pointer-events-none"/></div>
-                    <div className="relative"><select value={quickLink} onChange={e=>setQuickLink(e.target.value)} title="Link to a record" className="appearance-none pl-6 pr-5 py-1 rounded-md bg-white/[0.04] border border-white/[0.08] text-[12px] text-white/75 outline-none focus:border-brand-500/40 cursor-pointer max-w-[180px]" style={{colorScheme:'dark'}}><option value="">Link to…</option><optgroup label="Contacts">{calContactOptions().map(n=>(<option key={'c'+n} value={'contact:'+n}>{n}</option>))}</optgroup><optgroup label="Companies">{calCompanyOptions().map(n=>(<option key={'o'+n} value={'company:'+n}>{n}</option>))}</optgroup><optgroup label="Leads">{calLeadOptions().map(n=>(<option key={'l'+n} value={'lead:'+n}>{n}</option>))}</optgroup></select><I.Paperclip size={11} className="absolute left-1.5 top-1/2 -translate-y-1/2 text-white/35 pointer-events-none"/></div>
+                    <div className="relative"><select value={quickLink} onChange={e=>setQuickLink(e.target.value)} title="Link to a record" className="appearance-none pl-6 pr-5 py-1 rounded-md bg-white/[0.04] border border-white/[0.08] text-[12px] text-white/75 outline-none focus:border-brand-500/40 cursor-pointer max-w-[180px]" style={{colorScheme:'dark'}}><option value="">Link to…</option><optgroup label="Leads">{[...new Set(calLeadOptions())].map(n=>(<option key={'l'+n} value={'lead:'+n}>{n}</option>))}</optgroup><optgroup label="Contacts">{[...new Set(calContactOptions())].map(n=>(<option key={'c'+n} value={'contact:'+n}>{n}</option>))}</optgroup><optgroup label="Companies">{[...new Set(calCompanyOptions())].map(n=>(<option key={'o'+n} value={'company:'+n}>{n}</option>))}</optgroup><optgroup label="Deals">{calDealOptions().map(o=>(<option key={'d'+o.id} value={'deal:'+o.id}>{o.label}</option>))}</optgroup></select><I.Paperclip size={11} className="absolute left-1.5 top-1/2 -translate-y-1/2 text-white/35 pointer-events-none"/></div>
                     <div className="relative ml-auto"><select value={quickAssignee} onChange={e=>setQuickAssignee(e.target.value)} title="Assignee" className="appearance-none pl-6 pr-5 py-1 rounded-md bg-white/[0.04] border border-white/[0.08] text-[12px] text-white/75 outline-none focus:border-brand-500/40 cursor-pointer" style={{colorScheme:'dark'}}><option value="">Unassigned</option>{TEAM_MEMBERS.map(m=>(<option key={m.avatar} value={m.avatar}>{m.name}{m.avatar==='AM'?' (me)':''}</option>))}</select><I.UserCog size={11} className="absolute left-1.5 top-1/2 -translate-y-1/2 text-white/35 pointer-events-none"/></div>
                     <button onClick={quickAdd} disabled={!quickTitle.trim()} title="Add task" className={['ml-auto inline-flex items-center gap-1 h-[28px] px-3 rounded-md text-[12px] font-medium transition-all',quickTitle.trim()?'text-white bg-brand-500 hover:bg-brand-400 shadow-brand':'text-white/30 bg-white/[0.04] cursor-not-allowed'].join(' ')}><I.Plus size={12} stroke={2.6}/>Add</button>
                   </div>
@@ -16592,14 +16601,15 @@ function App(){
   const calToggleDone=React.useCallback((id)=>setCalItems(a=>a.map(x=>x.id===id?{...x,done:!x.done}:x)),[]);
   const calCtx=React.useMemo(()=>({items:calItems,addItem:calAddItem,updateItem:calUpdateItem,deleteItem:calDeleteItem,toggleDone:calToggleDone}),[calItems,calAddItem,calUpdateItem,calDeleteItem,calToggleDone]);
   const goTo=React.useCallback((p,payload)=>{const r=ENGAGE_REDIRECT[p];if(r){payload=Object.assign({},r,(payload&&typeof payload==='object')?payload:null);p='engage';}try{window.__nrturPage=p;}catch(e){}setPage(p);if(payload!==undefined)setNav(payload);window.scrollTo&&window.scrollTo(0,0);},[]);
-  React.useEffect(()=>{try{window.__nrturGoTo=goTo;}catch(e){}},[goTo]); // nav hook for QA sweeps, matching the existing __nrturPage/__nrturToast/__nrturOpenSearch handles
+  const jumpTo=React.useCallback((p,payload)=>goTo(p,payload===undefined?null:payload),[goTo]); // the console page jumper starts each page fresh, so a stale nav (e.g. signup's {email}) never leaks into accept-invite
+  React.useEffect(()=>{try{window.__nrturGoTo=jumpTo;}catch(e){}},[jumpTo]); // nav hook for QA sweeps, matching the existing __nrturPage/__nrturToast/__nrturOpenSearch handles
   const [addRecord,setAddRecord]=React.useState(null);
   const [appToast,setAppToast]=React.useState('');
   const appToastFn=React.useCallback((m,t)=>{if(window.__nrturToast){window.__nrturToast(m,t||'success');}else{setAppToast(m);setTimeout(()=>setAppToast(''),2200);}},[]);
   // Central create choke point — every quick-add path funnels through here, so the effective-role
   // create gate is enforced once regardless of which button/menu/command triggered it.
   React.useEffect(()=>{window.__nrturQuickAdd=(m,initialMode,prefill)=>{const K={contact:'Contacts',company:'Companies',deal:'Deals',lead:'Leads',task:'Tasks'}[m]||'Contacts';if(!effCanObject(K,'create')){appToastFn('Your role doesn’t have permission to create '+(m||'record')+'s.','warning');return;}setAddRecord({object:m,initialMode:initialMode||'single',prefill:prefill||null});};},[appToastFn]);
-  React.useEffect(()=>{window.__nrturOpenSearch=()=>setSearchOpen(true);window.__nrturGoTo=goTo;return()=>{delete window.__nrturOpenSearch;delete window.__nrturGoTo;};},[goTo]);
+  React.useEffect(()=>{window.__nrturOpenSearch=()=>setSearchOpen(true);window.__nrturGoTo=jumpTo;return()=>{delete window.__nrturOpenSearch;delete window.__nrturGoTo;};},[jumpTo]);
   React.useEffect(()=>{const fn=(e)=>{if((e.metaKey||e.ctrlKey)&&e.key==='k'){e.preventDefault();setSearchOpen(true);}};document.addEventListener('keydown',fn);return()=>document.removeEventListener('keydown',fn);},[]);
   const p={goTo,nav};
   const MARKETING_PAGES=['signup','signin','forgot-password','verify-email','reset-expired','accept-invite','unsubscribe','onboarding-1','onboarding-2','onboarding-3','onboarding-4'];
