@@ -68,7 +68,7 @@ There are two stop lists. The workspace suppression list (`suppressions`, `/supp
 - **Manual SMS (`POST /telephony/sms/send`):** blocked only for numbers in `sms_suppressions`, that is after a STOP: 409 `TELEPHONY_RECIPIENT_OPTED_OUT` (`telephony/sms_service.go`). An SMS or `all` row on the suppression list does not block a manual text.
 - **Manual email (compose, reply, forward via `/inbox/...`):** not blocked. `inbox/send.go` performs no suppression lookup, and the inbox composers do not check either.
 - **Calls:** not blocked. No voice path reads either list; `calls` rows are stored but never enforced.
-- In the app, the only UI-side checks are the contact page's quick actions (disabled by the matching suppression row; see `contacts.md`) and the stage bulk flows' consent check. The inbox composers, the New SMS modal and the dialer check nothing.
+- In the app, the only UI-side checks are the contact page's quick actions (disabled by the matching suppression row; see `contacts.md`) and the stage bulk flows' consent check. The inbox composers, the New SMS modal and the dialer check no suppression list. The one exception is the SMS thread: it reflects a STOP opt-out by locking its composer and showing an "Opted out" chip on the conversation row. A New SMS to an opted-out number is refused by the server (409 `TELEPHONY_RECIPIENT_OPTED_OUT`).
 
 **Routing (built)**
 - Inbound email and SMS are matched to contacts by email address or phone number (`contact_identifiers`). Unknown senders stay unmatched, and no lead is created automatically.

@@ -115,7 +115,7 @@ The full price and limit table is in [`pricing/pricing.md`](../../pricing/pricin
   - CSV imports stop at the line and report "N of M imported".
 - Mailboxes and phone lines have two numbers: *included* (free) and *hold* (the most the plan can hold, including purchases). The effective cap is the smaller of the hold and included + purchased.
 - Automated sends are a monthly meter (Team 1,000, Pro 7,500, Business 35,000). One unit is used per email or text that an automation or sequence sends.
-  - At 0 the step does not send: the automation goes to `error`, and the sequence pauses.
+  - At 0 the step does not send: the automation goes to `error`. A sequence is neither paused nor errored: it stays `active`, and each enrollment fails at its send step with `plan_limit:automated_sends` (see [`sequences.md`](sequences.md)).
   - Trial and Solo have no automated sending, and saving a flow with a send step is refused.
 - The app pre-empts refusals by reading `GET /settings/usage`:
   - `useCapGate` / `CapGateNotice` on every capped create, warning at 80%
@@ -207,4 +207,6 @@ The full price and limit table is in [`pricing/pricing.md`](../../pricing/pricin
 - **Records-cap batch gap.** On paid tiers, the one save allowed at the records line is not capped for batch admissions: a latent gap in `records_policy.go`.
 - **Unpaid charges are never collected.** Shortfalls are recorded, but nothing collects them later.
 - **The Stripe portal only allows** changing the payment method and cancelling. Plan changes go through the app's own plan-switch screen.
+- **The downgrade refusal carries a raw prefix.** On `USAGE_ABOVE_TARGET_BUNDLE` the 409's `message` is the Go error string, so the switch dialog prints "billing: the plan cannot be switched in its current state: you have used …". The prototype shows the sentence without the `billing:` prefix.
+- **Read-only banner for non-owners always says "canceled".** The subscription read is owner-only, so for admins and members it is refused and `ReadOnlyBanner` falls back to "Your subscription was canceled" even when the trial ended or a payment failed. The prototype names the real state for everyone.
 - **Seat and add-on doors do not pre-empt a blocked subscription.** While the plan is `past_due`, `incomplete` or set to cancel, the add-on steppers and seat door stay enabled and the backend refuses on submit with `409 PLAN_NOT_SWITCHABLE`. Only the plan cards are disabled up front.

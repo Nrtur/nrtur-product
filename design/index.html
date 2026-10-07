@@ -3568,7 +3568,7 @@ function AddRecordDrawer({object,close,onToast,goTo,initialMode,prefill}){
   const isReq=(f)=>f.required||stageReqIds.includes(f.id);
   const augReq=(f)=>stageReqIds.includes(f.id)&&!f.required?{...f,required:true}:f; // so the field renders its required asterisk
   const errorFor=(f)=>{const v=vals[f.id];const empty=(Array.isArray(v)?v.length===0:!String(v||'').trim());if(isReq(f)&&empty)return'Required';if(f.type==='Email'&&!empty&&!emailRe.test(v))return'Enter a valid email';return'';};
-  const nudgeFor=(f)=>{const v=vals[f.id];const empty=(Array.isArray(v)?v.length===0:!String(v||'').trim());return(f.important&&empty)?'Recommended':'';};
+  const nudgeFor=(f)=>{const v=vals[f.id];const empty=(Array.isArray(v)?v.length===0:!String(v||'').trim());return(f.important&&empty&&object!=='lead')?'Recommended':'';}; // the app's LeadFormSheet has no "Recommended" hint under Estimated value
   const allValid=fields.every(f=>!errorFor(f));
   const addCompanyRec=(name)=>{const id=Date.now()+Math.floor(Math.random()*1000);crm.setCompanies(a=>[{id,name,domain:'',industry:INDUSTRIES[0],type:'Prospect',owner:'AM',ownerColor:'#5E92D8',avatar:arInitials(name),color:arPick(),size:null,tags:[],days:0,last:'Just now',archived:false},...a]);};
   const addContactRec=(name)=>{const id=Date.now()+Math.floor(Math.random()*1000);crm.setContacts(a=>[{id,name,first:name.split(' ')[0]||name,last:name.split(' ').slice(1).join(' '),co:'',email:'',phone:'',avatar:arInitials(name),color:arPick(),status:'Active',cstatus:'Prospect',owner:'AM',ownerColor:'#5E92D8',lastAct:'Just now',deal:'—',days:0,tags:[],archived:false},...a]);};
@@ -3750,7 +3750,7 @@ function GlobalBannerHost({goTo,page}){
     // fact and who to ask — not a CTA that lands on a "Billing is restricted" page.
     const canBill=(function(){try{return effCanManageBilling();}catch(e){return true;}})();
     const forOwner=(b,ask)=>canBill?b:{...b,body:ask,cta:undefined,go:undefined};
-    if(bs==='trial-expired'||bs==='cancelled'||bs==='unpaid'){const p=BANNER_PRESETS.readOnly;const clause=bs==='trial-expired'?'Your trial ended on '+((bc.trial&&bc.trial.endLabel)||'June 11')+', 2026':bs==='unpaid'?'Your plan ended after payment failed':'Your subscription was canceled';fixes.push(forOwner({...p,title:p.title.replace('{clause}',clause)},'Your data is kept. Ask your workspace owner to choose a plan.'));}
+    if(bs==='trial-expired'||bs==='cancelled'||bs==='unpaid'){const p=BANNER_PRESETS.readOnly;const clause=bs==='trial-expired'?'Your trial ended on '+((bc.trial&&bc.trial.endLabel)||'June 11')+', 2026':bs==='unpaid'?'Your plan ended after payment failed':'Your subscription was canceled';fixes.push(forOwner({...p,title:p.title.replace('{clause}',clause),body:bs==='unpaid'?'Your data is kept. Update your card, then choose a plan to continue.':p.body},'Your data is kept. Ask your workspace owner to choose a plan.'));} // app ReadOnlyBanner: the owner reads the state's directive after the kept-data line
     else if(bs==='trial'){const tb=trialBanner((bc&&bc.trial)||null,canBill);if(tb)fixes.push(tb);}
     const owned=(b)=>Array.isArray(b.owner)?b.owner.indexOf(page)>=0:b.owner===page;
     all=[...fixes,...pushed].filter(b=>!owned(b)&&(b.persistent||dismissed.indexOf(b.id)<0));
@@ -4128,7 +4128,7 @@ function trialBanner(t,canBill){
   if(!t)return null;
   const d=Math.max(0,Math.floor(t.daysLeft));const b=trialBucket(d);const end=(t.endLabel||'the end date')+', 2026';
   const warn=b==='urgent'||b==='last'||b==='ended';
-  return {id:'trial-'+(warn?'urgent':'countdown'),sev:warn?'warning':'info',Icon:warn?I.Clock:I.Sparkles,title:'Your trial ends on '+end+' — '+d+' day'+(d===1?'':'s')+' remaining',body:'Email sync, phone lines and sequences unlock when you choose a plan.',cta:canBill?'Choose a plan':undefined,go:canBill?'settings-billing':undefined};
+  return {id:'trial-'+(warn?'urgent':'countdown'),sev:warn?'warning':'info',Icon:warn?I.Clock:I.Sparkles,title:'Your trial ends on '+end+' — '+d+' day'+(d===1?'':'s')+' remaining',body:'Email sync, phone lines and sequences unlock when you choose a plan.'+(canBill?'':' Ask your workspace owner to choose a plan.'),cta:canBill?'Choose a plan':undefined,go:canBill?'settings-billing':undefined};
 }
 // Shared connected-mailbox state so the inbox rail and Integrations page stay in sync (email spec Part B).
 const MailAccountsContext=React.createContext({accounts:[],connect:()=>{},disconnect:()=>{}});
@@ -6152,6 +6152,8 @@ function DuplicatesView({object,showToolbar}){
 // is the thing you are really allocating. Anything above 100 is unreachable, anything below leaves the top
 // of the scale dead — both are shown, never enforced (the API accepts either; inventing a rule would lie).
 const LEAD_INDUSTRY_OPTS=['Software','Finance','Healthcare','Retail','Manufacturing','Education','Real Estate','Other'];
+// App LeadScoringSettings NOT_SCORING_YET — shown on the Engagement and Behavior groups (nothing writes those activities yet).
+const SCORE_NOT_SCORING_YET='No email or web-tracking pipeline writes these activities yet, so this group adds 0 to every score today. The weights are saved and apply automatically once tracking ships.';
 const SCORE_GRP=[{k:'profile_fit',label:'Profile fit',c:'#54CD95'},{k:'engagement',label:'Engagement',c:'#2FA877'},{k:'behavior',label:'Behavior',c:'#2FA877'}];
 const _sInt=(x)=>Math.max(0,parseInt(x,10)||0);
 // Max reachable per group — mirrors the engine exactly. Only ONE size tier can ever match (first match wins),
@@ -6225,7 +6227,14 @@ function ScoreChips({items,onChange,disabled,placeholder,opts}){
 }
 function SettingsScoringPage({goTo}){
   const crm=React.useContext(CrmDataContext);
-  const canEdit=settingsIsAdmin(); // owner/admin/manager may PUT; a member is read-only (API: 403 NOT_AUTHORIZED)
+  let canEdit=settingsIsAdmin(); // owner/admin/manager may PUT; a member is read-only (API: 403 NOT_AUTHORIZED)
+  // Plan gate (catalog lead_scoring: Trial, Pro, Business — off on Solo and Team; GET and PUT are both gated).
+  // App PlanRefusalNotice copy under ENFORCE (entitlements.Boot enforces every feature gate): refused, no "keep using it". Demo toggle: the workspace plan, or Solo / Team.
+  const _bcScore=React.useContext(BillingContext);
+  const [scoreDemo,setScoreDemo]=React.useState('plan');
+  const _scoreTier=scoreDemo!=='plan'?scoreDemo:(_bcScore.billingState==='trial'?'trial':((_bcScore.sub||BILLING_SUB_SEED).tier));
+  const scoreGateReason=capWorkspaceReadOnly(_bcScore)?'Lead scoring isn’t available while this workspace is read-only.':(_scoreTier==='solo'||_scoreTier==='team')?('Lead scoring isn’t included in the '+(_scoreTier==='solo'?'Solo':'Team')+' plan. It’s available on the Pro plan.'):null;
+  if(scoreGateReason)canEdit=false; // gated: GET and PUT are both refused
   const saved=crm.leadScoringRules||LEAD_SCORING_DEFAULTS;
   const meta=crm.leadScoringMeta||{is_default:true};
   const [d,setD]=React.useState(()=>JSON.parse(JSON.stringify(saved)));
@@ -6274,8 +6283,10 @@ function SettingsScoringPage({goTo}){
     return _sInt(t.points)===M.tierMax&&M.tierMax>0?{k:'best',t:'Best case'}:null;};
   const gapAfter=(i)=>{const t=tiers[i],n=tiers[i+1];if(!n)return null;const mx=_sInt(t.max_employees);if(mx===0)return null;const nmn=_sInt(n.min_employees);return nmn>mx+1?(mx+1)+'–'+(nmn-1):null;};
   const grpAccent=(k)=>(SCORE_GRP.find(g=>g.k===k)||{}).c;
-  const GroupHead=({k,title})=>{const mx=M[k];return(<div className="flex items-center gap-2 mt-1">
+  const NotScoringNotice=()=>(<div role="note" className="-mt-2 flex items-start gap-2 px-3 py-2 rounded-xl bg-white/[0.03] border border-white/[0.07] text-[12px] text-white/60 leading-relaxed"><I.Info size={13} className="shrink-0 mt-0.5 text-white/40"/><span>{SCORE_NOT_SCORING_YET}</span></div>);
+  const GroupHead=({k,title,notScoring})=>{const mx=M[k];return(<div className="flex items-center gap-2 mt-1">
     <SectionHead title={title} className="flex-1"/>
+    {notScoring&&<span className="inline-flex items-center px-2 py-1 rounded-lg text-[11px] font-medium text-white/55 bg-white/[0.06] shrink-0">Not scoring yet</span>}
     <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-lg text-[11px] font-medium text-white/60 bg-white/[0.05] border border-white/[0.08] shrink-0" title="The most this group can add to any lead">
       <span className="w-1.5 h-1.5 rounded-full" style={{background:grpAccent(k)}}/>max +{mx}</span>
   </div>);};
@@ -6285,7 +6296,8 @@ function SettingsScoringPage({goTo}){
       <button onClick={save} disabled={!dirty} className={dirty?CUST_SAVE:'inline-flex items-center gap-2 px-4 py-2 rounded-xl text-[13px] font-semibold text-white/30 bg-white/[0.06] cursor-not-allowed'}><I.Check size={14} stroke={2.4}/>Save rules</button>
     </div>):null}>
     <div className="max-w-3xl flex flex-col gap-4">
-      {!canEdit&&<div className="rounded-2xl border border-white/[0.08] bg-white/[0.03] px-4 py-3 flex items-start gap-2.5">
+      {scoreGateReason&&<CapGateBox reason={scoreGateReason} remedy="See plans" goTo={goTo}/>}
+      {!canEdit&&!scoreGateReason&&<div className="rounded-2xl border border-white/[0.08] bg-white/[0.03] px-4 py-3 flex items-start gap-2.5">
         <I.Lock size={14} className="text-white/45 shrink-0 mt-0.5"/>
         <p className="text-[12.5px] text-white/70 leading-relaxed"><span className="font-semibold text-white/90">View only.</span> Your role can see the weights but can’t change them — only an owner, admin, or manager can edit scoring rules.</p>
       </div>}
@@ -6393,7 +6405,8 @@ function SettingsScoringPage({goTo}){
         </div>
       </div>
 
-      <GroupHead k="engagement" title="Engagement · marketing touches"/>
+      <GroupHead k="engagement" title="Engagement · marketing touches" notScoring/>
+      <NotScoringNotice/>
       <div className="flex flex-col gap-2 -mt-2">
         <ScoreSignalEdit label="Opened an email" detail="Counted per open, then capped" unit="open" points={en.email_opened_points} cap={en.email_opened_cap}
           onPoints={v=>set(['engagement','email_opened_points'],v)} onCap={v=>set(['engagement','email_opened_cap'],v)} disabled={!canEdit} accent={grpAccent('engagement')}
@@ -6403,7 +6416,8 @@ function SettingsScoringPage({goTo}){
           rowMax={num(en.link_clicked_cap)} groupMax={M.engagement} dead={num(en.link_clicked_cap)===0} deadWhy="Cap is 0 — this signal contributes nothing."/>
       </div>
 
-      <GroupHead k="behavior" title="Behavior · buying intent"/>
+      <GroupHead k="behavior" title="Behavior · buying intent" notScoring/>
+      <NotScoringNotice/>
       <div className="flex flex-col gap-2 -mt-2">
         <ScoreSignalEdit label="Visited a page" detail="Pricing / product page visits, then capped" unit="visit" points={bh.page_visit_points} cap={bh.page_visit_cap}
           onPoints={v=>set(['behavior','page_visit_points'],v)} onCap={v=>set(['behavior','page_visit_cap'],v)} disabled={!canEdit} accent={grpAccent('behavior')}
@@ -6415,6 +6429,7 @@ function SettingsScoringPage({goTo}){
 
     </div>
     {confirmNode}
+    <PreviewStateToggle label="Plan" options={[{k:'plan',l:'Current plan'},{k:'solo',l:'Solo (no lead scoring)'},{k:'team',l:'Team (no lead scoring)'}]} value={scoreDemo} onChange={setScoreDemo}/>
     {toast&&<div className="fixed bottom-20 left-1/2 -translate-x-1/2 z-[160] inline-flex items-center gap-2.5 px-4 py-2.5 rounded-xl text-[13px] font-medium bg-emerald-500/12 text-emerald-200 border border-emerald-500/25"><I.Check size={14} stroke={2.4}/>{toast}</div>}
   </SettingsShell>);
 }
@@ -6711,7 +6726,7 @@ function PRow({label,required,children}){
     <div className="flex-1 min-w-0">{children}</div>
   </div>);
 }
-function PInlineText({value,onCommit,type,placeholder,linkKind}){
+function PInlineText({value,onCommit,type,placeholder,linkKind,onDial}){
   const [ed,setEd]=React.useState(false);const [v,setV]=React.useState(value==null?'':value);
   React.useEffect(()=>setV(value==null?'':value),[value]);
   const isMoney=type==='currency';const isPct=type==='percent';
@@ -6726,7 +6741,8 @@ function PInlineText({value,onCommit,type,placeholder,linkKind}){
   return(<div className="flex items-center gap-1.5 group/edit min-h-[28px]">
     <button onClick={()=>setEd(true)} className="flex-1 min-w-0 text-left text-[13px] py-1 flex items-center truncate">{disp}</button>
     {!empty&&linkKind==='email'&&<a href={'mailto:'+value} onClick={e=>e.stopPropagation()} className="shrink-0 text-white/30 hover:text-brand-300" title="Send email"><I.Mail size={12}/></a>}
-    {!empty&&linkKind==='phone'&&<a href={'tel:'+value} onClick={e=>e.stopPropagation()} className="shrink-0 text-white/30 hover:text-brand-300" title="Call"><I.Phone size={12}/></a>}
+    {!empty&&linkKind==='phone'&&onDial&&<><button type="button" onClick={e=>{e.stopPropagation();onDial(value);}} className="shrink-0 text-white/30 hover:text-brand-300" title="Call from nrtur"><I.Phone size={12}/></button><button type="button" onClick={e=>{e.stopPropagation();try{navigator.clipboard&&navigator.clipboard.writeText(String(value));}catch(_){}window.__nrturToast&&window.__nrturToast('Copied','success');}} className="shrink-0 text-white/30 hover:text-brand-300" title="Copy"><I.Copy size={12}/></button></>}
+    {!empty&&linkKind==='phone'&&!onDial&&<a href={'tel:'+value} onClick={e=>e.stopPropagation()} className="shrink-0 text-white/30 hover:text-brand-300" title="Call"><I.Phone size={12}/></a>}
     {!empty&&linkKind==='url'&&<a href={(String(value).startsWith('http')?'':'https://')+value} target="_blank" rel="noreferrer" onClick={e=>e.stopPropagation()} className="shrink-0 text-white/30 hover:text-brand-300" title="Open"><I.ArrowRight size={12}/></a>}
     <I.Edit size={11} className="shrink-0 text-white/0 group-hover/edit:text-white/30 transition-colors"/>
   </div>);
@@ -6889,7 +6905,7 @@ function PField({f,record,onChange,goTo}){
     case 'user': ctrl=<span className="inline-flex items-center gap-2 text-[13px] text-white/70">{userByCode(val)?<><span className="w-5 h-5 rounded-full flex items-center justify-center text-white text-[9px] font-semibold" style={{background:userByCode(val).color}}>{val}</span>{userByCode(val).name}</>:'—'}</span>;break;
     case 'relcontacts': {const rows=val||[];ctrl=(<div className="flex flex-col gap-1.5 py-1">{rows.map((r,idx)=>(<div key={idx} className="flex items-center gap-2"><span className="flex-1 text-[13px] text-white/85 truncate">{r.contact}</span><select value={r.role||'Other'} onChange={e=>commit(rows.map((x,j)=>j===idx?{...x,role:e.target.value}:x))} className="px-1.5 py-1 rounded-md text-[11px] text-white outline-none" style={{background:'var(--s850)',colorScheme:'dark'}}>{['Champion','Decision maker','Billing','Technical','Other'].map(o=>(<option key={o} value={o}>{o}</option>))}</select><button onClick={()=>commit(rows.filter((_,j)=>j!==idx))} className="text-white/30 hover:text-red-300 shrink-0"><I.X size={11}/></button></div>))}<RelAdder onAdd={(name)=>commit([...rows,{contact:name,role:'Other'}])}/></div>);break;}
     case 'converted': ctrl=(<div className="flex flex-wrap gap-1.5 py-0.5">{record.convContact&&<button onClick={()=>goTo&&goTo('contact-detail',record.convertedToContactId)} className="inline-flex items-center gap-1.5 px-2 py-1 rounded-lg bg-white/[0.05] border border-white/[0.08] text-[12px] text-brand-300 hover:bg-white/[0.08]"><I.UserPlus size={11}/>{record.convContact}</button>}{record.convCompany&&<button onClick={()=>goTo&&goTo('company-detail',record.convertedToCompanyId)} className="inline-flex items-center gap-1.5 px-2 py-1 rounded-lg bg-white/[0.05] border border-white/[0.08] text-[12px] text-brand-300 hover:bg-white/[0.08]"><I.Building size={11}/>{record.convCompany}</button>}{record.convDeal&&<button onClick={()=>goTo&&goTo('deal-detail',record.convertedToDealId)} className="inline-flex items-center gap-1.5 px-2 py-1 rounded-lg bg-white/[0.05] border border-white/[0.08] text-[12px] text-brand-300 hover:bg-white/[0.08]"><I.GitBranch size={11}/>{record.convDeal}</button>}{!record.convContact&&!record.convCompany&&!record.convDeal&&<span className="text-white/25 text-[13px]">Not converted</span>}</div>);break;
-    default: ctrl=<PInlineText value={val} onCommit={commit} type={f.type} placeholder={f.placeholder} linkKind={f.linkKind}/>;
+    default: ctrl=<PInlineText value={val} onCommit={commit} type={f.type} placeholder={f.placeholder} linkKind={f.linkKind} onDial={f.onDial}/>;
   }
   if(_ro)ctrl=(<fieldset disabled title="Read-only" className="contents border-0 m-0 p-0 min-w-0">{ctrl}</fieldset>);
   return(<PRow label={f.label} required={f.required}>{ctrl}</PRow>);
@@ -7177,18 +7193,19 @@ function actCompanyOwn(co){
 }
 function actLeadOwn(l){
   if(!l)return[];
-  const own=l.owner||'AM';const A=actActor(own).name;const sz=l.employeesSize||40;const them=l.name||'Lead';
+  // The app's lead timeline (GET /leads/{id}/activities) only ever holds status_change, assignment,
+  // lead_converted, deal_created and notes. No email/call/SMS logging, no forms, no score events on a lead.
+  const own=l.owner||'AM';const A=actActor(own).name;const st=l.status||'New';
   const out=[
-    mkAct('email',{ts:60,by:own,title:'Re: Pricing for your team',body:'What does onboarding look like for a '+sz+'-person team? And do you support SSO out of the box?',payload:{dir:'in',subject:'Re: Pricing',thread:[{from:them,ts:60,snippet:'What does onboarding look like for a '+sz+'-person team?'},{from:A,ts:40,snippet:'Happy to walk you through it — most teams are live in under a week. Grabbing some times now.'}]}}),
-    mkAct('call',{ts:200,by:own,title:'Discovery call · '+them,body:'Intro call — qualified the team size, timeline and budget.'}),
-    mkAct('call',{ts:1800,by:own,title:'Outbound call · Left voicemail',body:'Earlier attempt; left a voicemail with next steps.',payload:{dir:'out',rec:false,outcome:'Left voicemail',reason:'Discovery'}}),
-    mkAct('sms',{ts:600,by:own,title:'Text thread with '+them,body:'3 messages'}),
-    mkAct('form',{ts:120,by:'nrtur',title:'Submitted "'+(l.adFormName||'Request a demo')+'" form',body:((l.formAnswers&&l.formAnswers.length)?l.formAnswers.map(a=>a.q+' '+a.a).join(' · '):('Team size: '+sz))+' · Source: '+(l.source||'Web form')+'.'}),
-    mkAct('score',{ts:120,by:'nrtur',title:'Lead score reached '+(l.score!=null?l.score:82),body:'Visited pricing twice, opened 2 emails, submitted demo form.',payload:{field:'Score',from:'—',to:String(l.score!=null?l.score:82)}}),
-    mkAct('created',{ts:240,by:'nrtur',label:'LEAD CREATED',title:'Lead captured',body:'Source: '+(l.source||'Web form')+'.'}),
+    mkAct('note',{ts:900,by:own,title:'Note added',body:'Intro call booked for next week. Wants to see pricing for the team before committing.'}),
+    ...(st!=='New'?[mkAct('field',{ts:1500,by:own,label:'STATUS CHANGE',title:'Status changed — New → '+st,body:'',payload:{field:'Status',from:'New',to:st}})]:[]),
+    mkAct('field',{ts:2100,by:'nrtur',label:'ASSIGNMENT',title:'Assigned to '+A,body:'',payload:{field:'Owner',from:'—',to:A}}),
+    mkAct('created',{ts:2400,by:'nrtur',label:'LEAD CREATED',title:'Lead created',body:'Source: '+(l.source||'Web form')+'.'}),
   ];
-  if(l.qual)out.unshift(actFromQual(l.qual));
-  if(l.converted)out.unshift(mkAct('created',{ts:30,by:own,label:'CONVERTED',title:'Lead converted',body:'Converted to Contact'+(l.convCompany?', Company':'')+(l.convDeal?' & Deal':'')+'.'}));
+  if(l.converted){
+    if(l.convDeal)out.unshift(mkAct('deal',{ts:30,by:own,label:'DEAL CREATED',title:'Deal created — '+l.convDeal,body:'Created on conversion.'}));
+    out.unshift(mkAct('created',{ts:30,by:own,label:'CONVERTED',title:'Lead converted',body:'Converted to Contact'+(l.convCompany?', Company':'')+(l.convDeal?' & Deal':'')+'.'}));
+  }
   return out;
 }
 function actLabelDeal(d){return (d.name||d.company||'Deal')+(d.value?(' · '+d.value):'');}
@@ -10916,7 +10933,9 @@ function LeadDetailPage({goTo,nav}){
   const {confirmNode,openConfirm}=useConfirm();
   const b=leadScoreBucket(l.score);
   const canEditLead=effCanObject('Leads','edit')&&!l.converted&&!l.archived; // converted and archived leads are locked read-only
-  const leadPrimary=[{key:'name',label:'Name',type:'text',required:true},{key:'company',label:'Company name',type:'text'},{key:'title',label:'Job title',type:'text',autocomplete:true,options:COMMON_JOB_TITLES},{key:'companyDomain',label:'Company domain',type:'text'},{key:'email',label:'Primary email',type:'email',linkKind:'email'},{key:'phone',label:'Phone',type:'phone',linkKind:'phone'},{key:'source',label:'Source',type:'select',options:LEAD_SOURCES},{key:'status',label:'Status',type:'pill',options:LEAD_STATUSES},{key:'closeDate',label:'Expected close date',type:'date'},{key:'estValueNum',label:'Estimated value',type:'currency',sensitive:true},{key:'owner',label:'Owner',type:'owner'},{key:'tags',label:'Tags',type:'tags'}];
+  const [dialPhone,setDialPhone]=React.useState(null); // the phone in About opens the in-app softphone (app: useSoftphoneUi.openDialer), plus a copy button
+  const canNoteLead=effCanObject('Leads','edit')&&!l.converted; // app LeadTimeline: notes/tasks are disabled on a converted lead only — an archived lead still takes notes
+  const leadPrimary=[{key:'name',label:'Name',type:'text',required:true},{key:'company',label:'Company name',type:'text'},{key:'title',label:'Job title',type:'text',autocomplete:true,options:COMMON_JOB_TITLES},{key:'companyDomain',label:'Company domain',type:'text'},{key:'email',label:'Primary email',type:'email',linkKind:'email'},{key:'phone',label:'Phone',type:'phone',linkKind:'phone',onDial:(v)=>setDialPhone(v)},{key:'source',label:'Source',type:'select',options:LEAD_SOURCES},{key:'status',label:'Status',type:'pill',options:LEAD_STATUSES},{key:'closeDate',label:'Expected close date',type:'date'},{key:'estValueNum',label:'Estimated value',type:'currency',sensitive:true},{key:'owner',label:'Owner',type:'owner'},{key:'tags',label:'Tags',type:'tags'}];
   const leadSecondary=[]; // the lead About panel is the twelve fields above — no "Show all properties" section
   const [editOpen,setEditOpen]=React.useState(false);
   const [seqEnrollOpen,setSeqEnrollOpen]=React.useState(false);
@@ -10982,7 +11001,7 @@ function LeadDetailPage({goTo,nav}){
               </div>}
               <SequenceEnrollmentBanner kind="lead" id={l.id} goTo={goTo}/>
               <RecordTasks recId={l.id} match={(t)=>t.leadId!=null?t.leadId===l.id:(t.contact===l.name&&t.linkType==='lead')} prefill={{contact:l.name,linkType:'lead',company:l.company||''}} canEdit={effCanObject('Tasks','create')} goTo={goTo} onLog={(title,body)=>setExtra(x=>[mkAct('task',{ts:0,by:'AM',title,body}),...x])}/>
-              <ActivityTimeline kind="lead" rec={l} ctx={actCtx} goTo={goTo} extra={extra} richComposer onAddNote={canEditLead?addNote:undefined} onSchedule={canEditLead?()=>setSchedOpen(true):undefined} notePlaceholder={'Add a note about '+l.name+'...'}/>
+              <ActivityTimeline kind="lead" rec={l} ctx={actCtx} goTo={goTo} extra={extra} richComposer onAddNote={canNoteLead?addNote:undefined} onSchedule={canNoteLead?()=>setSchedOpen(true):undefined} notePlaceholder={'Add a note about '+l.name+'...'}/>
             </div>
           </div>
           <RecordMetaFooter record={l} meta={leadMeta}/>
@@ -10992,49 +11011,20 @@ function LeadDetailPage({goTo,nav}){
       {editOpen&&<RecordEditDrawer object="lead" title={'Edit '+l.name} Icon={I.Sparkles} groups={editGroups} record={l} onSave={onEditSave} onClose={()=>setEditOpen(false)}/>}
       {convertOpen&&<ConvertLeadModal lead={l} close={()=>setConvertOpen(false)} onConfirm={doConvert}/>}
       {convToast&&(<div className="fixed bottom-20 left-1/2 -translate-x-1/2 z-[160] inline-flex items-center gap-2.5 px-4 py-2.5 rounded-xl text-[13px] font-medium bg-emerald-500/12 text-emerald-200 border border-emerald-500/25 shadow-[0_8px_40px_rgba(0,0,0,0.5)]"><I.Check size={14} stroke={2.4}/>{convToast}</div>)}
-      {schedOpen&&<TaskFormModal initial={{type:'task',allDay:true,priority:'Medium',contact:l.name,linkType:'lead',company:l.company}} onClose={()=>setSchedOpen(false)} onSave={(ev)=>{calAddItem(ev);setExtra(x=>[mkAct('task',{ts:0,by:l.owner||'AM',title:ev.title||'Task created',body:(ev.date?('Due '+ev.date):'Added to tasks.')}),...x]);setSchedOpen(false);}}/>}
+      {dialPhone&&<SoftphoneDock name={l.name} phone={dialPhone} onClose={()=>setDialPhone(null)} onEnded={()=>{}}/>}
+        {schedOpen&&<TaskFormModal initial={{type:'task',allDay:true,priority:'Medium',contact:l.name,linkType:'lead',company:l.company}} onClose={()=>setSchedOpen(false)} onSave={(ev)=>{calAddItem(ev);setExtra(x=>[mkAct('task',{ts:0,by:l.owner||'AM',title:ev.title||'Task created',body:(ev.date?('Due '+ev.date):'Added to tasks.')}),...x]);setSchedOpen(false);}}/>}
       {seqEnrollOpen&&<SequenceEnrollModal recipients={[{id:l.id,name:l.name,email:l.email,phone:l.phone,timezone:l.timezone,company:l.company||'',type:'lead'}]} onClose={()=>setSeqEnrollOpen(false)}/>}
     </div>
   );
 }
-function AddLeadPage({goTo}){
-  const crm=React.useContext(CrmDataContext);
-  const [f,setF]=React.useState({name:'',company:'',email:'',phone:'',source:LEAD_SOURCES[0]||'',status:LEAD_STATUSES[0]||'',est:'',owner:(TEAM_MEMBERS[0]||{}).name||''});
-  const set=(k)=>(e)=>setF(s=>({...s,[k]:e.target.value}));
-  const create=()=>{
-    if(!f.name.trim()){window.__nrturToast&&window.__nrturToast('Enter the lead’s name first.','error');return;}
-    const om=TEAM_MEMBERS.find(m=>m.name===f.owner)||TEAM_MEMBERS[0]||{avatar:'AM',color:'#3475CE'};
-    const parts=f.name.trim().split(' ');const estN=parseInt(String(f.est).replace(/[^0-9]/g,''),10)||0;const id=Date.now()+Math.floor(Math.random()*1000);
-    const lead={id,name:f.name.trim(),first:parts[0]||f.name.trim(),last:parts.slice(1).join(' '),company:f.company.trim(),email:f.email.trim(),phone:f.phone.trim(),avatar:arInitials(f.name.trim()),color:arPick(),status:f.status,owner:om.avatar,ownerColor:om.color,source:f.source,estValue:estN?('$'+estN.toLocaleString('en-US')):'—',estValueNum:estN,score:(function(){try{return recomputeScore('lead',{company:f.company.trim(),phone:f.phone.trim(),title:''});}catch(e){return 0;}})(),days:0,tags:[],archived:false,converted:false,deleted:false,createdBy:CURRENT_USER_CODE,createdAt:'Just now',lastActivity:'Just now'};
-    crm.setLeads(a=>[lead,...a]);window.__nrturToast&&window.__nrturToast('Lead '+lead.name+' created ✓','success');goTo('lead-detail',id);
-  };
-  return(
-    <div className="h-full flex" style={{background:'var(--s950)'}}>
-      <AppSidebar active="contacts" goTo={goTo}/>
-      <div className="flex-1 flex flex-col min-w-0">
-        <header className="shrink-0 border-b border-white/[0.05] px-7 py-3.5 flex items-center justify-between" style={{background:'var(--s950)'}}><div className="flex items-center gap-2 text-[13px]"><button onClick={()=>goTo('leads')} className="text-white/45 hover:text-white transition-colors">Leads</button><I.ChevronRight size={12} className="text-white/25"/><span className="text-white font-medium">New lead</span></div><button onClick={()=>goTo('leads')} className="text-white/40 hover:text-white transition-colors"><I.X size={16}/></button></header>
-        <div className="flex-1 overflow-y-auto scroll-area">
-          <div className="px-7 py-6 max-w-2xl mx-auto">
-            <div className="rounded-2xl bg-white/[0.03] border border-white/[0.06] p-7">
-              <h2 className="text-white text-[22px] font-semibold mb-6">Add new lead</h2>
-              <div className="grid grid-cols-2 gap-4 mb-4">
-                <div><label className="text-[11px] font-medium text-white/45 uppercase tracking-[0.14em] block mb-1.5">Full name</label><input value={f.name} onChange={set('name')} placeholder="e.g. Olivia Bennett" className="w-full px-3 py-2.5 rounded-xl bg-white/[0.04] border border-white/[0.10] text-[13px] text-white placeholder:text-white/25 outline-none focus:border-brand-500/40"/></div>
-                <div><label className="text-[11px] font-medium text-white/45 uppercase tracking-[0.14em] block mb-1.5">Company</label><input value={f.company} onChange={set('company')} placeholder="e.g. Brightwave Studio" className="w-full px-3 py-2.5 rounded-xl bg-white/[0.04] border border-white/[0.10] text-[13px] text-white placeholder:text-white/25 outline-none focus:border-brand-500/40"/></div>
-                <div><label className="text-[11px] font-medium text-white/45 uppercase tracking-[0.14em] block mb-1.5">Email</label><input type="email" value={f.email} onChange={set('email')} placeholder="name@company.com" className="w-full px-3 py-2.5 rounded-xl bg-white/[0.04] border border-white/[0.10] text-[13px] text-white placeholder:text-white/25 outline-none focus:border-brand-500/40"/></div>
-                <div><label className="text-[11px] font-medium text-white/45 uppercase tracking-[0.14em] block mb-1.5">Phone</label><input type="tel" value={f.phone} onChange={set('phone')} placeholder="+1 555 000 0000" className="w-full px-3 py-2.5 rounded-xl bg-white/[0.04] border border-white/[0.10] text-[13px] text-white placeholder:text-white/25 outline-none focus:border-brand-500/40"/></div>
-                <div><label className="text-[11px] font-medium text-white/45 uppercase tracking-[0.14em] block mb-1.5">Source</label><select value={f.source} onChange={set('source')} className="w-full px-3 py-2.5 rounded-xl bg-white/[0.04] border border-white/[0.10] text-[13px] text-white outline-none focus:border-brand-500/40 appearance-none">{LEAD_SOURCES.map(s=>(<option key={s}>{s}</option>))}</select></div>
-                <div><label className="text-[11px] font-medium text-white/45 uppercase tracking-[0.14em] block mb-1.5">Status</label><select value={f.status} onChange={set('status')} className="w-full px-3 py-2.5 rounded-xl bg-white/[0.04] border border-white/[0.10] text-[13px] text-white outline-none focus:border-brand-500/40 appearance-none">{LEAD_STATUSES.map(s=>(<option key={s}>{s}</option>))}</select></div>
-                <div><label className="text-[11px] font-medium text-white/45 uppercase tracking-[0.14em] block mb-1.5">Estimated value</label><input value={f.est} onChange={set('est')} placeholder="$0" className="w-full px-3 py-2.5 rounded-xl bg-white/[0.04] border border-white/[0.10] text-[13px] text-white placeholder:text-white/25 outline-none focus:border-brand-500/40"/></div>
-                <div><label className="text-[11px] font-medium text-white/45 uppercase tracking-[0.14em] block mb-1.5">Owner</label><select value={f.owner} onChange={set('owner')} className="w-full px-3 py-2.5 rounded-xl bg-white/[0.04] border border-white/[0.10] text-[13px] text-white outline-none focus:border-brand-500/40 appearance-none">{TEAM_MEMBERS.map(m=>(<option key={m.avatar}>{m.name}</option>))}</select></div>
-              </div>
-              <div className="flex gap-3"><button onClick={()=>goTo('leads')} className="flex-1 py-2.5 rounded-xl text-[13px] font-medium text-white/65 bg-white/[0.04] border border-white/[0.08] hover:bg-white/[0.07] transition-all">Cancel</button><button onClick={create} className="flex-1 py-2.5 rounded-xl text-[13px] font-semibold text-white bg-brand-500 hover:bg-brand-400 shadow-brand transition-all">Create lead</button></div>
-            </div>
-          </div>
-        </div>
-        <AppFooter/>
-      </div>
-    </div>
-  );
+// The app has no standalone "new lead" route: a lead is always created in the LeadFormSheet over the Leads list.
+// This fallback route therefore shows the Leads page with the same New Lead drawer (same fields as the app's sheet).
+function AddLeadPage(props){
+  const {goTo}=props;
+  return(<>
+    <LeadsPage {...props}/>
+    <AddRecordDrawer object="lead" close={()=>goTo('leads')} onToast={(m,t)=>{window.__nrturToast&&window.__nrturToast(m,t||'success');}} goTo={goTo}/>
+  </>);
 }
 // ?? Email Inbox ???????????????????????????????????????????????????????????????
 const MAIL_FOLDERS=[
@@ -11167,7 +11157,7 @@ function MailLabelDialog({label,close,onSave}){
 const MAIL_ACCT_STATUS={synced:{l:'Synced',t:'text-emerald-400',d:'bg-emerald-400'},syncing:{l:'Syncing…',t:'text-white/50',d:'bg-white/40'},error:{l:'Sync error',t:'text-red-300',d:'bg-red-400'},'needs-reconnect':{l:'Reconnect needed',t:'text-amber-300',d:'bg-amber-400'}};
 function EmailFolderRail({active,setActive,goTo,onToast,emails,acctStatus}){
   // Badges only where the app shows them: Inbox = unread, Starred and Drafts = total. Sent/Archived/Trash carry none.
-  const countFor=(fk)=>{if(!emails)return null;const inF=emails.filter(e=>emailInFolder(e,fk));return fk==='inbox'?inF.filter(e=>e.unread).length:(fk==='drafts'||fk==='starred')?inF.length:0;};
+  const countFor=(fk)=>{if(!emails)return null;const inF=emails.filter(e=>emailInFolder(e,fk));return fk==='inbox'?inF.filter(e=>e.unread).length:fk==='drafts'?inF.length:0;}; // Starred is a flag, not a folder: /inbox/counts never returns a starred row, so the app shows no Starred badge
   const [disc,setDisc]=React.useState(null);
   const ma=React.useContext(MailAccountsContext);
   const [connectOpen,setConnectOpen]=React.useState(false);
@@ -11922,7 +11912,7 @@ function InboxPage({goTo,nav}){
             {smsConvos.map(c=>{const on=smsSel?.id===c.id;return(<button key={c.id} onClick={()=>{setSmsSel(c);if(c.unread)setSmsConvos(cs=>cs.map(x=>x.id===c.id?{...x,unread:false}:x));}} className={['w-full text-left px-4 py-4 border-b border-white/[0.03] transition-colors relative',on?'bg-brand-500/[0.10]':'hover:bg-white/[0.03]'].join(' ')}>
               {on&&<span className="absolute left-0 top-1/2 -translate-y-1/2 h-8 w-[3px] rounded-r-full bg-brand-500"/>}
               {c.unread&&<span className="absolute left-2 top-1/2 -translate-y-1/2 w-1.5 h-1.5 rounded-full bg-brand-400"/>}
-              <div className="flex items-start gap-3 pl-2"><div className="w-9 h-9 rounded-full flex items-center justify-center text-[11px] font-semibold text-white shrink-0" style={{background:c.color}}>{c.avatar}</div><div className="min-w-0 flex-1"><div className="flex items-center justify-between mb-0.5"><p className={['text-[13px] leading-tight',c.unread?'font-semibold text-white':'font-medium text-white/80'].join(' ')}>{c.contact}</p><span className="text-[10px] text-white/50 shrink-0 ml-2">{c.time}</span></div><p className={['text-[12px] truncate',c.unread?'text-white/70':'text-white/45'].join(' ')}>{(c.messages||[]).length&&c.messages[c.messages.length-1].me?'You sent a message':'New message'}</p></div></div>
+              <div className="flex items-start gap-3 pl-2"><div className="w-9 h-9 rounded-full flex items-center justify-center text-[11px] font-semibold text-white shrink-0" style={{background:c.color}}>{c.avatar}</div><div className="min-w-0 flex-1"><div className="flex items-center justify-between mb-0.5"><p className={['text-[13px] leading-tight',c.unread?'font-semibold text-white':'font-medium text-white/80'].join(' ')}>{c.contact}</p><span className="text-[10px] text-white/50 shrink-0 ml-2">{c.time}</span></div><p className={['text-[12px] truncate',c.unread?'text-white/70':'text-white/45'].join(' ')}>{(c.messages||[]).length&&c.messages[c.messages.length-1].me?'You sent a message':'New message'}</p>{(()=>{const _ct=c.contactId!=null?(_liveContacts||[]).find(x=>x.id===c.contactId&&!x.deleted):null;return smsStopped(c.phone||(_ct&&_ct.phone)||'')?<div className="mt-2 flex flex-wrap items-center gap-2"><span className="inline-flex items-center gap-1 rounded-md bg-red-500/10 px-2 py-0.5 text-[10px] font-medium text-red-300 ring-1 ring-red-500/20"><I.Ban size={10}/> Opted out</span></div>:null;})()}</div></div>
             </button>);})}
           </div>
           {smsSel?(<div className="flex-1 flex flex-col min-w-0">
@@ -11931,10 +11921,10 @@ function InboxPage({goTo,nav}){
             <div className="shrink-0 border-t border-white/[0.05] p-4" style={{background:'var(--s900)'}}>
               {(()=>{const _w=_liveWallet;if(!_w||_w.balance>1)return null;const _empty=_w.balance<WALLET_RATES.sms;const _sv=sevStyle(_empty?'critical':'warning');return(<div className="mb-2 flex items-center gap-2 px-3 py-2 rounded-lg text-[11.5px]" style={{color:_sv.ink,background:'color-mix(in srgb,'+_sv.accent+' 10%,transparent)',border:'1px solid color-mix(in srgb,'+_sv.accent+' 30%,transparent)'}}><I.AlertTriangle size={12} className="shrink-0"/><span className="min-w-0 flex-1">{_empty?'Your prepaid balance is empty — texts can’t be sent until credit is added.':('Low balance: $'+_w.balance.toFixed(2)+' left for texts and calls.')}</span>{effCanManageBilling()?<button onClick={()=>goTo('settings-billing')} className="shrink-0 font-semibold underline-offset-2 hover:underline">Add credit</button>:<span className="shrink-0 opacity-80">Ask your workspace owner to add credit.</span>}</div>);})()}
               {_threadNumGone&&!_smsSupp&&(<div role="alert" className="mb-2 flex items-start gap-2 px-3 py-2 rounded-lg bg-amber-500/[0.08] border border-amber-500/25 text-[11.5px] text-amber-200"><I.AlertTriangle size={12} className="shrink-0 mt-0.5"/><span className="min-w-0">This conversation was on a number that can no longer send. Replying from {smsFrom||'another number'} will start a new thread for the contact.</span></div>)}
-              {_smsSupp&&(<div className="mb-2 flex items-center gap-2 px-3 py-2 rounded-lg bg-rose-500/[0.10] border border-rose-500/30 text-[11.5px] text-rose-200"><I.Ban size={12} className="shrink-0"/><span className="min-w-0">This contact opted out of SMS (replied STOP). Texting is disabled until they reply START.</span></div>)}
+              {_smsSupp&&(<div className="mb-2 flex items-center gap-2 px-3 py-2 rounded-lg bg-rose-500/[0.10] border border-rose-500/30 text-[11.5px] text-rose-200"><I.Ban size={12} className="shrink-0"/><span className="min-w-0">This contact has opted out. New messages can't be sent.</span></div>)}
               <div className="rounded-xl border border-white/[0.08] focus-within:border-brand-500/40 transition-all" style={{background:'var(--field6)'}}>
                 {mmsAtt.length>0&&(<div className="px-3 pt-3 flex items-center gap-2 flex-wrap">{mmsAtt.map(m=>(<div key={m.uid} className="relative">{m.type==='file'?<div className="inline-flex items-center gap-2 px-2.5 py-2 rounded-lg text-[11px] text-white/75 bg-white/[0.05] border border-white/[0.08]"><I.Note size={12} className="text-violet-300"/>{m.name}<span className="text-white/50">{m.size}</span></div>:<div className="w-14 h-14 rounded-lg overflow-hidden border border-white/[0.1] relative" style={{background:m.grad}}>{m.type==='video'&&<span className="absolute inset-0 flex items-center justify-center text-white"><I.Play size={12}/></span>}</div>}<button onClick={()=>removeMmsAtt(m.uid)} title="Remove" className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-black/70 border border-white/20 text-white flex items-center justify-center hover:bg-black"><I.X size={8}/></button></div>))}</div>)}
-                <textarea ref={draftRef} value={draft} onChange={e=>setDraft(e.target.value)} rows={3} disabled={_smsSupp||!effCanCreateAny()} placeholder={_smsSupp?"This contact opted out of SMS":(!effCanCreateAny()?"View only — your role can’t send messages":"Type a message…")} className="w-full bg-transparent outline-none resize-none px-4 pt-3 pb-1 text-[13px] text-white placeholder:text-white/30 disabled:cursor-not-allowed"/>
+                <textarea ref={draftRef} value={draft} onChange={e=>setDraft(e.target.value)} rows={3} disabled={_smsSupp||!effCanCreateAny()} placeholder={_smsSupp?"This contact has opted out.":(!effCanCreateAny()?"View only — your role can’t send messages":"Type a message…")} className="w-full bg-transparent outline-none resize-none px-4 pt-3 pb-1 text-[13px] text-white placeholder:text-white/30 disabled:cursor-not-allowed"/>
                 <div className="flex items-center justify-between px-3 pb-3 gap-2"><div className="flex items-center gap-1 min-w-0">{_smsFromOpts.length>0&&<div className="relative"><select value={smsFrom} onChange={e=>setSmsFrom(e.target.value)} title="Send from this number" className="pl-2 pr-6 py-1 rounded-md bg-white/[0.04] border border-white/[0.08] text-[10.5px] font-mono text-white/60 outline-none appearance-none cursor-pointer" style={{colorScheme:'dark',background:'var(--s850)'}}>{_smsFromOpts.map(n=>(<option key={n}>{n}</option>))}</select><I.ChevronDown size={10} className="absolute right-1.5 top-1/2 -translate-y-1/2 text-white/30 pointer-events-none"/></div>}{(()=>{const _fn=_smsNumsAll.find(n=>n.number===smsFrom);const _mmsOk=!_fn||!!(_fn.caps&&_fn.caps.mms);return(<button disabled={!_mmsOk} onClick={()=>attachMms('image')} title={_mmsOk?'Attach media':'This number can’t send MMS'} aria-label="Attach media" className="w-8 h-8 rounded-lg flex items-center justify-center text-white/40 hover:text-violet-300 hover:bg-violet-500/10 transition-colors disabled:opacity-35 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-white/40"><I.Paperclip size={15}/></button>);})()}<span className={['text-[11px] tabular-nums ml-1 truncate',(seg.segs>=4&&!mmsAtt.length)?'text-amber-300':'text-white/50'].join(' ')}>{mmsAtt.length>0?(mmsAtt.length+' media · MMS'):(draft.length+' chars · '+seg.segs+' SMS')}</span></div><button disabled={(!draft.trim()&&mmsAtt.length===0)||_smsSupp||!effCanCreateAny()} onClick={()=>{if(!effCanCreateAny()){showToast('Your role can’t send messages');return;}const _isLd=smsSel.leadId!=null;const _rc=_isLd?((_leads||[]).find(x=>x.id===smsSel.leadId&&!x.deleted)||{id:smsSel.leadId,name:smsSel.contact,phone:smsSel.phone}):((smsSel.contactId!=null?(_liveContacts||[]).find(c=>c.id===smsSel.contactId&&!c.deleted):null)||(_liveContacts||[]).find(c=>c.name===smsSel.contact&&!c.deleted)||{id:smsSel.contactId,name:smsSel.contact,phone:smsSel.phone});const _g=canSendSms(_rc);if(!_g.ok){showToast(_g.reason);return;}const _media=mmsAtt.map(({uid,..._m})=>_m);const _isMms=_media.length>0;if(_walletCharge)_walletCharge(_isMms?WALLET_RATES.mms:+(seg.segs*WALLET_RATES.sms).toFixed(2),(_isMms?'MMS · ':'SMS · ')+smsSel.contact+(_isMms?'':' · '+seg.segs+' segment'+(seg.segs===1?'':'s')));const _msg={from:'Alex Morgan',me:true,body:draft.trim(),time:'Just now',...(smsFrom?{fromNumber:smsFrom}:{}),...(_isMms?{media:_media}:{})};const _prev=_isMms?(draft.trim()||(_media.length+' '+(_media[0].type==='file'?'file':'photo')+(_media.length===1?'':'s'))):draft.trim();setSmsConvos(cs=>cs.some(c=>c.id===smsSel.id)?cs.map(c=>c.id===smsSel.id?{...c,messages:[...c.messages,_msg],preview:_prev,time:'Just now'}:c):[{...smsSel,messages:[...smsSel.messages,_msg],preview:_prev,time:'Just now'},...cs]);setSmsSel(s=>({...s,messages:[...s.messages,_msg],preview:_prev,time:'Just now'}));if(_rc){const _dl=_isLd?[]:dealsForPerson(_rc.id);_addAct&&_addAct(_isLd?'lead':'contact',_rc.id,{...mkAct(_isMms?'mms':'sms',{ts:0,by:CURRENT_USER.avatar,title:(_isMms?'MMS sent':'SMS sent'),body:_prev,payload:{dir:'out',...(smsFrom?{from:smsFrom}:{}),...(_isMms?{media:_media}:{})}}),...(_isLd?{}:(smsSel.dealId!=null?{dealId:smsSel.dealId}:(_dl.length===1?{dealId:_dl[0].id}:{})))});if(_isLd){_updLead&&_updLead(_rc.id,{lastActivity:'Just now'});}else{_updCt&&_updCt(_rc.id,{last:'Just now',lastActivity:'Just now',days:0});}}setDraft('');setMmsAtt([]);showToast(_isMms?'MMS sent':'Message sent');}} className={['inline-flex items-center gap-2 px-4 py-1.5 rounded-lg text-[12px] font-medium transition-all border-none',((draft.trim()||mmsAtt.length)&&!_smsSupp&&effCanCreateAny())?'bg-brand-500 hover:bg-brand-400 text-white shadow-brand cursor-pointer':'bg-white/[0.06] text-white/30 cursor-not-allowed'].join(' ')}><I.Send size={11} stroke={2.4}/>Send {mmsAtt.length>0?'MMS':'SMS'}</button></div>
               </div>
             </div>
@@ -11957,7 +11947,7 @@ function InboxPage({goTo,nav}){
         </footer>
       </div>
       {toast&&<div className="fixed bottom-20 left-1/2 -translate-x-1/2 z-[120] inline-flex items-center gap-2.5 px-4 py-2.5 rounded-xl text-[13px] font-medium bg-emerald-500/12 text-emerald-200 border border-emerald-500/25 shadow-[0_8px_40px_rgba(0,0,0,0.5)]"><I.Check size={14} stroke={2.4}/>{toast}</div>}
-      {composeOpen&&<EmailComposeModal close={()=>setComposeOpen(false)} defaultTo={email?email.from.toLowerCase().replace(/\s+/g,'.')+'@example.com':''} onSent={onSentNew} onSavedDraft={(d)=>onSentNew(d,true)}/>}
+      {composeOpen&&<EmailComposeModal close={()=>setComposeOpen(false)} defaultTo='' onSent={onSentNew} onSavedDraft={(d)=>onSentNew(d,true)}/>}
       {lightbox&&<MmsLightbox m={lightbox} close={()=>setLightbox(null)}/>}
       {smsNewOpen&&<SmsNewMessageModal close={()=>setSmsNewOpen(false)} onSend={(d)=>{if(startSmsThread(d)!==false)setSmsNewOpen(false);}}/>}
       {mmsGallery&&smsSel&&<MmsGalleryModal contact={smsSel.contact} media={smsMedia} onOpen={(m)=>setLightbox(m)} close={()=>setMmsGallery(false)}/>}
@@ -12181,10 +12171,8 @@ function WaitTimeSelect({value,onChange,times}){
 // Option lists for action-node configuration dropdowns
 const REP_OPTS=['Round-robin','Deal owner','Least busy rep',...TEAM_MEMBERS.map(m=>m.name)];
 // P2: Assignment / Routing Rules — a shared per-object rule table (IF AND/OR conds THEN assign to rep/round-robin/least-busy).
-// First matching rule per object wins on record create + ad-lead capture. Seeded rules are armed (fire on the next matching create).
+// The app has no assignment rules (no FE feature, no BE module), so nothing is seeded: a new record keeps the owner the user picked.
 const ASSIGN_RULES_SEED=[
-  {id:'ar_lead_hot',object:'lead',name:'Hot leads (score > 70) → least busy rep',enabled:true,conds:{match:'AND',conds:[{id:'c1',fieldKey:'score',op:'>',value:'70',value2:''}]},thenType:'leastBusy',pool:[]},
-  {id:'ar_deal_ent',object:'deal',name:'Enterprise deals (> $25k) → Sarah Chen',enabled:true,conds:{match:'AND',conds:[{id:'c1',fieldKey:'amount',op:'>',value:'25000',value2:''}]},thenType:'rep',rep:'SC'},
 ];
 // Lead scoring — mirrors the backend contract (GET/PUT /api/v1/lead-scoring-rules, LeadScoringRules v1).
 // Four tunable groups; NO base and NO decay (the API has neither). The engine clamps the final score to 0-100.
@@ -13059,7 +13047,7 @@ function AutomationBuilderPage({goTo,nav}){
     showToast(msg);setTimeout(()=>goTo('settings-automations'),650);
   };
   // The header switch PATCHes /status immediately and only exists once the flow is saved.
-  const setStatusNow=(v)=>{const ns=v?'active':'paused';setActivated(v);setFlowStatus(ns);crm.setAutomations(list=>list.map(a=>a.id===savedId?{...a,status:ns}:a));showToast(v?'Automation activated':'Automation paused');};
+  const setStatusNow=(v)=>{const ns=(flowStatus==='error'||!v)?'paused':'active';setActivated(ns==='active');setFlowStatus(ns);crm.setAutomations(list=>list.map(a=>a.id===savedId?{...a,status:ns}:a));showToast(ns==='active'?'Automation activated':'Automation paused');};
   // automation_sends (app planGates): on a plan without automated sends, a flow with an email/SMS step can't be saved.
   const _bcA=React.useContext(BillingContext);
   const [planDemo,setPlanDemo]=React.useState('pro');
@@ -13078,7 +13066,7 @@ function AutomationBuilderPage({goTo,nav}){
         <header className="shrink-0 border-b border-white/[0.05] px-7 py-3.5 flex items-center justify-between gap-4" style={{background:'var(--s950)'}}>
           <div className="flex items-center gap-2 text-[13px] min-w-0"><button onClick={cancel} className="text-white/45 hover:text-white transition-colors shrink-0 inline-flex items-center gap-1"><I.ChevronLeft size={13}/>Automations</button><I.ChevronRight size={12} className="text-white/25 shrink-0"/><input value={name} onChange={e=>{setName(e.target.value);mark();}} className="bg-transparent text-white font-medium outline-none border-b border-transparent focus:border-brand-500/40 px-0.5 min-w-0"/></div>
           <div className="flex items-center gap-2 shrink-0">
-            {!readOnly&&<div className="flex items-center gap-2 mr-1 px-2.5 py-1.5 rounded-xl bg-white/[0.04] border border-white/[0.08]" title={savedId==null?'Save this automation before activating it':undefined}><span className={['text-[12px] font-medium',flowStatus==='active'?'text-emerald-300':flowStatus==='error'?'text-red-300':'text-white/50'].join(' ')}>{({active:'Active',paused:'Paused',draft:'Draft',error:'Error'})[flowStatus||'draft']}</span><span className={savedId==null?'opacity-40 pointer-events-none':''}><Toggle on={flowStatus==='active'} onChange={setStatusNow}/></span></div>}
+            {!readOnly&&<div className="flex items-center gap-2 mr-1 px-2.5 py-1.5 rounded-xl bg-white/[0.04] border border-white/[0.08]" title={savedId==null?'Save this automation before activating it':undefined}><span className={['text-[12px] font-medium',flowStatus==='active'?'text-emerald-300':flowStatus==='error'?'text-red-300':'text-white/50'].join(' ')}>{({active:'Active',paused:'Paused',draft:'Draft',error:'Error'})[flowStatus||'draft']}</span>{(()=>{const _wouldAct=flowStatus!=='active'&&flowStatus!=='error';const _actBlocked=_wouldAct&&(capWorkspaceReadOnly(_bcA)||_autoCapDemo==='limit');return(<span title={_actBlocked?(capWorkspaceReadOnly(_bcA)?CAP_READ_ONLY_REASON:'You’ve reached your plan’s limit of active automations.'):undefined} className={(savedId==null||_actBlocked)?'opacity-40 pointer-events-none':''}><Toggle on={flowStatus==='active'} onChange={setStatusNow}/></span>);})()}</div>}
             <button disabled={savedId==null} title={savedId==null?'Save this automation to see its runs':undefined} onClick={()=>setLogOpen(true)} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[13px] font-medium text-white/70 hover:text-white bg-white/[0.04] border border-white/[0.08] hover:bg-white/[0.07] transition-all disabled:opacity-40 disabled:cursor-not-allowed"><I.History size={12}/>Run history</button>
             {!readOnly&&<button disabled={savedId==null} title={savedId==null?'Save this automation to test it':undefined} onClick={()=>setTestOpen(true)} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[13px] font-medium text-white/70 hover:text-white bg-white/[0.04] border border-white/[0.08] hover:bg-white/[0.07] transition-all disabled:opacity-40 disabled:cursor-not-allowed"><I.Play size={12}/>Test</button>}
             <button onClick={cancel} className="px-3 py-1.5 rounded-lg text-[13px] text-white/65 hover:text-white bg-white/[0.04] border border-white/[0.08] hover:bg-white/[0.07] transition-all">{readOnly?'Back':'Cancel'}</button>
@@ -13153,7 +13141,7 @@ function AutomationBuilderPage({goTo,nav}){
         </div>
       </React.Fragment>,document.body)}
       {pickTrigger&&<TriggerPicker current={trigger} onPick={(t)=>{setTrigger(t);mark();}} close={()=>setPickTrigger(false)}/>}
-      {logOpen&&<AutomationLogModal auto={{name,status:activated?'active':'draft',runs:0,steps:nodes,success:100}} close={()=>setLogOpen(false)}/>}
+      {logOpen&&<AutomationLogModal auto={((savedId!=null&&(crm.automations||[]).find(a=>a.id===savedId))||{name,status:activated?'active':'draft',runs:0,steps:nodes,success:100})} close={()=>setLogOpen(false)}/>} {/* the saved flow's own runs, same as the list's Logs */}
       {toast&&(<div className="fixed bottom-20 left-1/2 -translate-x-1/2 z-[160] inline-flex items-center gap-2.5 px-4 py-2.5 rounded-xl text-[13px] font-medium bg-emerald-500/12 text-emerald-200 border border-emerald-500/25 shadow-[0_8px_40px_rgba(0,0,0,0.5)]"><I.Check size={14} stroke={2.4}/>{toast}</div>)}
     </div>
   );
@@ -13248,7 +13236,8 @@ const SETTINGS_PAGE_META={
 };
 // IA split: workspace settings are admin-governed shared truth; personal settings are per-user.
 // Gating reuses the existing role system (NAV_ADMIN_ROLES / CURRENT_USER_ROLE) — no parallel model.
-const WORKSPACE_SETTINGS_PAGES=new Set(['settings-general','settings-properties','settings-team','settings-compliance','settings-billing','settings-statuses','settings-scoring','settings-automations','settings-sequences','settings-phone-numbers','settings-suppression','settings-unsubscribes','settings-frequency','settings-reengagement','settings-tasks']);
+// settings-billing is NOT here: billing is owner-managed (its own BillingRestricted card), and members still page wallet history.
+const WORKSPACE_SETTINGS_PAGES=new Set(['settings-general','settings-properties','settings-team','settings-compliance','settings-statuses','settings-scoring','settings-automations','settings-sequences','settings-phone-numbers','settings-suppression','settings-unsubscribes','settings-frequency','settings-reengagement','settings-tasks']);
 function settingsIsAdmin(){return NAV_ADMIN_ROLES.indexOf(effectiveRole())>=0;}
 // Read-only banner for workspace pages that render their own layout (outside SettingsShell).
 function WorkspaceReadOnlyBanner({label}){const s=sevStyle('warning');return(<div className="rounded-2xl border px-4 py-3 flex items-center gap-2.5 text-[12.5px] mb-5" style={{background:s.soft,borderColor:s.line,color:s.ink}}><I.Lock size={14} className="shrink-0"/><span><span className="font-semibold">Managed by your admin.</span> {label||'This workspace asset is read-only for your role.'}</span></div>);}
@@ -13485,7 +13474,7 @@ function SettingsBillingPage({goTo}){
   // The one payment-state sentence (paymentState.ts) — headline, the owner's directive, and which door(s) it offers.
   const pay=pastDue?{tone:'warning',h:'Your payment is past due',d:'Update your payment method first.',portal:true}
     :cancelSched?{tone:'notice',h:'Your plan ends on '+sub.nextDate,d:'Reactivate your plan first.',portal:true}
-    :billingState==='unpaid'?{tone:'warning',h:'Your plan ended after payment failed',d:'Update your card, then choose a plan to continue.',portal:true,checkout:true,ended:'June 1, 2026',badge:'unpaid'}
+    :billingState==='unpaid'?{tone:'warning',h:'Your plan ended after payment failed',d:'Update your card, then choose a plan to continue.',portal:true,checkout:true,badge:'unpaid'} /* ended_at is null for unpaid by contract — no "Ended on" row */
     :billingState==='cancelled'?{tone:'notice',h:'Your plan ended on June 1, 2026',d:null,checkout:true,ended:'June 1, 2026',badge:'ended'}
     :billingState==='trial-expired'?{tone:'notice',h:'Your trial ended on '+trialEnd,d:null,checkout:true,ended:trialEnd,badge:'trial expired'}
     :null;
@@ -13615,17 +13604,29 @@ function SettingsBillingPage({goTo}){
               :<p>{billingMoney(planCharge)} / month</p>}
           </div>
         </BillingDialog>);})()}
-      {dlg&&dlg.kind==='switch'&&(()=>{const p=billingPlan(dlg.to);const yr=sub.interval==='yearly';const extra=Math.max(0,sub.seatsPaid-1);const cost=(x)=>((yr?x.yr:x.mo)+extra*((yr?x.userYr:x.userMo)||0));const diff=cost(p)-cost(plan);const due=diff>0?diff/2:0;const cr=diff<0?-diff/2:0;return(
-        <BillingDialog title={'Switch to '+p.name} sub="Review the changes before confirming your plan switch." onClose={()=>setDlg(null)} footer={<><button onClick={()=>setDlg(null)} className={BILL_BTN2}>Cancel</button><button onClick={()=>{setSub(s=>({...s,tier:p.k,credit:cr>0?+((s.credit||0)+cr).toFixed(2):(s.credit||0)}));setDlg(null);toast('Switched to '+p.name);}} className={BILL_BTN}>Confirm Switch</button></>}>
-          <div className="flex flex-col gap-2 text-[12.5px]">
+      {dlg&&dlg.kind==='switch'&&(()=>{const p=billingPlan(dlg.to);const yr=sub.interval==='yearly';const extra=Math.max(0,sub.seatsPaid-1);const cost=(x)=>((yr?x.yr:x.mo)+extra*((yr?x.userYr:x.userMo)||0));const diff=cost(p)-cost(plan);const due=diff>0?diff/2:0;const cr=diff<0?-diff/2:0;
+        // plan_switch.go refuseDowngradeAboveTargetBundle (preview AND confirm): 409 PLAN_NOT_SWITCHABLE / USAGE_ABOVE_TARGET_BUNDLE
+        // when this cycle's automated sends are above what the target tier includes. The dialog shows the reason and disables Confirm.
+        const _fromSends=(BILLING_LIMITS[tier]||{}).sends||0,_toSends=(BILLING_LIMITS[p.k]||{}).sends||0,_used=sub.sendsUsed||0;
+        const _fmtN=(n)=>Number(n).toLocaleString('en-US');
+        const swRefusal=(_fromSends>0&&_used>_toSends)?('The plan cannot be switched in its current state: you have used '+_fmtN(_used)+' automated sends this cycle; '+(_toSends>0?(p.name+' includes '+_fmtN(_toSends)):(p.name+' doesn’t include automated sends'))+' — downgrade after your allowance resets on '+sub.nextDate+'.'):null;
+        return(
+        <BillingDialog title={'Switch to '+p.name} sub="Review the changes before confirming your plan switch." onClose={()=>setDlg(null)} footer={<><button onClick={()=>setDlg(null)} className={BILL_BTN2}>Cancel</button><button disabled={!!swRefusal} onClick={()=>{if(swRefusal)return;setSub(s=>({...s,tier:p.k,credit:cr>0?+((s.credit||0)+cr).toFixed(2):(s.credit||0)}));setDlg(null);toast('Switched to '+p.name);}} className={BILL_BTN}>Confirm Switch</button></>}>
+          {swRefusal&&<div role="alert" className="rounded-lg bg-red-500/10 border border-red-500/25 p-3 text-[12.5px] text-red-300">{swRefusal}</div>}
+          {!swRefusal&&<><div className="flex flex-col gap-2 text-[12.5px]">
             <div className="flex justify-between items-center rounded-lg border border-white/[0.08] p-3 text-white"><span className="font-medium">Due now</span><span className="font-semibold tabular-nums">{billingMoney(due)}</span></div>
             {cr>0&&<div className="flex justify-between items-center rounded-lg border border-emerald-500/25 bg-emerald-500/[0.08] p-3 text-emerald-200"><span className="font-medium">Credit applied to balance</span><span className="font-semibold tabular-nums">{billingMoney(cr)}</span></div>}
           </div>
-          <p className="text-[11.5px] text-white/45">Upgrading to a higher plan does not immediately grant the welcome credit on this prorated invoice. It will be granted on your next full invoice.</p>
+          <p className="text-[11.5px] text-white/45">Upgrading to a higher plan does not immediately grant the welcome credit on this prorated invoice. It will be granted on your next full invoice.</p></>}
         </BillingDialog>);})()}
-      {dlg&&dlg.kind==='seats'&&(()=>{const add=dlg.mode==='add';const yr=sub.interval==='yearly';const up=(yr?plan.userYr:plan.userMo)||0;const delta=dlg.total-sub.seatsPaid;const min=add?sub.seatsPaid:1;return(
-        <BillingDialog title={add?'Add users':'Remove users'} sub={'Total users on '+plan.name+' (1 included)'} onClose={()=>setDlg(null)} footer={<><button onClick={()=>setDlg(null)} className={BILL_BTN2}>Cancel</button><button disabled={delta===0} onClick={()=>{if(refused){setDlg(d=>({...d,err:refused}));return;}if(!add&&dlg.total<accepted){setDlg(d=>({...d,err:accepted+' people hold seats in this workspace — keep at least '+accepted+' users.'}));return;}setSub(s=>({...s,seatsPaid:dlg.total}));setDlg(null);toast(add?'Users added':'Users removed');}} className={BILL_BTN}>{add?'Add users':'Remove users'}</button></>}>
+      {dlg&&dlg.kind==='seats'&&(()=>{const add=dlg.mode==='add';const yr=sub.interval==='yearly';const up=(yr?plan.userYr:plan.userMo)||0;const delta=dlg.total-sub.seatsPaid;const min=add?sub.seatsPaid:1;
+        // App seatDoor.seatFloor / BE seat_change.go: the floor is accepted members + pending invitations (a pending invite reserves a seat).
+        const _pend=Math.max(0,reserved-accepted);const floorUsers=Math.max(1,reserved);
+        const floorHint=accepted+' '+(accepted===1?'member holds a seat':'members hold seats')+' and '+(_pend===0?'no invitations are out':(_pend+' '+(_pend===1?'invitation is':'invitations are')+' out'))+', so you can keep no fewer than '+floorUsers+' '+(floorUsers===1?'user':'users')+'.';
+        return(
+        <BillingDialog title={add?'Add users':'Remove users'} sub={'Total users on '+plan.name+' (1 included)'} onClose={()=>setDlg(null)} footer={<><button onClick={()=>setDlg(null)} className={BILL_BTN2}>Cancel</button><button disabled={delta===0} onClick={()=>{if(refused){setDlg(d=>({...d,err:refused}));return;}if(!add&&dlg.total<floorUsers){setDlg(d=>({...d,err:floorHint}));return;}setSub(s=>({...s,seatsPaid:dlg.total}));setDlg(null);toast(add?'Users added':'Users removed');}} className={BILL_BTN}>{add?'Add users':'Remove users'}</button></>}>
           <div className="flex items-center justify-between gap-3"><p className="text-[13px] text-white">Total users</p><BillingStepper value={dlg.total} min={min} max={add?1000:sub.seatsPaid} onChange={v=>setDlg(d=>({...d,total:v,err:null}))}/></div>
+          {!add&&<p className="text-[12px] text-white/50">{floorHint}</p>}
           <p className="text-[12.5px] text-white/60">{delta===0?'No change.':add?(delta+' user'+(delta===1?'':'s')+' at $'+up+'/mo each — '+billingMoney(delta*up/2)+' charged today for the rest of this period.'):((-delta)+' user'+(delta===-1?'':'s')+' removed. No refund — paid through '+sub.nextDate+'.')}</p>
           {dlg.err&&<p role="alert" className="text-[12px] text-red-300">{dlg.err}</p>}
         </BillingDialog>);})()}
@@ -14988,9 +14989,8 @@ function SequenceBuilderPage({goTo,channel,nav}){
       ?{id:i+1,body:'Step '+(i+1)+' of “'+_seed.name+'” — placeholder copy; edit to replace.',delay:i===0?null:{n:2,unit:'days'}}
       :{id:i+1,subject:_seed.name+' — step '+(i+1),body:'Hi {{first_name}},\n\nStep '+(i+1)+' of the original “'+_seed.name+'” sequence. Edit to replace this placeholder.',delay:i===0?null:{n:2,unit:'days'}});
     if(_tplSeed)return[{id:1,body:_tplSeed.body,delay:null},{id:2,body:'Just floating this back up, {{first_name}}.',delay:{n:2,unit:'days'}}];
-    return isSms
-    ?[{id:1,body:'Hi {{first_name}}, thanks for connecting! Quick question — are you still looking at {{company_name}} options this quarter?',delay:null},{id:2,body:'Just floating this back up {{first_name}} — happy to share a 2-min overview whenever you have a sec.',delay:{n:2,unit:'days'}}]
-    :[{id:1,subject:'Welcome to nrtur, {{first_name}}',body:'Hi {{first_name}},\n\nThanks for signing up! Here is how to get started in 3 quick steps.\n\nBest,\nAlex',delay:null},{id:2,subject:'A few tips to get the most out of nrtur',body:'Hi {{first_name}},\n\nNoticed you are exploring — here are the features teams love most.\n\nAlex',delay:{n:3,unit:'days'}}];});
+    // App blankDraft: "Start from scratch" opens with ONE empty message step (no placeholder copy).
+    return isSms?[{id:1,body:'',delay:null}]:[{id:1,subject:'',body:'',delay:null}];});
   const [activated,setActivated]=React.useState(_edit?!!_edit.active:_seed?!!_seed.active:false);
   const [dirty,setDirty]=React.useState(false);
   // Exit conditions — list of cards + the inline builder draft (null when closed).
@@ -15011,7 +15011,9 @@ function SequenceBuilderPage({goTo,channel,nav}){
     const rec={name:(name||'').trim()||'Untitled sequence',channel,steps:steps.length,stepData:steps,active:_new?false:activated,...(_new?{status:'draft'}:{}),stopRules,...(_seed?{supersedes:_chKey+_seed.id}:{})};
     if(savedId!=null){crm.setCustomSeqs(a=>a.map(s=>s.id===savedId?{...s,...rec}:s));}
     else{const _id='cs_'+Date.now();setSavedId(_id);crm.setCustomSeqs(a=>[{id:_id,enrolled:0,sent:0,opened:0,replied:0,clicked:0,atStep:[],lastRun:null,createdBy:CURRENT_USER.avatar,fromBuilder:true,...rec},...a]);}
-    setDirty(false);showToast(msg);setTimeout(()=>goTo('settings-sequences'),650);
+    // App SequenceBuilderWorkspace: Save stays in the builder (a create moves onto the new id), so the
+    // "Save to activate" switch becomes usable in place. Back / Cancel return to the list.
+    setDirty(false);showToast(_new?'Sequence created.':msg);
   };
   const cancel=()=>{if(dirty)openConfirm({title:'Discard changes?',body:'Your unsaved changes to this sequence will be lost.',confirmLabel:'Discard',danger:true,onConfirm:()=>goTo('settings-sequences')});else goTo('settings-sequences');};
   const setStep=(id,patch)=>{setSteps(s=>s.map(x=>x.id===id?{...x,...patch}:x));mark();};
@@ -15280,8 +15282,8 @@ const AUTO_INIT=[
   {id:1,name:'New Lead Welcome Sequence',trigger:'Contact created',status:'active',runs:284,success:100,lastRun:'12m ago',spark:[4,6,5,8,12,9,11,14,12,16,18,15,22,24],steps:[STEP_PRESETS_A.assign,STEP_PRESETS_A.welcome,STEP_PRESETS_A.task],cond:'Deal value > $10k'},
   {id:2,name:'Proposal Follow-Up',trigger:'Deal moved to Proposal',status:'active',runs:91,success:97,lastRun:'1h ago',spark:[2,3,1,4,5,3,6,4,7,5,8,6,9,7],steps:[STEP_PRESETS_A.proposal,STEP_PRESETS_A.reminder],cond:'Deal value > $20k'},
   {id:3,name:'Deal Won Celebration',trigger:'Deal moved to Won',status:'active',runs:62,success:100,lastRun:'3h ago',spark:[1,2,2,3,4,3,5,4,6,5,7,6,8,7],steps:[STEP_PRESETS_A.welcome,STEP_PRESETS_A.task]},
-  {id:5,name:'Re-engagement Campaign',trigger:'Lead status changed',status:'paused',runs:47,pausedSince:'Apr 12',lastRun:'3 weeks ago',spark:[3,5,4,6,7,5,4,3,2,1,1,0,0,0],steps:[STEP_PRESETS_A.reengage,STEP_PRESETS_A.flag]},
-  {id:6,name:'Cold Lead Nurture',trigger:'Status changed',status:'paused',runs:33,pausedSince:'May 2',lastRun:'1 month ago',spark:[2,2,1,1,1,0,0,0,0,0,0,0,0,0],steps:[STEP_PRESETS_A.welcome,STEP_PRESETS_A.reminder]},
+  {id:5,name:'Re-engagement Campaign',trigger:'Lead status changed',status:'paused',runs:47,success:94,pausedSince:'Apr 12',lastRun:'3 weeks ago',spark:[3,5,4,6,7,5,4,3,2,1,1,0,0,0],steps:[STEP_PRESETS_A.reengage,STEP_PRESETS_A.flag]},
+  {id:6,name:'Cold Lead Nurture',trigger:'Status changed',status:'paused',runs:33,success:91,pausedSince:'May 2',lastRun:'1 month ago',spark:[2,2,1,1,1,0,0,0,0,0,0,0,0,0],steps:[STEP_PRESETS_A.welcome,STEP_PRESETS_A.reminder]},
   {id:8,name:'Quarterly Check-in',trigger:'Deal moved to Won',status:'draft',runs:0,steps:[STEP_PRESETS_A.task,STEP_PRESETS_A.welcome]},
   {id:10,name:'New Deal Kickoff',trigger:'Deal stage changed',status:'active',runs:37,success:100,lastRun:'25m ago',spark:[2,3,3,4,5,4,6,5,7,6,8,7,9,8],steps:[STEP_PRESETS_A.task]},
 ];
@@ -15679,6 +15681,7 @@ function AutomationTemplatePanel({close,onUse}){
   </>);
 }
 // Plan cap notice (app: billing CapGateNotice, blocked state) — the reason, then the owner's remedy or "Ask your workspace owner."
+let _autoCapDemo='open'; // prototype demo: the Automations list's "At active-automation limit" toggle, read by the builder switch too
 function CapGateBox({reason,remedy,goTo,className}){
   const owner=effCanManageBilling();
   return(<div role="status" className={'flex items-center gap-3 px-3.5 py-2.5 rounded-xl bg-amber-500/[0.08] border border-amber-500/25 text-[12px] text-amber-200 '+(className||'')}><I.CreditCard size={13} className="shrink-0"/><span className="flex-1 min-w-0">{reason}{owner?'':' Ask your workspace owner.'}</span>{owner&&remedy!==false&&<button onClick={()=>goTo&&goTo('settings-billing')} className="shrink-0 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11.5px] font-medium text-white bg-brand-500 hover:bg-brand-400">{remedy||'See plans'}</button>}</div>);
@@ -15701,12 +15704,14 @@ function SettingsAutomationsPage({goTo}){
   // Plan gates (app useCapGate): create on total_flows (unlimited on every plan, so only a read-only workspace blocks),
   // activate on active_automations. Demo toggle sets the active cap to the current active count.
   const _bc=React.useContext(BillingContext);
-  const [capDemo,setCapDemo]=React.useState('open');
+  const [capDemo,setCapDemoState]=React.useState(_autoCapDemo);
+  const setCapDemo=(v)=>{_autoCapDemo=v;setCapDemoState(v);}; // shared with the builder's switch (app BuilderHeader disables it at the limit too)
   const createBlocked=capWorkspaceReadOnly(_bc);
   const _activeCap=capDemo==='limit'?autos.filter(a=>a.status==='active').length:Infinity;
   const activateBlocked=createBlocked||autos.filter(a=>a.status==='active').length>=_activeCap;
   const activateReason=createBlocked?CAP_READ_ONLY_REASON:('You’ve reached your plan’s limit of '+_activeCap+' automation'+(_activeCap===1?'':'s')+'.');
-  const toggleAuto=(id)=>setAutos(a=>a.map(x=>x.id===id?{...x,status:x.status==='active'?'paused':'active'}:x));
+  // App nextStatusFor: an errored flow's switch PAUSES it (error → active is refused with 409 FLOW_ERRORED).
+  const toggleAuto=(id)=>setAutos(a=>a.map(x=>x.id===id?{...x,status:(x.status==='active'||x.status==='error')?'paused':'active'}:x));
   const duplicateAuto=(a)=>{setAutos(list=>[...list,{...a,id:Date.now(),name:'Copy of '+a.name,status:'paused',runs:0,lastRun:'Never run'}]);setMenu(null);showToast('Automation duplicated');};
   const delAuto=(id)=>setAutos(a=>a.filter(x=>x.id!==id));
   const useTemplate=(t)=>{setTplOpen(false);showToast('Template "'+t.name+'" loaded');goTo('automation-builder',t.recipe?{recipe:t.recipe}:undefined);};
@@ -15750,7 +15755,7 @@ function SettingsAutomationsPage({goTo}){
                 <div key={a.id} draggable onDragStart={()=>folderBeginItemDrag('automations',a.id)} onDragEnd={folderEndItemDrag} className={['rounded-2xl border p-5 transition-all',muted?'bg-white/[0.02] opacity-90':'bg-white/[0.035]',isErr?'':muted?'border-white/[0.05]':'border-white/[0.08] hover:border-white/[0.14]'].join(' ')} style={isErr?{borderColor:'rgba(227,107,80,0.3)',boxShadow:'0 0 0 1px rgba(227,107,80,0.12),0 0 30px rgba(227,107,80,0.08)'}:{}}>
                   <div className="flex items-start justify-between gap-4 mb-3">
                     <div className="flex items-start gap-3 min-w-0"><div className={['w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ring-1',a.status==='active'?'bg-brand-500/12 text-brand-300 ring-brand-500/25':isErr?'bg-red-500/10 text-red-300 ring-red-500/20':'bg-white/[0.05] text-white/40 ring-white/[0.06]'].join(' ')}><I.Zap size={17} stroke={2.2}/></div><div className="min-w-0"><div className="flex items-center gap-2 flex-wrap"><h3 className="text-white text-[15px] font-semibold leading-tight">{a.name}</h3><span className={['inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-medium ring-1',st.badge].join(' ')}><span className="w-1.5 h-1.5 rounded-full" style={{background:st.dot}}/>{st.label}</span></div><div className="flex items-center gap-2 mt-1 flex-wrap">{(()=>{const m=TRIGGER_META(a.trigger);return(<span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-medium" style={{background:m.color+'24',color:m.color}}><m.Icon size={10} stroke={2.4}/>{m.cat}</span>);})()}<p className="text-[12px] text-white/55"><span className="text-white/50">When:</span> <span className="font-medium text-white/80">{a.trigger}</span></p></div></div></div>
-                    <div className="flex items-center gap-2 shrink-0">{!readOnly&&<span className={a.status!=='active'&&activateBlocked?'opacity-40 pointer-events-none':''} title={a.status!=='active'&&activateBlocked?activateReason:undefined}><Toggle on={a.status==='active'} onChange={()=>toggleAuto(a.id)}/></span>}{!isDraft&&<button onClick={()=>setEnrModal(autoFlow(a))} className={EDIT}><I.Users size={12}/>Enrolled</button>}<button onClick={()=>setLogModal(a)} className={EDIT}><I.History size={12}/>Logs</button>{!readOnly&&<MoveToFolderButton api={fldAuto} itemId={a.id} sm/>}<button onClick={()=>goTo('automation-builder',{id:a.id})} className={EDIT}><I.Edit size={12}/>Edit</button>
+                    <div className="flex items-center gap-2 shrink-0">{!readOnly&&<span className={a.status!=='active'&&a.status!=='error'&&activateBlocked?'opacity-40 pointer-events-none':''} title={a.status!=='active'&&a.status!=='error'&&activateBlocked?activateReason:undefined}><Toggle on={a.status==='active'} onChange={()=>toggleAuto(a.id)}/></span>}{!isDraft&&<button onClick={()=>setEnrModal(autoFlow(a))} className={EDIT}><I.Users size={12}/>Enrolled</button>}<button onClick={()=>setLogModal(a)} className={EDIT}><I.History size={12}/>Logs</button>{!readOnly&&<MoveToFolderButton api={fldAuto} itemId={a.id} sm/>}<button onClick={()=>goTo('automation-builder',{id:a.id})} className={EDIT}><I.Edit size={12}/>Edit</button>
                       {!readOnly&&<div data-automenu className="relative"><button onClick={()=>setMenu(menu===a.id?null:a.id)} className="w-8 h-8 rounded-lg flex items-center justify-center text-white/45 hover:text-white hover:bg-white/[0.06] transition-all"><I.More size={14}/></button>
                         {menu===a.id&&(<div className="absolute right-0 top-9 z-30 w-40 overflow-hidden" style={{background:'var(--s850)',border:'1px solid rgba(255,255,255,0.10)',borderRadius:12,boxShadow:'0 16px 48px rgba(0,0,0,0.6)'}}>
                           <button onClick={()=>duplicateAuto(a)} style={{padding:'8px 14px',fontSize:13}} className="w-full flex items-center gap-2.5 text-white/80 hover:bg-brand-500/10 hover:text-white transition-colors"><I.Copy size={13}/>Duplicate</button>

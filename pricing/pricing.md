@@ -147,7 +147,7 @@ The old spec is `nrtur-docs/nrtur-pricing.html` (v4, 2 Sep 2026). In every case 
 | Automated sends per month, Pro | 25,000 | **7,500**. Matches the ground rule. |
 | Automated sends per month, Business | 100,000 | **35,000**. Matches the ground rule. |
 | Business users | "5 or more" users; "Business starts at five users" | No minimum. Seats are 1 + purchased like Team and Pro. "5+ users recommended" is display copy only. |
-| Trial length | 21 days | 21 days. Matches; no change. Note: the prototype's landing and signup pages say 14 days, which is wrong. |
+| Trial length | 21 days | 21 days. Matches; no change. The prototype now says 21 days everywhere (`TRIAL_LEN`). |
 | Trial mailbox and line | No mailbox, no phone line (§03) | Matches: 0 / 0. The 2026-09-18 internal handoff guide still says 1 / 1, which is out of date. |
 | Records limit | "each of contacts, leads, companies and deals" in §02; "2,500 records of each type" for the trial | Matches: four separate caps. The 2026-09-18 internal guide describing one pooled `records` cap is out of date. |
 | Data migration (Business, "1 source, 8 hrs") | Listed as a plan feature | Not in the catalog or the product. Removed from the pricing source of truth. |
@@ -163,4 +163,4 @@ The old spec is `nrtur-docs/nrtur-pricing.html` (v4, 2 Sep 2026). In every case 
 | Inbound messages and minutes drawing from the wallet | "Incoming … draw from it too"; incoming is free once the balance is empty | **Verified.** Inbound is settled against the wallet. When the balance is empty it is still received, and what could not be covered is recorded as an unpaid charge that is never collected. |
 | What a failed payment does to the plan | Read-only after the grace period | The code only goes read-only when Stripe **deletes** the subscription. An `unpaid` status keeps the paid tier. So the actual timing depends entirely on Stripe's dunning settings. |
 | Refunds on plans (annual pro rata within 30 days, monthly current month) | Listed in §06 | Not implemented in code. It would be a manual or Stripe-side policy: **unverified**. |
-| Prototype billing page prices | Starter free / Pro $59 / Business $99 (prototype `BILLING_PLANS`); landing Business $149 | Wrong. The real plans are Solo, Team, Pro and Business at the prices above. |
+| Prototype billing page prices | Starter free / Pro $59 / Business $99; landing Business $149 | Resolved. The prototype's `BILLING_PLANS` is now Solo, Team, Pro and Business at the prices above, and no $149 remains. |
