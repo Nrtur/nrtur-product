@@ -13,3 +13,4 @@ Context: the full design prototype had grown about 2–3× larger than the built
 7. **The repo is public** so GitHub Pages can serve the design on the free plan. As a result, no secrets, internal hosts or customer data are ever committed.
 8. **`nrtur-docs` is retired.** Its current content (pricing v4, personas) moved here, corrected. Everything else is archived.
 9. **Mobile is out of scope** for this reset and will be brought in later.
+10. **Mailboxes: Gmail only, for now** (2026-10-09). Microsoft 365 waits on SCRUM-1043. IMAP (Business email, Other) is untested end to end. Yahoo and iCloud are not accepted by the backend. Any of these comes back through a proposal once it has been verified.

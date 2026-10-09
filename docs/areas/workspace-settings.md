@@ -120,6 +120,7 @@ The menu has 6 groups: My account, Workspace, Objects & fields, Data management,
   - It lists mailboxes with their sync state: Synced, Syncing…, Sync error, Reconnect needed or Disconnected.
   - Owners and admins get Connect account or Add another account, and Disconnect. Members see the list only, with no notice; the buttons are simply hidden.
   - A "Reconnect needed" row gets a **Reconnect** button for owners and admins. The plan's mailbox cap gates Connect only, never Reconnect.
+  - Connect offers **Gmail only** (see the inbox area doc).
 - See Known gaps for the other items on the page.
 
 **Profile** (`/profile`, `features/profile`)
