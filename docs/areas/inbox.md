@@ -7,7 +7,7 @@ verified_on: 2026-10-06
 # Inbox
 
 ## What it does
-The Inbox is one screen (`/inbox`) where a team reads and answers its email, text messages and calls. Email comes from mailboxes the team connects through a hosted provider sign-in: Google (Gmail) or an IMAP-based provider. Microsoft 365 / Outlook is not connectable yet: its card is shown disabled, "coming soon". Threads sync in the background, open in a reader, and can be replied to, forwarded, starred, archived, deleted and labelled. SMS conversations run on the workspace's own phone numbers, with picture messages (MMS) attached inside the SMS thread. The Calls tab is the workspace call log plus the in-browser dialer. The "All" tab is a merged, newest-first feed across email, SMS/MMS and calls. Everything is workspace-shared: every member sees every connected mailbox, every SMS conversation and every call. Recipients of automated email can opt out on a public unsubscribe page.
+The Inbox is one screen (`/inbox`) where a team reads and answers its email, text messages and calls. Email comes from **Gmail** mailboxes the team connects through Google's hosted sign-in. Gmail is the only supported provider today (owner decision, 2026-10-09). Threads sync in the background, open in a reader, and can be replied to, forwarded, starred, archived, deleted and labelled. SMS conversations run on the workspace's own phone numbers, with picture messages (MMS) attached inside the SMS thread. The Calls tab is the workspace call log plus the in-browser dialer. The "All" tab is a merged, newest-first feed across email, SMS/MMS and calls. Everything is workspace-shared: every member sees every connected mailbox, every SMS conversation and every call. Recipients of automated email can opt out on a public unsubscribe page.
 
 ## Screens
 | Route (app) | Prototype page id | Purpose |
@@ -24,7 +24,7 @@ The Inbox is one screen (`/inbox`) where a team reads and answers its email, tex
 
 ## Behaviour and rules
 **Mailboxes**
-- Connect posts the provider's `serviceType` and is sent to the hosted consent page. No IMAP form is shown in the app; for IMAP providers the hosted page collects credentials. The provider cards are Google / Gmail, Business email (IMAP), Yahoo, iCloud and Other. Yahoo, iCloud and Other connect over generic IMAP. A "Microsoft 365 / Outlook" card is also rendered, but disabled with "coming soon" (`features/inbox/constants.ts`, `pending: "aurinko-office365"`, SCRUM-1043); it cannot be clicked.
+- Connect posts `serviceType: "Google"` and sends the browser to Google's hosted consent page. The backend also accepts `Office365`, `Exchange`, `EWS` and `IMAP` (`inbox/service.go` `mapServiceType`), but only Gmail is offered: Microsoft 365 waits on SCRUM-1043 and the IMAP path is untested. See Known gaps for what the app shows today.
 - The callback returns to `/inbox?connected=1`, and the modal then polls until the account appears. On failure it returns `?error=<reason>` (`invalid_state`, `not_completed`, `connect_failed`, `plan_limit_reached`).
 - Each connected mailbox in the folder rail shows one of: Synced, Syncing…, Sync error, or Reconnect needed (an expired or failed grant). An unknown status is shown as an error and never as healthy. Separately, the top bar shows a workspace-level pill: "Checking mailbox…", "Mailbox status unknown", "Inbox not synced", or "<provider> · reconnect needed". A healthy mailbox shows no top-bar pill, by product decision.
 - A status footer under the inbox reads "N accounts · live sync", "N accounts · reconnect needed", or "No mailbox connected".
@@ -106,7 +106,8 @@ There are two stop lists. The workspace suppression list (`suppressions`, `/supp
 - Schedule send in the UI, Snooze, Mark as unread, "Mark all read", the list Sort control, and filtering by label.
 - Microsoft 365 / Outlook connect. The backend accepts the `Office365` service type, but the connect is broken (SCRUM-1043), so the app shows the card disabled, "coming soon".
 - Send-time suppression or do-not-contact checks on manual email, manual SMS (beyond STOP) and calls (see Known gaps).
-- The in-app IMAP/SMTP connect form and the account-picker and consent steps (consent happens on the provider's hosted page).
+- Mailbox providers other than Gmail: Microsoft 365 / Outlook (SCRUM-1043), Business email / Other over IMAP, Yahoo and iCloud.
+- An in-app IMAP/SMTP connect form, and the account-picker and consent steps (consent happens on the provider's hosted page).
 - On an unknown sender: the "Create lead" card and "Lead captured from this email" card.
 - SMS: merge-variable "Insert" chips, "Link to deal", the shared-media strip in the thread header, separate image, video and file attach buttons (the app has one "Attach media"), the "Configure SMS" button, and the carrier-registration (A2P) banner.
 - MMS as its own channel. The MMS tab only points to the SMS tab.
@@ -114,6 +115,8 @@ There are two stop lists. The workspace suppression list (`suppressions`, `/supp
 - Call recordings, transcripts, talk ratio, voicemail and Hold.
 
 ## Known gaps
+
+- **The app's connect dialog still offers non-Gmail providers.** It shows Business email, Yahoo, iCloud and Other as clickable. **Yahoo and iCloud fail**: the frontend sends `serviceType` `Yahoo` / `iCloud`, which the backend rejects with `400 UNSUPPORTED_SERVICE_TYPE`. Business email and Other send `IMAP`, which reaches Aurinko but has not been verified end to end. The design offers Gmail only; FE ticket to match.
 - The app shows a decorative "AI sort" label and a Sort button that does nothing (`EmailList.tsx`). Both are cut from the design. The app should drop them as well.
 - The app still renders disabled "coming soon" controls: Templates, AI draft and Schedule send in compose; Snooze and More in the reader; Mark all read; label rows. These are cut from the design.
 - A feed row for an email outside the loaded Inbox pages opens an empty reader. This needs `starred` on the feed item, which is a backend follow-up.
