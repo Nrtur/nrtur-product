@@ -24,3 +24,13 @@ Screens are selected by a page id in `function App()` (`page==='…'`). Refer to
 | Settings | `profile` `settings-notifications` `settings-general` `settings-team` `settings-compliance` `settings-tasks` `settings-properties` `settings-tags` `settings-statuses` `settings-duplicates` `settings-integrations` `settings-phone-numbers` `settings-billing` |
 
 In the browser console, `window.__nrturGoTo('<page id>')` jumps to a page. `window.__nrturBillingState(...)` switches the billing page between its states (trial, active, read-only and so on).
+
+## Screens from proposals (not built yet)
+
+The design also shows features that are **proposed** (open PR) or **approved but not built**. Look here before building from a screen:
+
+| Feature | Status | Screens it adds or changes | Spec |
+|---|---|---|---|
+| Lead API | approved (not built) | `settings-integrations` (Lead API card), `leads` and `lead-detail` (Source "API") | [proposals/2026-10-lead-api.md](../proposals/2026-10-lead-api.md) |
+
+When a feature ships, its row is removed here as part of the close-out.

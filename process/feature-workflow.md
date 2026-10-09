@@ -9,6 +9,8 @@ The flow is: design and docs first, approval second, code third. The goal is tha
 - Change the design in `design/index.html`.
   - If the idea exists in the vision archive, copy the relevant screen from `nrtur-design-vision` and **trim it to what you actually want**. Do not bring the rest of the vision along with it.
 - If a rule, limit or price changes, update the matching file in `docs/areas/` or `pricing/` in the **same PR**.
+- Add a row for the feature to the "Screens from proposals" table in `design/README.md`, so nobody mistakes the new screens for built ones.
+- `docs/areas/` describes what is **built**. A not-yet-built feature's rules live in its proposal until close-out. Only cross-cutting files (pricing, permissions) get a short pointer to the proposal.
 - Open the PR using the template. Screenshots of the changed screens help reviewers.
 
 ## 2. Approve
@@ -35,6 +37,7 @@ When the feature ships to production:
 - Move the content of the proposal into the relevant `docs/areas/<area>.md`.
 - Update its `verified_against` and `verified_on` stamps.
 - Set the proposal to `status: built`. The proposal stays as history.
+- Remove its row from the "Screens from proposals" table in `design/README.md`.
 
 ## Keeping it in sync
 
