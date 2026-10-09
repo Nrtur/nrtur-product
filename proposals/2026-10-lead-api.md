@@ -35,7 +35,7 @@ This is **not** the automation "call webhook" step. That one sends data *out* of
 - The key is stored hashed. nrtur can never show it again, so a lost key means regenerating.
 
 **The request**
-- `POST /api/public/v1/leads`, with the header `Authorization: Bearer <key>` and a JSON body.
+- `POST https://api.nrtur.io/api/public/v1/leads` (production), with the header `Authorization: Bearer <key>` and a JSON body.
 - Accepted fields: `name`, `email`, `phone`, `company_name`, `job_title`, `source`, `estimated_value`, `notes`. These are the same fields as the in-app New Lead form, plus `notes`.
 - `estimated_value` is a decimal string, e.g. `"5000.00"`, the same format as the in-app API.
 - **Name or email is required**, the same rule as creating a lead in the app.
@@ -43,14 +43,14 @@ This is **not** the automation "call webhook" step. That one sends data *out* of
 - **"API" is added to the lead Source list** in the app, so API leads can be filtered by source like any other.
 - `notes`, if present, becomes the first note on the lead's timeline.
 - **Status:** the workspace default lead status.
-- **Owner:** the person who generated the key (open question 1).
+- **Owner:** the person who generated the key.
 - **Activity:** the lead's timeline shows "Created via Lead API".
 - The response is `201` with the new lead's `id` and its link in nrtur.
 
 **Duplicates** (the "Allow duplicate leads" setting, default **off**)
 - **Off:** if an active lead already has the same email or phone, the request is refused with `409 DUPLICATE_LEAD` and the existing lead's id. If the email belongs to an existing contact, it's refused with `409 LEAD_EMAIL_IS_CONTACT` and the contact's id. These are the same rules the app uses today.
 - **On:** the lead is created even if it matches an existing lead. A clash with a contact's email is still refused, because otherwise the lead would later convert into a duplicate contact.
-- The setting applies **only to leads created through the API**. Creating leads in the app and by CSV import keeps today's rules (open question 2).
+- The setting applies **only to leads created through the API**. Creating leads in the app and by CSV import keeps today's rules.
 
 **Limits and refusals**
 - **Plan:** available on Trial, Pro and Business, through the existing `api_access` plan feature. On Solo and Team the card shows the plan gate and the API refuses with `403 PLAN_FEATURE_UNAVAILABLE`.
@@ -86,9 +86,9 @@ No price change. The plan catalog already has **API access** (`api_access`) on T
 - A "Lead created" automation trigger. API leads won't start automations yet, because the live triggers include no "lead created". That should be its own proposal.
 - A public developer docs site. The card's example and the OpenAPI spec are enough for v1.
 
-## Open questions (owner decides before approval)
-1. **Who owns API leads?** Recommended: the person who generated the key. The alternative is a workspace setting, "Assign API leads to", which adds a member picker to the card.
-2. **Should "Allow duplicate leads" apply only to the API, or also to leads created in the app and by import?** Recommended: API only, to keep the change small. The app rule (SCRUM-992) stays as it is.
-3. **Rate limit of 60 requests per minute per workspace:** OK, or do you want different numbers per plan?
-4. **Notify anyone about new API leads?** Recommended: no in v1. The owner can see them in Leads, and a "Lead created" trigger is the better long-term answer.
-5. **Public API address.** The design shows `https://api.nrtur.io/api/public/v1/leads`. The production host isn't fixed yet; it depends on the environment split (SCRUM-1235). Confirm the address customers should use.
+## Decisions (owner, 2026-10-09)
+1. **Owner of API leads:** the person who generated the key.
+2. **"Allow duplicate leads" applies to the API only.** Creating leads in the app and by CSV import keeps today's rules (SCRUM-992).
+3. **Rate limit:** 60 requests per minute per workspace.
+4. **Notifications for new API leads:** not in v1.
+5. **API address:** production is `https://api.nrtur.io/api/public/v1/leads`. Staging uses the staging API host with the same path. The settings card shows the address of the environment it runs in.
