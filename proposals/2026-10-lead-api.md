@@ -1,6 +1,6 @@
 ---
 title: Lead API (create leads from outside nrtur)
-status: proposed        # proposed | approved | in-progress | built | dropped
+status: approved        # proposed | approved | in-progress | built | dropped
 owner: Qamar Ul Islam
 area: docs/areas/leads.md, docs/areas/workspace-settings.md
 screens: [settings-integrations, lead-detail, leads]

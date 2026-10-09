@@ -53,7 +53,7 @@ There is **no record-level visibility**: every member sees every contact, lead, 
 
 Plan limits are checked **before** role checks where both apply. For example, sequences are a Pro and Business feature, so on other plans every role is refused. See [../pricing/pricing.md](../pricing/pricing.md).
 
-## Proposed (not built)
+## Approved (not built yet)
 
 - **Lead API key** (generate, regenerate, revoke) and **Allow duplicate leads**: owner and admin; members read-only. See [../proposals/2026-10-lead-api.md](../proposals/2026-10-lead-api.md).
 

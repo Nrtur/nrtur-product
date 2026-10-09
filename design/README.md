@@ -31,6 +31,6 @@ The design also shows features that are **proposed** (open PR) or **approved but
 
 | Feature | Status | Screens it adds or changes | Spec |
 |---|---|---|---|
-| Lead API | proposed | `settings-integrations` (Lead API card), `leads` and `lead-detail` (Source "API") | [proposals/2026-10-lead-api.md](../proposals/2026-10-lead-api.md) |
+| Lead API | approved (not built) | `settings-integrations` (Lead API card), `leads` and `lead-detail` (Source "API") | [proposals/2026-10-lead-api.md](../proposals/2026-10-lead-api.md) |
 
 When a feature ships, its row is removed here as part of the close-out.
