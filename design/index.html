@@ -7171,7 +7171,13 @@ function actLeadOwn(l){
   // The app's lead timeline (GET /leads/{id}/activities) only ever holds status_change, assignment,
   // lead_converted, deal_created and notes. No email/call/SMS logging, no forms, no score events on a lead.
   const own=l.owner||'AM';const A=actActor(own).name;const st=l.status||'New';
-  const out=[
+  // Lead API (proposals/2026-10-lead-api.md): `notes` becomes the first note; owner = whoever generated the key; status = the workspace default.
+  const out=l.createdVia==='api'?[
+    ...(l.notes?[mkAct('note',{ts:60,by:'nrtur',title:'Note added',body:l.notes})]:[]),
+    ...(st!=='New'?[mkAct('field',{ts:30,by:own,label:'STATUS CHANGE',title:'Status changed — New → '+st,body:'',payload:{field:'Status',from:'New',to:st}})]:[]),
+    mkAct('field',{ts:61,by:'nrtur',label:'ASSIGNMENT',title:'Assigned to '+A,body:'',payload:{field:'Owner',from:'—',to:A}}),
+    mkAct('created',{ts:62,by:'nrtur',label:'LEAD CREATED',title:'Created via Lead API',body:l.source?('Source: '+l.source+'.'):''}),
+  ]:[
     mkAct('note',{ts:900,by:own,title:'Note added',body:'Intro call booked for next week. Wants to see pricing for the team before committing.'}),
     ...(st!=='New'?[mkAct('field',{ts:1500,by:own,label:'STATUS CHANGE',title:'Status changed — New → '+st,body:'',payload:{field:'Status',from:'New',to:st}})]:[]),
     mkAct('field',{ts:2100,by:'nrtur',label:'ASSIGNMENT',title:'Assigned to '+A,body:'',payload:{field:'Owner',from:'—',to:A}}),
@@ -10570,10 +10576,11 @@ function AddCompanyPage({goTo}){
 const LEAD_STATUSES=['New','Working','Nurturing','Qualified','Unqualified'];
 const LEAD_STATUS_CHIP={New:'bg-blue-500/12 text-blue-300 ring-blue-500/25',Working:'bg-amber-500/12 text-amber-300 ring-amber-500/25',Nurturing:'bg-violet-500/12 text-violet-300 ring-violet-500/25','Qualified':'bg-emerald-500/12 text-emerald-300 ring-emerald-500/25','Unqualified':'bg-white/[0.06] text-white/50 ring-white/[0.10]'};
 const LEAD_STATUS_DOT={New:'#8FB4EA',Working:'#E9B968',Nurturing:'#B69EEA','Qualified':'#5FD09B','Unqualified':'#87837A'};
-const LEAD_SOURCES=['Web form','Referral','Cold outreach','Event','Ad','LinkedIn','Import'];
+const LEAD_SOURCES=['Web form','Referral','Cold outreach','Event','Ad','LinkedIn','Import','API']; // 'API': the Lead API's default source (proposals/2026-10-lead-api.md)
 function leadScoreBucket(score){const b=(typeof leadScoringRulesLive==='function'?leadScoringRulesLive().bands:null)||{warm_min:34,hot_min:67};if(score>=(b.hot_min!=null?b.hot_min:67))return{k:'hot',c:'#F0947F',l:'Hot'};if(score>=(b.warm_min!=null?b.warm_min:34))return{k:'warm',c:'#E9B968',l:'Warm'};return{k:'cold',c:'#8FB4EA',l:'Cold'};} // cutoffs come from the workspace rules (score_band), never hardcoded
 const LEADS_DATA=[
   {signals:{email_opened:1,link_clicked:0,page_visit:0,demo_request:0},industry:'Retail',employeesSize:120,id:120,name:'Greg Mason',avatar:'GM',color:'#9D6C20',email:'greg@northpeak.io',phone:'+1 555-770-3321',company:'Northpeak Co',title:'Operations Lead',source:'Cold outreach',status:'Unqualified',score:28,estValue:'$4k',owner:'AM',ownerColor:'#5E92D8',created:'4 weeks ago',days:26,loc:'Boise, ID',tags:['cold'],archived:false,converted:false,deleted:true,deletedAt:Date.now()-26*864e5,deletedBy:'Alex Morgan',estValueNum:4000},
+  {signals:{email_opened:0,link_clicked:0,page_visit:0,demo_request:0},id:103,name:'Priya Desai',avatar:'PD',color:'#148478',email:'priya@tallgrass.studio',phone:'+1 555-318-6620',company:'Tallgrass Studio',title:'Studio Manager',source:'API',status:'New',score:0,estValue:'$6k',estValueNum:6000,owner:'AM',ownerColor:'#5E92D8',created:'1h ago',days:0,loc:'',tags:[],archived:false,converted:false,createdVia:'api',notes:'Sent from the pricing page contact form. Asked about onboarding a team of 12.'}, // Lead API seed: created by POST /api/public/v1/leads; owner = the key's generator
   {signals:{email_opened:4,link_clicked:2,page_visit:1,demo_request:0},id:1,name:'Olivia Bennett',timezone:'America/Denver',avatar:'OB',color:'#3475CE',email:'olivia@brightwave.io',phone:'+1 555-610-2210',company:'Brightwave Studio',title:'Marketing Director',source:'Web form',status:'Qualified',score:82,estValue:'$18k',owner:'AM',ownerColor:'#5E92D8',created:'2h ago',days:0,loc:'Denver, CO',tags:['inbound','qualified'],archived:false,converted:true,convertedAt:'2h ago',convertedToContactId:207,convertedToCompanyId:9,convertedToDealId:208,convContact:'Olivia Bennett',convCompany:'Brightwave Studio',convDeal:'Brightwave Studio · $18,000',estValueNum:18000,emails:['olivia.b@brightwave.io'],phones:[],createdBy:'AM',createdAt:'2h ago',companyDomain:'brightwave.io',industry:'Software',employeesSize:24},
   {signals:{email_opened:0,link_clicked:0,page_visit:0,demo_request:0},id:2,name:'Daniel Okonkwo',avatar:'DO',color:'#855ED7',email:'daniel@lumen.io',phone:'+1 555-441-9087',company:'Lumen Labs',title:'Head of Growth',source:'Referral',status:'Working',score:74,estValue:'$32k',owner:'JK',ownerColor:'#9B7BDE',created:'1d ago',days:1,loc:'Austin, TX',tags:['referral'],archived:false,converted:false,estValueNum:32000,emails:[],phones:['+1 555-441-0000'],createdBy:'JK',createdAt:'1d ago',companyDomain:'lumen.io',industry:'Software',employeesSize:60},
   {signals:{email_opened:3,link_clicked:1,page_visit:1,demo_request:0},id:3,name:'Sofia Marchetti',avatar:'SM',color:'#BF4C85',email:'sofia@craftly.co',phone:'+1 555-228-6610',company:'Craftly',title:'Founder',source:'Event',status:'Nurturing',score:58,estValue:'$9k',owner:'SC',ownerColor:'#C2568C',created:'2d ago',days:2,loc:'New York, NY',tags:['saastr'],archived:false,converted:true,convertedAt:'2d ago',convertedToContactId:205,convertedToCompanyId:12,convertedToDealId:206,convContact:'Sofia Marchetti',convCompany:'Craftly',convDeal:'Craftly · $9,000',estValueNum:9000,emails:['sofia@craftly.co'],phones:[],createdBy:'SC',createdAt:'2d ago',companyDomain:'craftly.co',industry:'Retail',employeesSize:8},
@@ -14322,6 +14329,110 @@ function SettingsPhoneNumbersPage({goTo}){
     {!readOnly&&<PreviewStateToggle label="Phone lines" options={[{k:'open',l:'Room on plan'},{k:'limit',l:'At limit'},{k:'refuse',l:'Buy refused (422)'}]} value={capDemo} onChange={setCapDemo}/>}
   </SettingsShell>);
 }
+// ── Lead API (proposals/2026-10-lead-api.md) ── one workspace key that lets outside systems CREATE leads (nothing else).
+// Plan: api_access (Trial, Pro, Business); Solo/Team get the plan gate and no key controls. Read-only workspace: notice + controls disabled.
+// Members (no config:manage) see the card read-only and never the key. The full key is shown ONCE, right after generating.
+const LEAD_API_ENDPOINT='https://api.nrtur.io/api/public/v1/leads';
+const LEAD_API_CURL=['curl -X POST '+LEAD_API_ENDPOINT+' \\','  -H "Authorization: Bearer nrtur_live_YOUR_KEY" \\','  -H "Content-Type: application/json" \\',"  -d '{",'    "name": "Jordan Lee",','    "email": "jordan@example.com",','    "phone": "+14155550123",','    "company_name": "Example Co",','    "job_title": "Operations Manager",','    "source": "Website form",','    "estimated_value": "5000.00",','    "notes": "Asked for a demo"',"  }'"].join('\n');
+// Prototype store (survives navigation): the seeded key is the one that created the seeded API lead (Priya Desai).
+let _leadApiStore={key:{prefix:'nrtur_live_7Kd2',createdBy:'Alex Morgan',createdOn:'Oct 2, 2026',lastUsed:'1h ago'},allowDup:false};
+function leadApiNewKey(){const c='ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789';let s='';for(let i=0;i<32;i++)s+=c[Math.floor(Math.random()*c.length)];return 'nrtur_live_'+s;}
+function leadApiCopy(text){try{navigator.clipboard&&navigator.clipboard.writeText(text).catch(()=>{});}catch(e){}custToast('Copied');}
+function LeadApiKeyDialog({fullKey,onDone}){
+  const dref=React.useRef(null);useFocusTrap(dref);
+  return(
+    <div className="fixed inset-0 z-[200] flex items-center justify-center p-4" style={{background:'rgba(0,0,0,0.72)',backdropFilter:'blur(8px)'}}>
+      <div ref={dref} role="dialog" aria-modal="true" aria-label="Your Lead API key" tabIndex={-1} style={{width:460,maxWidth:'100%',background:'var(--pop)',border:'1px solid rgba(255,255,255,0.08)',borderRadius:16,backdropFilter:'blur(24px)',boxShadow:'0 0 0 1px rgba(255,255,255,0.04),0 32px 80px rgba(0,0,0,0.65)',padding:24}}>
+        <div className="flex items-start gap-4 mb-5">
+          <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ring-1 bg-brand-500/10 ring-brand-500/25 text-brand-300"><I.Key size={17}/></div>
+          <div><p className="text-white text-[15px] font-semibold leading-snug">Your Lead API key</p><p className="text-white/55 text-[13px] mt-2 leading-relaxed">Copy it now and store it somewhere safe. nrtur stores only a hash, so a lost key means regenerating.</p></div>
+        </div>
+        <div className="flex items-center gap-2 mb-3">
+          <div className="flex-1 min-w-0 flex items-center gap-2 px-3 py-2.5 rounded-xl bg-black/30 border border-white/[0.08] font-mono text-[12.5px] text-white/85 overflow-hidden"><I.Key size={12} className="text-white/30 shrink-0"/><span className="truncate select-all" data-lead-api-full-key>{fullKey}</span></div>
+          <button onClick={()=>leadApiCopy(fullKey)} className="inline-flex items-center gap-1.5 px-3 h-10 rounded-xl text-[12px] font-medium text-white/70 hover:text-white bg-white/[0.04] border border-white/[0.08] hover:bg-white/[0.07] transition-all shrink-0"><I.Copy size={13}/>Copy</button>
+        </div>
+        <div role="note" className="flex items-center gap-2 px-3 py-2 rounded-xl bg-amber-500/[0.08] border border-amber-500/25 text-[12px] text-amber-200 mb-5"><I.AlertTriangle size={13} className="shrink-0"/>You won’t see this key again.</div>
+        <button onClick={onDone} className="w-full py-2.5 rounded-xl text-[13px] font-semibold text-white bg-brand-500 hover:bg-brand-400 border-none transition-all">Done</button>
+      </div>
+    </div>
+  );
+}
+function LeadApiCard({goTo,stackToggle}){
+  const _bc=React.useContext(BillingContext);
+  const {confirmNode,openConfirm}=useConfirm();
+  const [demo,setDemo]=React.useState('plan'); // plan | solo | team | readonly | member
+  const [apiKey,setApiKeyS]=React.useState(_leadApiStore.key);
+  const [allowDup,setAllowDupS]=React.useState(_leadApiStore.allowDup);
+  const [shownKey,setShownKey]=React.useState(null); // the full key — held only while its one-time dialog is open
+  const setApiKey=(k)=>{_leadApiStore.key=k;setApiKeyS(k);};
+  const setAllowDup=(v)=>{_leadApiStore.allowDup=v;setAllowDupS(v);};
+  const tier=(demo==='solo'||demo==='team')?demo:(_bc.billingState==='trial'?'trial':((_bc.sub||BILLING_SUB_SEED).tier));
+  const readOnly=demo==='readonly'||capWorkspaceReadOnly(_bc);
+  const gateReason=!readOnly&&(tier==='solo'||tier==='team')?('The Lead API isn’t included in the '+(tier==='solo'?'Solo':'Team')+' plan. It’s available on the Pro plan.'):null;
+  const isAdmin=settingsIsAdmin()&&demo!=='member'; // config:manage — owner/admin
+  const canAct=isAdmin&&!readOnly;
+  const generate=()=>{const full=leadApiNewKey();const now=(()=>{try{return new Date().toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});}catch(e){return 'Today';}})();setApiKey({prefix:full.slice(0,15),createdBy:CURRENT_USER.name,createdOn:now,lastUsed:null});setShownKey(full);custToast('Key generated');};
+  const regenerate=()=>openConfirm({title:'Regenerate the Lead API key?',body:'The current key stops working immediately. Anything still sending it will be refused until you update it with the new key.',confirmLabel:'Regenerate key',danger:true,onConfirm:generate});
+  const revoke=()=>openConfirm({title:'Revoke the Lead API key?',body:'The key is deleted and the Lead API stops accepting requests until a new key is generated.',confirmLabel:'Revoke key',danger:true,onConfirm:()=>{setApiKey(null);custToast('Key revoked');}});
+  const LBL='text-[11px] font-medium text-white/45 uppercase tracking-[0.14em] mb-1.5';
+  const COPY_BTN='inline-flex items-center gap-1.5 px-3 h-10 rounded-xl text-[12px] font-medium text-white/70 hover:text-white bg-white/[0.04] border border-white/[0.08] hover:bg-white/[0.07] transition-all shrink-0';
+  const toggleEl=(<PreviewStateToggle label="Lead API" options={[{k:'plan',l:'Plan OK'},{k:'solo',l:'Solo (gated)'},{k:'team',l:'Team (gated)'},{k:'readonly',l:'Read-only'},{k:'member',l:'Member view'}]} value={demo} onChange={setDemo}/>);
+  return(
+    <React.Fragment>
+      <div className="rounded-2xl border border-white/[0.06] bg-white/[0.03] p-5" data-lead-api-card>
+        <div className="flex items-start gap-3 mb-4">
+          <div className="w-10 h-10 rounded-xl bg-brand-500/12 ring-1 ring-brand-500/25 text-brand-300 flex items-center justify-center shrink-0"><I.Key size={17}/></div>
+          <div className="min-w-0 flex-1"><p className="text-[14px] font-semibold text-white">Lead API</p><p className="text-[12px] text-white/50 mt-0.5">Create leads from outside nrtur: website forms, Zapier or Make, ad tools and partners. The API creates leads only. It can’t read, edit or delete anything.</p></div>
+        </div>
+        {gateReason?<CapGateBox reason={gateReason} remedy="See plans" goTo={goTo}/>:<div className="flex flex-col gap-4">
+          {readOnly&&<CapGateBox reason={CAP_READ_ONLY_REASON} remedy="See plans" goTo={goTo}/>}
+          {!isAdmin&&<div role="note" className="rounded-xl border border-white/[0.08] bg-white/[0.03] px-3.5 py-2.5 flex items-center gap-2.5 text-[12px] text-white/70"><I.Lock size={13} className="text-white/45 shrink-0"/>Ask an owner or admin to manage the Lead API key.</div>}
+          {/* Key */}
+          <div>
+            <p className={LBL}>API key</p>
+            {apiKey?(<React.Fragment>
+              <div className="flex items-center gap-2 mb-3">
+                <div className="flex-1 min-w-0 flex items-center gap-2 px-3 py-2.5 rounded-xl bg-black/30 border border-white/[0.08] font-mono text-[12.5px] text-white/80 overflow-hidden"><I.Lock size={12} className="text-white/30 shrink-0"/><span className="truncate" data-lead-api-masked>{apiKey.prefix}…</span></div>
+              </div>
+              <div className="flex items-center justify-between gap-4 flex-wrap">
+                <div className="flex items-center gap-x-3 gap-y-1 flex-wrap text-[11px] text-white/40"><span>Created by {apiKey.createdBy}</span><span>·</span><span>Created {apiKey.createdOn}</span><span>·</span><span>{apiKey.lastUsed?('Last used '+apiKey.lastUsed):'Never used'}</span></div>
+                {isAdmin&&<div className="flex items-center gap-2">
+                  <button onClick={regenerate} disabled={!canAct} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] font-medium text-white/70 hover:text-white bg-white/[0.04] border border-white/[0.08] hover:bg-white/[0.07] transition-all disabled:opacity-40 disabled:cursor-not-allowed"><I.History size={12}/>Regenerate</button>
+                  <button onClick={revoke} disabled={!canAct} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] font-medium text-red-300 bg-red-500/10 border border-red-500/20 hover:bg-red-500/15 transition-all disabled:opacity-40 disabled:cursor-not-allowed"><I.Trash size={12}/>Revoke</button>
+                </div>}
+              </div>
+            </React.Fragment>):(<div className="flex items-center justify-between gap-4 flex-wrap px-3 py-2.5 rounded-xl bg-white/[0.03] border border-white/[0.06]">
+              <p className="text-[12px] text-white/55">No key yet. Generate one to start sending leads to nrtur.</p>
+              {isAdmin&&<button onClick={generate} disabled={!canAct} className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-[12px] font-semibold text-brand-300 bg-brand-500/10 border border-brand-500/25 hover:bg-brand-500/15 transition-all disabled:opacity-40 disabled:cursor-not-allowed"><I.Plus size={12} stroke={2.4}/>Generate key</button>}
+            </div>)}
+          </div>
+          {/* Endpoint */}
+          <div>
+            <p className={LBL}>Endpoint</p>
+            <div className="flex items-center gap-2">
+              <div className="flex-1 min-w-0 flex items-center gap-2 px-3 py-2.5 rounded-xl bg-black/30 border border-white/[0.08] font-mono text-[12.5px] text-white/80 overflow-hidden"><span className="px-1.5 py-0.5 rounded-md bg-brand-500/15 text-brand-300 text-[10.5px] font-semibold shrink-0">POST</span><span className="truncate">{LEAD_API_ENDPOINT}</span></div>
+              <button onClick={()=>leadApiCopy(LEAD_API_ENDPOINT)} className={COPY_BTN}><I.Copy size={13}/>Copy</button>
+            </div>
+          </div>
+          {/* Example request */}
+          <div>
+            <div className="flex items-center justify-between gap-2 mb-1.5"><p className="text-[11px] font-medium text-white/45 uppercase tracking-[0.14em]">Example request</p><button onClick={()=>leadApiCopy(LEAD_API_CURL)} className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11.5px] font-medium text-white/70 hover:text-white bg-white/[0.04] border border-white/[0.08] hover:bg-white/[0.07] transition-all"><I.Copy size={12}/>Copy</button></div>
+            <pre className="px-3.5 py-3 rounded-xl bg-black/30 border border-white/[0.08] font-mono text-[11.5px] leading-relaxed text-white/75 overflow-x-auto scroll-area whitespace-pre">{LEAD_API_CURL}</pre>
+            <p className="text-[11px] text-white/40 mt-1.5">Name or email is required. Source defaults to “API” when it’s left out.</p>
+          </div>
+          {/* Duplicates */}
+          <div className="flex items-center gap-3 px-3 py-2.5 rounded-lg bg-white/[0.03] border border-white/[0.06]">
+            <div className="min-w-0 flex-1"><p className="text-[12.5px] text-white/85 font-medium">Allow duplicate leads</p><p className="text-[11.5px] text-white/50 mt-0.5">When on, an API lead is created even if its email or phone matches an existing lead. A match with a contact’s email is always refused.</p></div>
+            {isAdmin?<Toggle on={allowDup} onChange={setAllowDup} disabled={!canAct}/>:<span className="text-[12px] font-medium text-white/55 shrink-0">{allowDup?'On':'Off'}</span>}
+          </div>
+        </div>}
+      </div>
+      {shownKey&&<LeadApiKeyDialog fullKey={shownKey} onDone={()=>setShownKey(null)}/>}
+      {confirmNode}
+      {stackToggle?<div className="fixed left-0 right-0 bottom-[52px] h-0 z-[80]" style={{transform:'translateZ(0)'}}>{toggleEl}</div>:toggleEl}
+    </React.Fragment>
+  );
+}
 function SettingsIntegrationsPage({goTo}){
   const ma=React.useContext(MailAccountsContext);
   const [mailboxModal,setMailboxModal]=React.useState(false);
@@ -14346,6 +14457,7 @@ function SettingsIntegrationsPage({goTo}){
           <div key={acc.addr} className="flex items-center gap-2.5 px-3 py-2 rounded-lg bg-white/[0.03] border border-white/[0.06]"><span className="w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-semibold text-white shrink-0" style={{background:acc.color}}>{acc.initials}</span><span className="min-w-0 flex-1"><span className="block text-[12.5px] text-white/85 truncate">{acc.addr}</span><span className={'text-[10.5px] inline-flex items-center gap-1 '+st.cls}><span className={'w-1 h-1 rounded-full '+st.dot}/>{st.label}</span></span>{acc.provider&&<ProviderBadge provider={acc.provider}/>}{canManage&&stateOf(acc,i)==='reconnect'&&<button onClick={reconnect} disabled={reconnecting} className="inline-flex shrink-0 items-center gap-1 rounded-md border border-amber-500/25 bg-amber-500/10 px-2 py-1 text-[11px] font-medium text-amber-200 hover:bg-amber-500/15 disabled:opacity-50 transition-all"><I.History size={11}/>{reconnecting?'Reconnecting…':'Reconnect'}</button>}{canManage&&<button onClick={()=>openConfirm({title:'Disconnect '+acc.addr+'?',body:'This permanently removes the mailbox and deletes every synced email and conversation for it. This can’t be undone. You can reconnect the account later, but its mail will need to sync again from scratch.',confirmLabel:'Disconnect mailbox',danger:true,onConfirm:()=>{ma.disconnect(acc.addr);custToast(acc.addr+' disconnected');}})} className="text-[11.5px] font-medium text-red-300 hover:text-red-200 shrink-0">Disconnect</button>}</div>);})}</div>}
         {canManage&&<button onClick={()=>setMailboxModal(true)} className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-[12px] font-semibold text-brand-300 bg-brand-500/10 border border-brand-500/25 hover:bg-brand-500/15 transition-all"><I.Plus size={12} stroke={2.4}/>{has?'Add another account':'Connect account'}</button>}
       </div>
+      <LeadApiCard goTo={goTo} stackToggle={has}/>
       {mailboxModal&&<MailboxConnectModal close={()=>setMailboxModal(false)} onConnected={(acct)=>ma.connect(acct)}/>}
       {confirmNode}
       {has&&<PreviewStateToggle label="Mailbox" options={[{k:'synced',l:'Synced'},{k:'syncing',l:'Syncing'},{k:'reconnect',l:'Reconnect needed'},{k:'error',l:'Sync error'},{k:'disconnected',l:'Disconnected'}]} value={firstState} onChange={setFirstState}/>}

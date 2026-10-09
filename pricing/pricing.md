@@ -81,7 +81,7 @@ How the limits are measured:
 | Single sign-on | no | no | no | no | yes |
 | Audit log | no | no | no | no | yes |
 
-API access, SSO and audit log are set per tier but have no product surface yet.
+SSO and audit log are set per tier but have no product surface yet. **API access** will be used first by the Lead API (proposed in [`proposals/2026-10-lead-api.md`](../proposals/2026-10-lead-api.md), not built yet): a per-workspace key that lets outside systems create leads.
 
 Enforcement: every limit, feature and the automated-sends meter is **enforced** (`entitlements.Boot()`):
 - **Records on paid plans** warn at 80%. The save that crosses the line is allowed, and every save beyond it is refused. Imports stop at the line.

@@ -53,6 +53,10 @@ There is **no record-level visibility**: every member sees every contact, lead, 
 
 Plan limits are checked **before** role checks where both apply. For example, sequences are a Pro and Business feature, so on other plans every role is refused. See [../pricing/pricing.md](../pricing/pricing.md).
 
+## Proposed (not built)
+
+- **Lead API key** (generate, regenerate, revoke) and **Allow duplicate leads**: owner and admin; members read-only. See [../proposals/2026-10-lead-api.md](../proposals/2026-10-lead-api.md).
+
 ## Known gaps (code, not design)
 
 - **The activity feed is not role-checked in the API.** `GET /activities` has no role gate, so a member can fetch the whole workspace's activity feed through the API. Only the UI hides it.
