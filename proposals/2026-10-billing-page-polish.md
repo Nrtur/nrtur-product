@@ -1,6 +1,6 @@
 ---
 title: Billing page polish (wallet history infinite scroll, Plan usage layout)
-status: proposed        # proposed | approved | in-progress | built | dropped
+status: approved        # proposed | approved | in-progress | built | dropped
 owner: Qamar Ul Islam
 area: docs/areas/billing.md
 screens: [settings-billing]
