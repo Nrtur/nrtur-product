@@ -4,7 +4,7 @@ status: approved        # proposed | approved | in-progress | built | dropped
 owner: Qamar Ul Islam
 area: docs/areas/billing.md
 screens: [settings-billing]
-tickets: []
+tickets: [SCRUM-1279 (FE wallet history infinite scroll), SCRUM-1280 (FE Plan usage layout)]
 created: 2026-10-12
 ---
 
