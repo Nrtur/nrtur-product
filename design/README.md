@@ -33,6 +33,6 @@ The design also shows features that are **proposed** (open PR) or **approved but
 |---|---|---|---|
 | Lead API | approved (not built) | `settings-integrations` (Lead API card), `leads` and `lead-detail` (Source "API") | [proposals/2026-10-lead-api.md](../proposals/2026-10-lead-api.md) |
 | Billing page polish | approved (not built) | `settings-billing` (wallet history infinite scroll; Plan usage layout and subtitle) | [proposals/2026-10-billing-page-polish.md](../proposals/2026-10-billing-page-polish.md) |
-| Email and SMS templates | proposed | `engage` (new Templates tab; `email-templates` and `sms-templates` open it), `inbox` (Templates button in new email, reply/forward, SMS thread and New SMS), `email-sequence-builder` and `sms-sequence-builder` (step editor), `automation-builder` (Send email / Send SMS steps) | [proposals/2026-10-message-templates.md](../proposals/2026-10-message-templates.md) |
+| Email and SMS templates | approved (not built) | `engage` (new Templates tab; `email-templates` and `sms-templates` open it), `inbox` (Templates button in new email, reply/forward, SMS thread and New SMS), `email-sequence-builder` and `sms-sequence-builder` (step editor), `automation-builder` (Send email / Send SMS steps) | [proposals/2026-10-message-templates.md](../proposals/2026-10-message-templates.md) |
 
 When a feature ships, its row is removed here as part of the close-out.

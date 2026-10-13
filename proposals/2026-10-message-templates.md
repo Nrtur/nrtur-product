@@ -1,6 +1,6 @@
 ---
 title: Email and SMS templates (save a message once, reuse it anywhere)
-status: proposed        # proposed | approved | in-progress | built | dropped
+status: approved        # proposed | approved | in-progress | built | dropped
 owner: Qamar Ul Islam
 area: docs/areas/inbox.md, docs/areas/sequences.md, docs/areas/automations.md
 screens: [engage (Templates tab; aliases email-templates, sms-templates), inbox, email-sequence-builder, sms-sequence-builder, automation-builder]
@@ -99,11 +99,12 @@ Available on **every plan, including the trial**. Templates cost nothing to stor
 - Filling merge fields on the server for inbox sends. The inbox fills them in the browser when a template is inserted, as described above.
 - Rich-text editing for sequence email steps.
 
-## Open questions
-1. **Permissions:** is "everyone creates, creator or admin edits and deletes" right? The alternative is that only owners and admins create, edit and delete, and members only insert. That is stricter, but reps couldn't save their own.
-2. **Limit:** is 500 per channel per workspace fine?
-3. **Inbox merge fields:** fill them when the template is inserted, and block Send while any are left, as proposed. Or should the server fill them for inbox sends too? That would be bigger backend work.
-4. **Sequence email steps** lose formatting, because that editor is plain text. Is that OK for v1, or should we move sequence email steps to the rich-text editor first?
+## Decisions (owner, 2026-10-13)
+Approved in PR #5 with the open questions accepted as proposed:
+1. **Permissions:** everyone can create and duplicate; editing or deleting needs the creator, an owner or an admin.
+2. **Limit:** 500 templates per channel per workspace (a safety limit, not a plan limit).
+3. **Inbox merge fields:** filled in the browser when a template is inserted; Send is blocked while any known merge field is left. No server-side filling for inbox sends in v1.
+4. **Sequence email steps** stay plain text in v1; a template's formatting is flattened there.
 
 ## Tickets (to create after approval)
 - **BE:** message templates.
