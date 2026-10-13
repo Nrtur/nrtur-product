@@ -14382,7 +14382,7 @@ function SettingsPhoneNumbersPage({goTo}){
 // Plan: api_access (Trial, Pro, Business); Solo/Team get the plan gate and no key controls. Read-only workspace: notice + controls disabled.
 // Members (no config:manage) see the card read-only and never the key. The full key is shown ONCE, right after generating.
 const LEAD_API_ENDPOINT='https://api.nrtur.io/api/public/v1/leads';
-const LEAD_API_CURL=['curl -X POST '+LEAD_API_ENDPOINT+' \\','  -H "Authorization: Bearer nrtur_live_YOUR_KEY" \\','  -H "Content-Type: application/json" \\',"  -d '{",'    "name": "Jordan Lee",','    "email": "jordan@example.com",','    "phone": "+14155550123",','    "company_name": "Example Co",','    "job_title": "Operations Manager",','    "source": "Website form",','    "estimated_value": "5000.00",','    "notes": "Asked for a demo"',"  }'"].join('\n');
+const LEAD_API_CURL=['curl -X POST '+LEAD_API_ENDPOINT+' \\','  -H "Authorization: Bearer nrtur_live_YOUR_KEY" \\','  -H "Content-Type: application/json" \\',"  -d '{",'    "name": "Jordan Lee",','    "email": "jordan@example.com",','    "phone": "+14155550123",','    "company_name": "Example Co",','    "job_title": "Operations Manager",','    "source": "Web form",','    "estimated_value": "5000.00",','    "notes": "Asked for a demo"',"  }'"].join('\n');
 // Prototype store (survives navigation): the seeded key is the one that created the seeded API lead (Priya Desai).
 let _leadApiStore={key:{prefix:'nrtur_live_7Kd2',createdBy:'Alex Morgan',createdOn:'Oct 2, 2026',lastUsed:'1h ago'},allowDup:false};
 function leadApiNewKey(){const c='ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789';let s='';for(let i=0;i<32;i++)s+=c[Math.floor(Math.random()*c.length)];return 'nrtur_live_'+s;}
@@ -14433,7 +14433,10 @@ function LeadApiCard({goTo,stackToggle}){
           <div className="w-10 h-10 rounded-xl bg-brand-500/12 ring-1 ring-brand-500/25 text-brand-300 flex items-center justify-center shrink-0"><I.Key size={17}/></div>
           <div className="min-w-0 flex-1"><p className="text-[14px] font-semibold text-white">Lead API</p><p className="text-[12px] text-white/50 mt-0.5">Create leads from outside nrtur: website forms, Zapier or Make, ad tools and partners. The API creates leads only. It can’t read, edit or delete anything.</p></div>
         </div>
-        {gateReason?<CapGateBox reason={gateReason} remedy="See plans" goTo={goTo}/>:<div className="flex flex-col gap-4">
+        {gateReason?<div className="flex flex-col gap-3"><CapGateBox reason={gateReason} remedy="See plans" goTo={goTo}/>
+          {/* Revoke works on every plan, so a leaked key can't come back on a re-upgrade. Every other action stays gated. */}
+          {isAdmin&&apiKey&&<div className="flex items-center justify-between gap-4 flex-wrap px-3 py-2.5 rounded-xl bg-white/[0.03] border border-white/[0.06]"><p className="text-[12px] text-white/60 min-w-0">A key still exists (<span className="font-mono">{apiKey.prefix}…</span>). Revoke it so it can’t be used again if you upgrade.</p><button onClick={revoke} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] font-medium text-red-300 bg-red-500/10 border border-red-500/20 hover:bg-red-500/15 transition-all"><I.Trash size={12}/>Revoke</button></div>}
+        </div>:<div className="flex flex-col gap-4">
           {readOnly&&<CapGateBox reason={CAP_READ_ONLY_REASON} remedy="See plans" goTo={goTo}/>}
           {!isAdmin&&<div role="note" className="rounded-xl border border-white/[0.08] bg-white/[0.03] px-3.5 py-2.5 flex items-center gap-2.5 text-[12px] text-white/70"><I.Lock size={13} className="text-white/45 shrink-0"/>Ask an owner or admin to manage the Lead API key.</div>}
           {/* Key */}
@@ -14447,7 +14450,7 @@ function LeadApiCard({goTo,stackToggle}){
                 <div className="flex items-center gap-x-3 gap-y-1 flex-wrap text-[11px] text-white/40"><span>Created by {apiKey.createdBy}</span><span>·</span><span>Created {apiKey.createdOn}</span><span>·</span><span>{apiKey.lastUsed?('Last used '+apiKey.lastUsed):'Never used'}</span></div>
                 {isAdmin&&<div className="flex items-center gap-2">
                   <button onClick={regenerate} disabled={!canAct} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] font-medium text-white/70 hover:text-white bg-white/[0.04] border border-white/[0.08] hover:bg-white/[0.07] transition-all disabled:opacity-40 disabled:cursor-not-allowed"><I.History size={12}/>Regenerate</button>
-                  <button onClick={revoke} disabled={!canAct} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] font-medium text-red-300 bg-red-500/10 border border-red-500/20 hover:bg-red-500/15 transition-all disabled:opacity-40 disabled:cursor-not-allowed"><I.Trash size={12}/>Revoke</button>
+                  <button onClick={revoke} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] font-medium text-red-300 bg-red-500/10 border border-red-500/20 hover:bg-red-500/15 transition-all disabled:opacity-40 disabled:cursor-not-allowed"><I.Trash size={12}/>Revoke</button>
                 </div>}
               </div>
             </React.Fragment>):(<div className="flex items-center justify-between gap-4 flex-wrap px-3 py-2.5 rounded-xl bg-white/[0.03] border border-white/[0.06]">

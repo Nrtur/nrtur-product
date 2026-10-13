@@ -32,6 +32,8 @@ This is **not** the automation "call webhook" step. That one sends data *out* of
 - The card shows: masked key, created by, created on, and last used ("Never used" if unused).
 - **Regenerate** replaces the key. The old key stops working **immediately**. A confirm dialog says so.
 - **Revoke** deletes the key. The API stops accepting requests until a new key is generated. A confirm dialog is shown.
+  - Revoke works on **every plan**. On Solo, Team or a read-only workspace, owners and admins can still revoke from the plan-gate notice, so a leaked key can't come back to life on a re-upgrade. Every other card action stays plan-gated.
+- **The key creator leaves:** when the member who generated the key is removed or suspended, the key is revoked automatically.
 - The key is stored hashed. nrtur can never show it again, so a lost key means regenerating.
 
 **The request**
@@ -39,7 +41,7 @@ This is **not** the automation "call webhook" step. That one sends data *out* of
 - Accepted fields: `name`, `email`, `phone`, `company_name`, `job_title`, `source`, `estimated_value`, `notes`. These are the same fields as the in-app New Lead form, plus `notes`.
 - `estimated_value` is a decimal string, e.g. `"5000.00"`, the same format as the in-app API.
 - **Name or email is required**, the same rule as creating a lead in the app.
-- `source` defaults to `"API"` when it's missing or blank. A sender may pass its own (e.g. `"Website form"`).
+- `source` defaults to `"API"` when it's missing or blank. A sender may pass its own (e.g. `"Web form"`), but it must be one of the app's lead sources: Web form, Referral, Event, Cold outreach, Ad, LinkedIn, Import, API (case-insensitive). Anything else is refused with `422`.
 - **"API" is added to the lead Source list** in the app, so API leads can be filtered by source like any other.
 - `notes`, if present, becomes the first note on the lead's timeline.
 - **Status:** the workspace default lead status.
@@ -48,17 +50,17 @@ This is **not** the automation "call webhook" step. That one sends data *out* of
 - The response is `201` with the new lead's `id` and its link in nrtur.
 
 **Duplicates** (the "Allow duplicate leads" setting, default **off**)
-- **Off:** if an active lead already has the same email or phone, the request is refused with `409 DUPLICATE_LEAD` and the existing lead's id. If the email belongs to an existing contact, it's refused with `409 LEAD_EMAIL_IS_CONTACT` and the contact's id. These are the same rules the app uses today.
+- **Off:** if an active lead already has the same email or phone, the request is refused with `409 DUPLICATE_LEAD`, returning the existing lead's id and `matched_on` (`email` or `phone`), never its name. If the email belongs to an existing contact, it's refused with `409 LEAD_EMAIL_IS_CONTACT` and the contact's id. These are the same rules the app uses today.
 - **On:** the lead is created even if it matches an existing lead. A clash with a contact's email is still refused, because otherwise the lead would later convert into a duplicate contact.
 - The setting applies **only to leads created through the API**. Creating leads in the app and by CSV import keeps today's rules.
 
 **Limits and refusals**
-- **Plan:** available on Trial, Pro and Business, through the existing `api_access` plan feature. On Solo and Team the card shows the plan gate and the API refuses with `403 PLAN_FEATURE_UNAVAILABLE`.
+- **Plan:** available on Trial, Pro and Business, through the existing `api_access` plan feature. On Solo and Team the card shows the plan gate and the API refuses with `422 PLAN_FEATURE_UNAVAILABLE`.
 - **Records cap:** the leads cap applies exactly as in the app. At the cap the API refuses with `422 PLAN_LIMIT_REACHED`.
-- **Read-only workspace** (cancelled or trial ended): the API refuses every request with `403`, and the card shows the read-only notice.
+- **Read-only workspace** (cancelled or trial ended): the API refuses every request with `422 PLAN_FEATURE_UNAVAILABLE` (tier `read_only`), and the card shows the read-only notice.
 - **Rate limit:** 60 requests per minute per workspace. Above that the API returns `429` with a `Retry-After` header.
 - **Missing or wrong key:** `401` with no detail, so the response gives nothing away to someone guessing keys.
-- **Validation errors** (bad email or phone, both name and email missing): `422` naming the field. The phone check is the same E.164 rule as the app.
+- **Validation errors** (bad email or phone, both name and email missing): `422` naming the field. The phone check is the app's rule: 7–15 digits after removing spaces, dashes, dots and brackets, with an optional leading `+`.
 
 **What the card shows to help people use it**
 - The endpoint URL with a Copy button.
@@ -92,3 +94,14 @@ No price change. The plan catalog already has **API access** (`api_access`) on T
 3. **Rate limit:** 60 requests per minute per workspace.
 4. **Notifications for new API leads:** not in v1.
 5. **API address:** production is `https://api.nrtur.io/api/public/v1/leads`. Staging uses the staging API host with the same path. The settings card shows the address of the environment it runs in.
+
+## Decisions (owner, 2026-10-12)
+Recorded from what shipped in nrtur-backend #366 and #367:
+1. **Plan gate:** Solo and Team are refused with `422 PLAN_FEATURE_UNAVAILABLE`, not 403.
+2. **Read-only workspace:** also `422 PLAN_FEATURE_UNAVAILABLE` (tier `read_only`), not 403.
+3. **Source:** must be one of the app's lead sources (Web form, Referral, Event, Cold outreach, Ad, LinkedIn, Import, API; case-insensitive). Anything else is `422`.
+4. **Key creator removed or suspended:** the key is revoked automatically.
+
+## Follow-up (owner, 2026-10-13)
+1. **Revoke on every plan:** the card's Revoke works on Solo, Team and read-only too, from the plan-gate notice (owners and admins), so a leaked key can't return on re-upgrade. Every other card action stays plan-gated.
+2. **Duplicate response:** the public `409 DUPLICATE_LEAD` returns the existing lead's id and `matched_on` (`email` / `phone`), never its name.

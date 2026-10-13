@@ -40,7 +40,7 @@ Leads are unqualified prospects that a team works before turning them into conta
 - Rules (UI and API agree): name or email required on create; the edit sheet also requires a name. Email must be a valid bare address. Phone: 7–15 digits with optional `+`; separators allowed; stored as typed (not E.164). Free-text fields are trimmed; only the API refuses control characters (422 `INVALID`).
   - Width limits: UI caps name, company name, company domain and job title at 120, industry at 80 and phone at 50. The API allows name, company name, company domain, industry and email 255, job title 150, phone 50.
   - Estimated value ≥ 0; employees a whole number ≥ 0; expected close date `YYYY-MM-DD`.
-- Source must be one of: Web form, Referral, Cold outreach, Event, Ad, LinkedIn, Import.
+- Source must be one of: Web form, Referral, Cold outreach, Event, Ad, LinkedIn, Import, API.
 - Status is workspace-configurable (`/lead-statuses`). Seeded: New (default), Working, Nurturing, Qualified, Unqualified. Converted and Archived are lifecycle states, not statuses.
 - Owner defaults to the creator and must be an active member (`ASSIGNEE_NOT_MEMBER`).
 - Duplicates are refused at write time:
