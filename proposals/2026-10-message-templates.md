@@ -4,7 +4,7 @@ status: approved        # proposed | approved | in-progress | built | dropped
 owner: Qamar Ul Islam
 area: docs/areas/inbox.md, docs/areas/sequences.md, docs/areas/automations.md
 screens: [engage (Templates tab; aliases email-templates, sms-templates), inbox, email-sequence-builder, sms-sequence-builder, automation-builder]
-tickets: []             # filled in after approval
+tickets: [SCRUM-1281 (BE templates API), SCRUM-1282 (FE Templates tab), SCRUM-1283 (FE Templates picker)]
 created: 2026-10-13
 ---
 
