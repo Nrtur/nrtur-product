@@ -11293,6 +11293,7 @@ function EmailReplyComposer({target,onClose,onToast,onSend,onSaveDraft,canReplyA
   const [showQuote,setShowQuote]=React.useState(false);
   const [askDiscard,setAskDiscard]=React.useState(false);
   const [edKey,setEdKey]=React.useState(0);
+  const _crmTpl=React.useContext(CrmDataContext);
   const valRef=React.useRef('');valRef.current=val;
   const hasText=()=>!!mailHtmlToText(valRef.current);
   const attemptClose=()=>{if(hasText())setAskDiscard(true);else onClose&&onClose();};
@@ -11300,8 +11301,10 @@ function EmailReplyComposer({target,onClose,onToast,onSend,onSaveDraft,canReplyA
   // No suppression check on a manual send — the app's inbox send path has none (see inbox.md › What blocks a send).
   const text=mailHtmlToText(val);
   const hasRecip=!!(to.trim()||cc.trim());
-  const canSend=!!text&&hasRecip;
-  const sendReason=!hasRecip?'Add at least one recipient':!text?'Write a message first':undefined;
+  const _tplLeft=tplLeftoverTags(text); // proposed (message templates): unfilled merge fields block Send
+  const applyTpl=(t)=>{const r=tplRecipientValues(_crmTpl,to);setVal(tplFill(t.body,r.vals));setEdKey(k=>k+1);};
+  const canSend=!!text&&hasRecip&&_tplLeft.length===0;
+  const sendReason=!hasRecip?'Add at least one recipient':!text?'Write a message first':_tplLeft.length?'Fill in the merge fields first':undefined;
   const send=()=>{if(!canSend)return;const all=[to,cc].filter(x=>x.trim()).join(', ');onSend?onSend({mode,to:all,body:text,target}):(onToast&&onToast(mode==='forward'?('Message forwarded'+(all?' to '+all:'')):'Reply sent'));onClose&&onClose();};
   const placeholder=mode==='forward'?'Add a message…':'Write your reply…';
   const tab=(m,label,Icon,disabled,reason)=>{const on=mode===m;const b=(<button key={m} type="button" disabled={disabled} aria-label={reason?label+' — '+reason:undefined} onClick={()=>!disabled&&onSwitchMode&&onSwitchMode(m)} className={['inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-[12px] font-medium transition-colors',on?'bg-brand-500/12 text-brand-200 ring-1 ring-brand-500/25':disabled?'text-white/25 cursor-not-allowed':'text-white/55 hover:text-white hover:bg-white/[0.06]'].join(' ')}><Icon size={12}/>{label}</button>);return disabled&&reason?<span key={m} title={reason} className="inline-flex">{b}</span>:b;};
@@ -11321,6 +11324,7 @@ function EmailReplyComposer({target,onClose,onToast,onSend,onSaveDraft,canReplyA
         <div className="flex items-center gap-2"><span className="w-8 text-[11px] text-white/40">Cc</span><input value={cc} onChange={e=>setCc(e.target.value)} aria-label="Cc recipients" placeholder="Add Cc…" className="flex-1 min-w-0 bg-white/[0.04] border border-white/[0.10] rounded-md px-2 py-1 text-[12px] text-white placeholder:text-white/30 outline-none focus:border-brand-500/45"/></div>
       </div>
       <p className="text-[11px] text-white/40 mb-2 truncate"><span className="text-white/55">Subject:</span> {target.subject}</p>
+      {_tplLeft.length>0&&<div className="mb-2"><TplLeftoverNote tags={_tplLeft}/></div>}
       <div className="rounded-xl border border-white/[0.10] bg-white/[0.03] focus-within:border-brand-500/45 transition-all overflow-hidden">
         <RichTextField key={edKey} bare value={val} onChange={setVal} placeholder={placeholder} minH={92}/>
         {target.quoted&&(<div className="px-4 pb-2.5">
@@ -11328,7 +11332,7 @@ function EmailReplyComposer({target,onClose,onToast,onSend,onSaveDraft,canReplyA
           {showQuote&&<div className="mt-2 pl-3 border-l-2 border-white/[0.12] text-[12px] text-white/45 whitespace-pre-wrap leading-relaxed max-h-28 overflow-y-auto scroll-area">{target.quoted}</div>}
         </div>)}
         <div className="flex items-center justify-between px-2.5 py-2 border-t border-white/[0.06]">
-          <div className="flex items-center gap-0.5"><button title="Attach" onClick={()=>onToast&&onToast('Attach a file')} className="w-8 h-8 rounded-md text-white/45 hover:text-white hover:bg-white/[0.06] flex items-center justify-center transition-colors"><I.Paperclip size={14}/></button><button title="Image" onClick={()=>onToast&&onToast('Insert image')} className="w-8 h-8 rounded-md text-white/45 hover:text-white hover:bg-white/[0.06] flex items-center justify-center transition-colors"><I.Image size={14}/></button><button title="Emoji" onClick={()=>onToast&&onToast('Pick an emoji')} className="w-8 h-8 rounded-md text-white/45 hover:text-white hover:bg-white/[0.06] flex items-center justify-center transition-colors"><I.Smile size={14}/></button></div>
+          <div className="flex items-center gap-0.5"><button title="Attach" onClick={()=>onToast&&onToast('Attach a file')} className="w-8 h-8 rounded-md text-white/45 hover:text-white hover:bg-white/[0.06] flex items-center justify-center transition-colors"><I.Paperclip size={14}/></button><button title="Image" onClick={()=>onToast&&onToast('Insert image')} className="w-8 h-8 rounded-md text-white/45 hover:text-white hover:bg-white/[0.06] flex items-center justify-center transition-colors"><I.Image size={14}/></button><button title="Emoji" onClick={()=>onToast&&onToast('Pick an emoji')} className="w-8 h-8 rounded-md text-white/45 hover:text-white hover:bg-white/[0.06] flex items-center justify-center transition-colors"><I.Smile size={14}/></button><TemplatePickerButton channel="email" onPick={applyTpl} hasContent={!!text} note="Replaces your reply text. The subject stays as it is."/></div>
           <div className="flex items-center gap-2"><button onClick={()=>{if(!text){onToast&&onToast('Nothing to save yet');return;}onSaveDraft?onSaveDraft({mode,to:to.trim(),body:text,target}):(onToast&&onToast('Draft saved'));onClose&&onClose();}} className="text-[12px] text-white/50 hover:text-white px-3 py-1.5 rounded-lg hover:bg-white/[0.04] transition-colors">Save draft</button><span title={!canSend?sendReason:undefined} className="inline-flex"><button disabled={!canSend} onClick={send} className={['inline-flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-[12px] font-medium transition-all',canSend?'bg-brand-500 hover:bg-brand-400 text-white shadow-brand':'bg-white/[0.06] text-white/30 cursor-not-allowed'].join(' ')}><I.Send size={11} stroke={2.4}/>{mode==='forward'?'Forward':'Send'}</button></span></div>
         </div>
       </div>
@@ -11765,12 +11769,13 @@ function SmsNewMessageModal({close,onSend,initialTo}){
   const {contacts}=React.useContext(CrmDataContext);
   const [to,setTo]=React.useState(initialTo||'');
   const [body,setBody]=React.useState('');
+  const _tplLeft=tplLeftoverTags(body); // proposed (message templates)
   const [media,setMedia]=React.useState([]); // MMS parts (max 10), sent from the default number — it must carry MMS
   const seg=SmsSegments(body.length);
   const _from=(typeof outboundNumberFor==='function')?outboundNumberFor(null,'sms'):null;
   const _mmsOk=!!(_from&&_from.caps&&_from.caps.mms);const _atCap=media.length>=10;
   const attach=()=>{const pool=MMS_SAMPLE.image;const m=pool[media.length%pool.length];setMedia(a=>[...a,{...m,uid:Date.now()+Math.random()}]);};
-  const ok=to.trim()&&(body.trim()||media.length>0);
+  const ok=to.trim()&&(body.trim()||media.length>0)&&_tplLeft.length===0;
   const LBL='text-[11px] font-medium text-white/45 uppercase tracking-[0.14em] block mb-1.5';
   const INP='w-full px-3 py-2.5 rounded-xl bg-white/[0.04] border border-white/[0.10] text-[13px] text-white placeholder:text-white/30 outline-none focus:border-brand-500/40 transition-all';
   return(<div className="fixed inset-0 z-[150] bg-black/70 backdrop-blur-sm flex items-center justify-center p-4" onClick={close}>
@@ -11780,7 +11785,8 @@ function SmsNewMessageModal({close,onSend,initialTo}){
         <div><label className={LBL}>To</label><input autoFocus list="sms-new-to" value={to} onChange={e=>setTo(e.target.value)} placeholder="Contact name or phone number" className={INP}/><datalist id="sms-new-to">{(contacts||[]).filter(c=>!c.deleted&&c.phone).map(c=>(<option key={c.id} value={c.name}>{c.phone}</option>))}</datalist></div>
         <div><label className={LBL}>Message</label><textarea value={body} onChange={e=>setBody(e.target.value)} rows={4} placeholder="Type a message…" className={INP+' resize-none'}/>
           {media.length>0&&<div className="mt-2 flex items-center gap-2 flex-wrap">{media.map(m=>(<div key={m.uid} className="relative"><div className="w-12 h-12 rounded-lg border border-white/[0.1]" style={{background:m.grad}}/><button onClick={()=>setMedia(a=>a.filter(x=>x.uid!==m.uid))} aria-label={'Remove '+m.name} className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-black/70 border border-white/20 text-white flex items-center justify-center"><I.X size={8}/></button></div>))}</div>}
-          <div className="flex items-center gap-2 mt-1.5"><span className="inline-flex" title={!_mmsOk?(_from?_from.number+' does not support MMS.':'MMS unavailable'):_atCap?'Up to 10 files per message':'Attach image (MMS)'}><button disabled={!_mmsOk||_atCap} onClick={attach} aria-label="Attach media" className="w-7 h-7 rounded-lg flex items-center justify-center text-white/45 hover:text-violet-300 hover:bg-violet-500/10 transition-colors disabled:opacity-35 disabled:cursor-not-allowed"><I.Paperclip size={14}/></button></span><p className={['text-[11px] tabular-nums',seg.segs>=4&&!media.length?'text-amber-300':'text-white/45'].join(' ')}>{media.length>0?(media.length+' media · MMS'):(body.length+' chars · '+seg.segs+' SMS')}</p></div></div>
+          {_tplLeft.length>0&&<div className="mt-2"><TplLeftoverNote tags={_tplLeft}/></div>}
+          <div className="flex items-center gap-2 mt-1.5"><span className="inline-flex" title={!_mmsOk?(_from?_from.number+' does not support MMS.':'MMS unavailable'):_atCap?'Up to 10 files per message':'Attach image (MMS)'}><button disabled={!_mmsOk||_atCap} onClick={attach} aria-label="Attach media" className="w-7 h-7 rounded-lg flex items-center justify-center text-white/45 hover:text-violet-300 hover:bg-violet-500/10 transition-colors disabled:opacity-35 disabled:cursor-not-allowed"><I.Paperclip size={14}/></button></span><TemplatePickerButton channel="sms" onPick={t=>setBody(tplFill(t.body,tplRecipientValues({contacts},to).vals))} hasContent={!!body.trim()} note="Merge fields fill in for the person in To."/><p className={['text-[11px] tabular-nums',seg.segs>=4&&!media.length?'text-amber-300':'text-white/45'].join(' ')}>{media.length>0?(media.length+' media · MMS'):(body.length+' chars · '+seg.segs+' SMS')}</p></div></div>
       </div>
       <div className="px-5 py-3.5 border-t border-white/[0.07] flex items-center justify-end gap-2"><button onClick={close} className="px-4 py-2 rounded-xl text-[13px] font-medium text-white/60 hover:text-white bg-white/[0.04] border border-white/[0.08] transition-all">Cancel</button><button disabled={!ok} onClick={()=>onSend({to,body:body.trim(),media:media.map(({uid,...m})=>m)})} className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-[13px] font-medium text-white bg-brand-500 hover:bg-brand-400 transition-all disabled:opacity-40 disabled:cursor-not-allowed"><I.Send size={12}/>{media.length>0?'Send MMS':'Send SMS'}</button></div>
     </div>
@@ -11942,10 +11948,11 @@ function InboxPage({goTo,nav}){
               {(()=>{const _w=_liveWallet;if(!_w||_w.balance>1)return null;const _empty=_w.balance<WALLET_RATES.sms;const _sv=sevStyle(_empty?'critical':'warning');return(<div className="mb-2 flex items-center gap-2 px-3 py-2 rounded-lg text-[11.5px]" style={{color:_sv.ink,background:'color-mix(in srgb,'+_sv.accent+' 10%,transparent)',border:'1px solid color-mix(in srgb,'+_sv.accent+' 30%,transparent)'}}><I.AlertTriangle size={12} className="shrink-0"/><span className="min-w-0 flex-1">{_empty?'Your prepaid balance is empty — texts can’t be sent until credit is added.':('Low balance: $'+_w.balance.toFixed(2)+' left for texts and calls.')}</span>{effCanManageBilling()?<button onClick={()=>goTo('settings-billing')} className="shrink-0 font-semibold underline-offset-2 hover:underline">Add credit</button>:<span className="shrink-0 opacity-80">Ask your workspace owner to add credit.</span>}</div>);})()}
               {_threadNumGone&&!_smsSupp&&(<div role="alert" className="mb-2 flex items-start gap-2 px-3 py-2 rounded-lg bg-amber-500/[0.08] border border-amber-500/25 text-[11.5px] text-amber-200"><I.AlertTriangle size={12} className="shrink-0 mt-0.5"/><span className="min-w-0">This conversation was on a number that can no longer send. Replying from {smsFrom||'another number'} will start a new thread for the contact.</span></div>)}
               {_smsSupp&&(<div className="mb-2 flex items-center gap-2 px-3 py-2 rounded-lg bg-rose-500/[0.10] border border-rose-500/30 text-[11.5px] text-rose-200"><I.Ban size={12} className="shrink-0"/><span className="min-w-0">This contact has opted out. New messages can't be sent.</span></div>)}
+              {!_smsSupp&&tplLeftoverTags(draft).length>0&&<div className="mb-2"><TplLeftoverNote tags={tplLeftoverTags(draft)}/></div>}
               <div className="rounded-xl border border-white/[0.08] focus-within:border-brand-500/40 transition-all" style={{background:'var(--field6)'}}>
                 {mmsAtt.length>0&&(<div className="px-3 pt-3 flex items-center gap-2 flex-wrap">{mmsAtt.map(m=>(<div key={m.uid} className="relative">{m.type==='file'?<div className="inline-flex items-center gap-2 px-2.5 py-2 rounded-lg text-[11px] text-white/75 bg-white/[0.05] border border-white/[0.08]"><I.Note size={12} className="text-violet-300"/>{m.name}<span className="text-white/50">{m.size}</span></div>:<div className="w-14 h-14 rounded-lg overflow-hidden border border-white/[0.1] relative" style={{background:m.grad}}>{m.type==='video'&&<span className="absolute inset-0 flex items-center justify-center text-white"><I.Play size={12}/></span>}</div>}<button onClick={()=>removeMmsAtt(m.uid)} title="Remove" className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-black/70 border border-white/20 text-white flex items-center justify-center hover:bg-black"><I.X size={8}/></button></div>))}</div>)}
                 <textarea ref={draftRef} value={draft} onChange={e=>setDraft(e.target.value)} rows={3} disabled={_smsSupp||!effCanCreateAny()} placeholder={_smsSupp?"This contact has opted out.":(!effCanCreateAny()?"View only — your role can’t send messages":"Type a message…")} className="w-full bg-transparent outline-none resize-none px-4 pt-3 pb-1 text-[13px] text-white placeholder:text-white/30 disabled:cursor-not-allowed"/>
-                <div className="flex items-center justify-between px-3 pb-3 gap-2"><div className="flex items-center gap-1 min-w-0">{_smsFromOpts.length>0&&<div className="relative"><select value={smsFrom} onChange={e=>setSmsFrom(e.target.value)} title="Send from this number" className="pl-2 pr-6 py-1 rounded-md bg-white/[0.04] border border-white/[0.08] text-[10.5px] font-mono text-white/60 outline-none appearance-none cursor-pointer" style={{colorScheme:'dark',background:'var(--s850)'}}>{_smsFromOpts.map(n=>(<option key={n}>{n}</option>))}</select><I.ChevronDown size={10} className="absolute right-1.5 top-1/2 -translate-y-1/2 text-white/30 pointer-events-none"/></div>}{(()=>{const _fn=_smsNumsAll.find(n=>n.number===smsFrom);const _mmsOk=!_fn||!!(_fn.caps&&_fn.caps.mms);return(<button disabled={!_mmsOk} onClick={()=>attachMms('image')} title={_mmsOk?'Attach media':'This number can’t send MMS'} aria-label="Attach media" className="w-8 h-8 rounded-lg flex items-center justify-center text-white/40 hover:text-violet-300 hover:bg-violet-500/10 transition-colors disabled:opacity-35 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-white/40"><I.Paperclip size={15}/></button>);})()}<span className={['text-[11px] tabular-nums ml-1 truncate',(seg.segs>=4&&!mmsAtt.length)?'text-amber-300':'text-white/50'].join(' ')}>{mmsAtt.length>0?(mmsAtt.length+' media · MMS'):(draft.length+' chars · '+seg.segs+' SMS')}</span></div><button disabled={(!draft.trim()&&mmsAtt.length===0)||_smsSupp||!effCanCreateAny()} onClick={()=>{if(!effCanCreateAny()){showToast('Your role can’t send messages');return;}const _isLd=smsSel.leadId!=null;const _rc=_isLd?((_leads||[]).find(x=>x.id===smsSel.leadId&&!x.deleted)||{id:smsSel.leadId,name:smsSel.contact,phone:smsSel.phone}):((smsSel.contactId!=null?(_liveContacts||[]).find(c=>c.id===smsSel.contactId&&!c.deleted):null)||(_liveContacts||[]).find(c=>c.name===smsSel.contact&&!c.deleted)||{id:smsSel.contactId,name:smsSel.contact,phone:smsSel.phone});const _g=canSendSms(_rc);if(!_g.ok){showToast(_g.reason);return;}const _media=mmsAtt.map(({uid,..._m})=>_m);const _isMms=_media.length>0;if(_walletCharge)_walletCharge(_isMms?WALLET_RATES.mms:+(seg.segs*WALLET_RATES.sms).toFixed(2),(_isMms?'MMS · ':'SMS · ')+smsSel.contact+(_isMms?'':' · '+seg.segs+' segment'+(seg.segs===1?'':'s')));const _msg={from:'Alex Morgan',me:true,body:draft.trim(),time:'Just now',...(smsFrom?{fromNumber:smsFrom}:{}),...(_isMms?{media:_media}:{})};const _prev=_isMms?(draft.trim()||(_media.length+' '+(_media[0].type==='file'?'file':'photo')+(_media.length===1?'':'s'))):draft.trim();setSmsConvos(cs=>cs.some(c=>c.id===smsSel.id)?cs.map(c=>c.id===smsSel.id?{...c,messages:[...c.messages,_msg],preview:_prev,time:'Just now'}:c):[{...smsSel,messages:[...smsSel.messages,_msg],preview:_prev,time:'Just now'},...cs]);setSmsSel(s=>({...s,messages:[...s.messages,_msg],preview:_prev,time:'Just now'}));if(_rc){const _dl=_isLd?[]:dealsForPerson(_rc.id);_addAct&&_addAct(_isLd?'lead':'contact',_rc.id,{...mkAct(_isMms?'mms':'sms',{ts:0,by:CURRENT_USER.avatar,title:(_isMms?'MMS sent':'SMS sent'),body:_prev,payload:{dir:'out',...(smsFrom?{from:smsFrom}:{}),...(_isMms?{media:_media}:{})}}),...(_isLd?{}:(smsSel.dealId!=null?{dealId:smsSel.dealId}:(_dl.length===1?{dealId:_dl[0].id}:{})))});if(_isLd){_updLead&&_updLead(_rc.id,{lastActivity:'Just now'});}else{_updCt&&_updCt(_rc.id,{last:'Just now',lastActivity:'Just now',days:0});}}setDraft('');setMmsAtt([]);showToast(_isMms?'MMS sent':'Message sent');}} className={['inline-flex items-center gap-2 px-4 py-1.5 rounded-lg text-[12px] font-medium transition-all border-none',((draft.trim()||mmsAtt.length)&&!_smsSupp&&effCanCreateAny())?'bg-brand-500 hover:bg-brand-400 text-white shadow-brand cursor-pointer':'bg-white/[0.06] text-white/30 cursor-not-allowed'].join(' ')}><I.Send size={11} stroke={2.4}/>Send {mmsAtt.length>0?'MMS':'SMS'}</button></div>
+                <div className="flex items-center justify-between px-3 pb-3 gap-2"><div className="flex items-center gap-1 min-w-0">{_smsFromOpts.length>0&&<div className="relative"><select value={smsFrom} onChange={e=>setSmsFrom(e.target.value)} title="Send from this number" className="pl-2 pr-6 py-1 rounded-md bg-white/[0.04] border border-white/[0.08] text-[10.5px] font-mono text-white/60 outline-none appearance-none cursor-pointer" style={{colorScheme:'dark',background:'var(--s850)'}}>{_smsFromOpts.map(n=>(<option key={n}>{n}</option>))}</select><I.ChevronDown size={10} className="absolute right-1.5 top-1/2 -translate-y-1/2 text-white/30 pointer-events-none"/></div>}{(()=>{const _fn=_smsNumsAll.find(n=>n.number===smsFrom);const _mmsOk=!_fn||!!(_fn.caps&&_fn.caps.mms);return(<button disabled={!_mmsOk} onClick={()=>attachMms('image')} title={_mmsOk?'Attach media':'This number can’t send MMS'} aria-label="Attach media" className="w-8 h-8 rounded-lg flex items-center justify-center text-white/40 hover:text-violet-300 hover:bg-violet-500/10 transition-colors disabled:opacity-35 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-white/40"><I.Paperclip size={15}/></button>);})()}<TemplatePickerButton channel="sms" disabled={_smsSupp||!effCanCreateAny()} hasContent={!!draft.trim()} note="Merge fields fill in for this contact." onPick={t=>setDraft(tplFill(t.body,tplRecipientValues({contacts:_allContacts},smsSel.contactId!=null?{contactId:smsSel.contactId}:{name:smsSel.contact,phone:smsSel.phone}).vals))}/><span className={['text-[11px] tabular-nums ml-1 truncate',(seg.segs>=4&&!mmsAtt.length)?'text-amber-300':'text-white/50'].join(' ')}>{mmsAtt.length>0?(mmsAtt.length+' media · MMS'):(draft.length+' chars · '+seg.segs+' SMS')}</span></div><button disabled={(!draft.trim()&&mmsAtt.length===0)||_smsSupp||!effCanCreateAny()||tplLeftoverTags(draft).length>0} onClick={()=>{if(!effCanCreateAny()){showToast('Your role can’t send messages');return;}const _isLd=smsSel.leadId!=null;const _rc=_isLd?((_leads||[]).find(x=>x.id===smsSel.leadId&&!x.deleted)||{id:smsSel.leadId,name:smsSel.contact,phone:smsSel.phone}):((smsSel.contactId!=null?(_liveContacts||[]).find(c=>c.id===smsSel.contactId&&!c.deleted):null)||(_liveContacts||[]).find(c=>c.name===smsSel.contact&&!c.deleted)||{id:smsSel.contactId,name:smsSel.contact,phone:smsSel.phone});const _g=canSendSms(_rc);if(!_g.ok){showToast(_g.reason);return;}const _media=mmsAtt.map(({uid,..._m})=>_m);const _isMms=_media.length>0;if(_walletCharge)_walletCharge(_isMms?WALLET_RATES.mms:+(seg.segs*WALLET_RATES.sms).toFixed(2),(_isMms?'MMS · ':'SMS · ')+smsSel.contact+(_isMms?'':' · '+seg.segs+' segment'+(seg.segs===1?'':'s')));const _msg={from:'Alex Morgan',me:true,body:draft.trim(),time:'Just now',...(smsFrom?{fromNumber:smsFrom}:{}),...(_isMms?{media:_media}:{})};const _prev=_isMms?(draft.trim()||(_media.length+' '+(_media[0].type==='file'?'file':'photo')+(_media.length===1?'':'s'))):draft.trim();setSmsConvos(cs=>cs.some(c=>c.id===smsSel.id)?cs.map(c=>c.id===smsSel.id?{...c,messages:[...c.messages,_msg],preview:_prev,time:'Just now'}:c):[{...smsSel,messages:[...smsSel.messages,_msg],preview:_prev,time:'Just now'},...cs]);setSmsSel(s=>({...s,messages:[...s.messages,_msg],preview:_prev,time:'Just now'}));if(_rc){const _dl=_isLd?[]:dealsForPerson(_rc.id);_addAct&&_addAct(_isLd?'lead':'contact',_rc.id,{...mkAct(_isMms?'mms':'sms',{ts:0,by:CURRENT_USER.avatar,title:(_isMms?'MMS sent':'SMS sent'),body:_prev,payload:{dir:'out',...(smsFrom?{from:smsFrom}:{}),...(_isMms?{media:_media}:{})}}),...(_isLd?{}:(smsSel.dealId!=null?{dealId:smsSel.dealId}:(_dl.length===1?{dealId:_dl[0].id}:{})))});if(_isLd){_updLead&&_updLead(_rc.id,{lastActivity:'Just now'});}else{_updCt&&_updCt(_rc.id,{last:'Just now',lastActivity:'Just now',days:0});}}setDraft('');setMmsAtt([]);showToast(_isMms?'MMS sent':'Message sent');}} className={['inline-flex items-center gap-2 px-4 py-1.5 rounded-lg text-[12px] font-medium transition-all border-none',((draft.trim()||mmsAtt.length)&&!_smsSupp&&effCanCreateAny()&&!tplLeftoverTags(draft).length)?'bg-brand-500 hover:bg-brand-400 text-white shadow-brand cursor-pointer':'bg-white/[0.06] text-white/30 cursor-not-allowed'].join(' ')}><I.Send size={11} stroke={2.4}/>Send {mmsAtt.length>0?'MMS':'SMS'}</button></div>
               </div>
             </div>
           </div>):(<div className="flex-1 flex items-center justify-center"><div className="text-center"><div className="w-12 h-12 rounded-xl bg-white/[0.03] border border-white/[0.06] flex items-center justify-center mx-auto mb-4 text-white/25"><I.Hash size={22}/></div><p className="text-[14px] font-medium text-white/50">Select a conversation</p></div></div>)}
@@ -11988,6 +11995,8 @@ function EmailComposeModal({close:_close,defaultTo='',onSent,onSavedDraft,seedSu
   const [showCc,setShowCc]=React.useState(false);
   const [subject,setSubject]=React.useState(seedSubject);
   const [body,setBody]=React.useState(()=>mailTextToHtml(seedBody)); // rich text (HTML), like the app's editor
+  const [rtKey,setRtKey]=React.useState(0); // remounts the editor when a template replaces the body
+  const _crmTpl=React.useContext(CrmDataContext);
   const [attachments,setAttachments]=React.useState([]);
   const [sending,setSending]=React.useState(false);
   // Guard closing a composed message with typed content (was: Esc / X / Discard lost it with no warning).
@@ -11995,7 +12004,10 @@ function EmailComposeModal({close:_close,defaultTo='',onSent,onSavedDraft,seedSu
   const {attemptClose,guardNode}=useCloseGuard(_dirty,_close);const close=attemptClose;
   // No suppression check here: the app's manual send (inbox send.go) doesn't consult the suppression list.
   // App rule: at least one recipient, and a subject OR a body.
-  const _canSend=!!(to.trim()||cc.trim()||bcc.trim())&&!!(subject.trim()||mailHtmlToText(body))&&!sending;
+  // Proposed (message templates): the inbox doesn't fill merge fields at send, so Send waits until none are left.
+  const _tplLeft=tplLeftoverTags(subject,mailHtmlToText(body));
+  const applyTpl=(t)=>{const r=tplRecipientValues(_crmTpl,to);setSubject(tplFill(t.subject,r.vals));setBody(tplFill(t.body,r.vals));setRtKey(k=>k+1);};
+  const _canSend=!!(to.trim()||cc.trim()||bcc.trim())&&!!(subject.trim()||mailHtmlToText(body))&&!sending&&_tplLeft.length===0;
   const handleSend=()=>{if(!_canSend)return;setSending(true);setTimeout(()=>{setSending(false);onSent&&onSent({to,subject,body:mailHtmlToText(body),from});_close();},900);};
   const saveDraft=()=>{if(!to.trim()&&!subject.trim()&&!mailHtmlToText(body)){window.__nrturToast&&window.__nrturToast('Nothing to save yet','info');return;}if(onSavedDraft)onSavedDraft({to,subject,body:mailHtmlToText(body),from});else window.__nrturToast&&window.__nrturToast('Draft saved','success');_close();};
   return(
@@ -12007,12 +12019,14 @@ function EmailComposeModal({close:_close,defaultTo='',onSent,onSavedDraft,seedSu
           <div className="flex items-center px-5 py-2.5"><span className="text-[12px] text-white/40 w-14 shrink-0">To</span><input value={to} onChange={e=>setTo(e.target.value)} placeholder="recipient@company.com" className="flex-1 bg-transparent outline-none text-[13px] text-white placeholder:text-white/25"/><button onClick={()=>setShowCc(v=>!v)} className="text-[11px] text-white/40 hover:text-brand-300 transition-colors shrink-0 ml-2">Cc/Bcc</button></div>
           {showCc&&(<><div className="flex items-center px-5 py-2.5"><span className="text-[12px] text-white/40 w-14 shrink-0">Cc</span><input value={cc} onChange={e=>setCc(e.target.value)} placeholder="cc@company.com" className="flex-1 bg-transparent outline-none text-[13px] text-white placeholder:text-white/25"/></div><div className="flex items-center px-5 py-2.5"><span className="text-[12px] text-white/40 w-14 shrink-0">Bcc</span><input value={bcc} onChange={e=>setBcc(e.target.value)} placeholder="bcc@company.com" className="flex-1 bg-transparent outline-none text-[13px] text-white placeholder:text-white/25"/></div></>)}
           <div className="flex items-center px-5 py-2.5"><span className="text-[12px] text-white/40 w-14 shrink-0">Subject</span><input value={subject} onChange={e=>setSubject(e.target.value)} placeholder="Subject line..." className="flex-1 bg-transparent outline-none text-[13px] text-white placeholder:text-white/25"/></div>
-          <div className="px-2"><RichTextField bare value={body} onChange={setBody} placeholder="Write your message…" minH={180}/></div>
+          <div className="px-2"><RichTextField key={rtKey} bare value={body} onChange={setBody} placeholder="Write your message…" minH={180}/></div>
+          {_tplLeft.length>0&&<div className="px-5 py-2.5"><TplLeftoverNote tags={_tplLeft}/></div>}
           {attachments.length>0&&(<div className="px-5 py-2.5 flex flex-wrap gap-2">{attachments.map((a,i)=>(<span key={i} className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] text-white/70 bg-white/[0.05] border border-white/[0.08]"><I.Paperclip size={11}/>{a}<button onClick={()=>setAttachments(arr=>arr.filter((_,j)=>j!==i))} className="text-white/35 hover:text-white"><I.X size={10}/></button></span>))}</div>)}
         </div>
         <div className="flex items-center justify-between px-5 py-3 border-t border-white/[0.07] relative" style={{background:'rgba(255,255,255,0.01)'}}>
           <div className="flex items-center gap-1">
             <button onClick={()=>setAttachments(a=>[...a,`document-${a.length+1}.pdf`])} title="Attach file" className="w-8 h-8 rounded-lg flex items-center justify-center text-white/35 hover:text-white hover:bg-white/[0.06] transition-colors"><I.Paperclip size={13}/></button>
+            <TemplatePickerButton channel="email" onPick={applyTpl} hasContent={!!(subject.trim()||mailHtmlToText(body))} note="Merge fields fill in for the person in To."/>
           </div>
           <div className="flex items-center gap-2">
             <button onClick={close} className="px-3 py-1.5 rounded-lg text-[12px] text-white/55 hover:text-white hover:bg-white/[0.06] transition-colors">Discard</button>
@@ -12540,11 +12554,13 @@ function ActionConfig({node,onChange,goTo}){
   const _cfg=React.useContext(FlowCfgCtx); // the trigger's record type — scopes which fields a step may set
   if(k==='assign')return <ActionAssignConfig node={node} onChange={onChange}/>;
   if(k==='welcome'||k==='reengage'||k==='proposal'||k==='email')return(<React.Fragment>
+    <ActionField label="Template"><TemplatePickerButton variant="field" channel="email" hasContent={!!((node.subject||'').trim()||(node.body||'').trim())} note="Copies the subject and body. Merge fields fill in when each email sends." onPick={t=>onChange({subject:t.subject,body:t.body})}/></ActionField>
     <ActionField label="Subject"><ATxt value={node.subject} onChange={v=>onChange({subject:v})} ph="Subject line"/></ActionField>
     <ActionField label="Body" hint="Placeholders: {{first_name}}, {{company_name}}, {{owner_first_name}}."><textarea value={node.body||''} onChange={e=>onChange({body:e.target.value})} rows={5} placeholder="Write your email…" className="w-full px-2.5 py-1.5 rounded-lg bg-white/[0.04] border border-white/[0.10] text-[12px] text-white placeholder:text-white/30 outline-none focus:border-brand-500/40 resize-none"/></ActionField>
     {k!=='proposal'&&<ActionField label="Send from"><ASel value={node.fromRep||'Deal owner'} opts={REP_OPTS} onChange={v=>onChange({fromRep:v})}/></ActionField>}
   </React.Fragment>);
   if(k==='sms')return(<React.Fragment>
+    <ActionField label="Template"><TemplatePickerButton variant="field" channel="sms" hasContent={!!(node.body||'').trim()} note="Copies the message. Merge fields fill in when each text sends." onPick={t=>onChange({body:t.body})}/></ActionField>
     <ActionField label="Message" hint="Placeholders: {{first_name}}, {{company_name}}, {{owner_first_name}}."><textarea value={node.body||''} onChange={e=>onChange({body:e.target.value})} rows={4} placeholder="Type your SMS message…" className="w-full px-2.5 py-1.5 rounded-lg bg-white/[0.04] border border-white/[0.10] text-[12px] text-white placeholder:text-white/30 outline-none focus:border-brand-500/40 resize-none"/></ActionField>
     {(()=>{try{const _g=smsComplianceState();return !_g.ok?(<p className="text-[11px] text-amber-300/90 leading-relaxed flex items-start gap-1.5 mt-1"><I.Ban size={11} className="shrink-0 mt-px"/><span>{_g.reason} — this step will be skipped until messaging is approved.</span></p>):null;}catch(e){return null;}})()}
   </React.Fragment>);
@@ -13253,6 +13269,7 @@ const SETTINGS_PAGE_META={
   'settings-duplicates':'Duplicates','settings-scoring':'Lead scoring','settings-integrations':'Integrations','settings-phone-numbers':'Phone numbers',
   'settings-suppression':'Suppression list','settings-notifications':'Notifications',
   'settings-frequency':'Message frequency','settings-reengagement':'Re-engagement','settings-tasks':'Tasks & reminders',
+  'email-templates':'Email templates','sms-templates':'SMS templates',
 };
 // IA split: workspace settings are admin-governed shared truth; personal settings are per-user.
 // Gating reuses the existing role system (NAV_ADMIN_ROLES / CURRENT_USER_ROLE) — no parallel model.
@@ -15360,6 +15377,7 @@ function SequenceBuilderPage({goTo,channel,nav}){
             <button onClick={()=>setActiveNodeId(null)} className="text-white/40 hover:text-white transition-colors"><I.X size={16}/></button>
           </div>
           <div className="flex-1 overflow-y-auto scroll-area px-6 py-5" style={{background:'var(--s850)'}}>
+            <div className="mb-5"><label className={DLBL}>Template</label><TemplatePickerButton variant="field" channel={isSms?'sms':'email'} hasContent={!!((draft.subject||'').trim()||(draft.body||'').trim())} note={isSms?'Copies the message. Merge fields fill in when each text sends.':'Copies the subject and text. Formatting becomes plain text here.'} onPick={t=>dset(isSms?{body:t.body}:{subject:t.subject,body:tplHtmlToText(t.body)})}/></div>
             {!isSms&&(<div className="mb-5"><label className={DLBL}>Subject</label><input value={draft.subject||''} onChange={e=>dset({subject:e.target.value})} placeholder="Subject line" className="w-full px-3 py-2.5 rounded-lg bg-white/[0.05] border border-white/[0.12] text-[13px] text-white placeholder:text-white/30 outline-none focus:border-brand-500/45"/></div>)}
             <div><label className={DLBL}>{isSms?'Message text':'Email body'}</label>
               <div className="rounded-xl border border-white/[0.12] focus-within:border-brand-500/45 transition-all overflow-hidden" style={{background:'var(--field6)'}}>
@@ -16504,6 +16522,243 @@ function seqBlankFields(channel){
   if(channel==='sms')return{body:''};
   return{subject:'',body:''};
 }
+// ?? Message templates (PROPOSED, not built: proposals/2026-10-message-templates.md) ??????????
+// Saved email and SMS messages the whole workspace can reuse. Using a template COPIES its text into the
+// composer or step. Editing or deleting a template later never changes a sent message or a saved step.
+// Demo: window.__nrturTemplates('empty') shows the empty library; window.__nrturTemplates('seed') restores it.
+const TPL_NAME_MAX=100;
+const TPL_SUBJECT_MAX=255;
+const TPL_SMS_MAX=1600;        // 10 GSM-7 segments
+const TPL_PER_CHANNEL_MAX=500; // per workspace, per channel
+const MSG_TEMPLATES_SEED=[
+  {id:'tpl_e1',channel:'email',name:'Intro after a demo request',subject:'Thanks for reaching out, {{first_name}}',body:'<p>Hi {{first_name}},</p><p>Thanks for asking about a demo. I’d love to show you how we could help {{company_name}}.</p><p>Do you have 20 minutes this week? Reply with a time that suits you.</p><p>Best,<br>{{owner_first_name}}</p>',createdBy:'AM',updatedBy:'AM',updated:'2d ago'},
+  {id:'tpl_e2',channel:'email',name:'Proposal follow-up',subject:'Following up on the proposal for {{company_name}}',body:'<p>Hi {{first_name}},</p><p>Just checking you received the proposal for {{deal_name}}. I’m happy to walk through any part of it on a quick call.</p><p>Thanks,<br>{{owner_full_name}}</p>',createdBy:'SC',updatedBy:'SC',updated:'5d ago'},
+  {id:'tpl_e3',channel:'email',name:'Meeting recap',subject:'Recap of today’s call',body:'<p>Hi {{first_name|there}},</p><p>Thanks for your time today. Here’s a short recap:</p><ul><li>What we covered</li><li>Next steps and owners</li></ul><p>Let me know if I missed anything.</p><p>{{owner_first_name}}</p>',createdBy:'AM',updatedBy:'JK',updated:'1w ago'},
+  {id:'tpl_e4',channel:'email',name:'Checking in',subject:'Still on your list, {{first_name}}?',body:'<p>Hi {{first_name}},</p><p>It’s been a little while since we spoke. Is this still a priority for {{company_name}} this quarter?</p><p>{{owner_first_name}}</p>',createdBy:'JK',updatedBy:'JK',updated:'3w ago'},
+  {id:'tpl_s1',channel:'sms',name:'Quick intro',body:'Hi {{first_name}}, it’s {{owner_first_name}} from {{workspace_name}}. Thanks for reaching out! Is now a good time for a quick call?',createdBy:'AM',updatedBy:'AM',updated:'1d ago'},
+  {id:'tpl_s2',channel:'sms',name:'Meeting reminder',body:'Hi {{first_name}}, a reminder about our call tomorrow. Reply here if you need to move it. – {{owner_first_name}}',createdBy:'SC',updatedBy:'SC',updated:'4d ago'},
+  {id:'tpl_s3',channel:'sms',name:'Proposal sent',body:'Hi {{first_name}}, I’ve just emailed the proposal for {{company_name}}. Any questions, text me here.',createdBy:'AM',updatedBy:'AM',updated:'1w ago'},
+  {id:'tpl_s4',channel:'sms',name:'Missed call',body:'Sorry I missed you, {{first_name|there}}! When’s a good time to call back?',createdBy:'JK',updatedBy:'JK',updated:'2w ago'},
+];
+const _tplStore={list:MSG_TEMPLATES_SEED.map(t=>({...t})),subs:new Set()};
+function _tplSet(fn){_tplStore.list=typeof fn==='function'?fn(_tplStore.list):fn;_tplStore.subs.forEach(f=>f());}
+try{window.__nrturTemplates=(s)=>_tplSet(s==='empty'?[]:MSG_TEMPLATES_SEED.map(t=>({...t})));}catch(e){}
+function useMsgTemplates(){
+  const [,bump]=React.useReducer(x=>x+1,0);
+  React.useEffect(()=>{_tplStore.subs.add(bump);return()=>{_tplStore.subs.delete(bump);};},[]);
+  return [_tplStore.list,_tplSet];
+}
+// Merge fields: the same 11 tags as MERGE_TAGS, with the optional fallback form {{first_name|there}}.
+const TPL_TAG_RE=/\{\{\s*([a-zA-Z_]+)\s*(?:\|([^}]*))?\}\}/g;
+const TPL_KNOWN=new Set(MERGE_TAGS.map(t=>t.token.slice(2,-2)));
+const TPL_SAMPLE={first_name:'Sarah',last_name:'Chen',full_name:'Sarah Chen',email:'sarah@meridian.co',phone:'+1 555-234-8901',company_name:'Meridian Agency',owner_first_name:'Alex',owner_full_name:'Alex Morgan',deal_name:'Meridian expansion',deal_amount:'$12,000',workspace_name:'nrtur'};
+function tplTagsIn(strs,pred){const out=[];strs.forEach(s=>String(s||'').replace(TPL_TAG_RE,(m,k)=>{if(pred(k.toLowerCase())&&out.indexOf(m)<0)out.push(m);return m;}));return out;}
+function tplUnknownTags(...strs){return tplTagsIn(strs,k=>!TPL_KNOWN.has(k));}
+function tplLeftoverTags(...strs){return tplTagsIn(strs,k=>TPL_KNOWN.has(k));}
+// Known tags take the value, else their fallback; a tag with neither is left in place (the inbox then blocks Send).
+function tplFill(str,vals){return String(str||'').replace(TPL_TAG_RE,(m,k,fb)=>{const key=k.toLowerCase();if(!TPL_KNOWN.has(key))return m;const v=vals&&vals[key];if(v)return v;if(fb!=null&&fb!=='')return fb;return m;});}
+function tplPreview(str){return tplFill(str,TPL_SAMPLE).replace(TPL_TAG_RE,'…');}
+// Values for an inbox recipient: matched to a contact by id, email, name or phone. No deal context in the inbox.
+function tplRecipientValues(crm,q){
+  const cs=((crm&&crm.contacts)||[]).filter(c=>!c.deleted);
+  let c=null;
+  if(q&&typeof q==='object'&&q.contactId!=null)c=cs.find(x=>x.id===q.contactId)||null;
+  else{
+    const raw=String(q||'').split(',')[0].trim();const em=(raw.match(/[^\s<>]+@[^\s<>]+/)||[''])[0].toLowerCase();const dg=raw.replace(/\D/g,'');const nm=raw.toLowerCase();
+    if(raw)c=cs.find(x=>(em&&(x.email||'').toLowerCase()===em)||(!em&&nm&&(x.name||'').toLowerCase()===nm)||(dg.length>=7&&(x.phone||'').replace(/\D/g,'')===dg))||null;
+  }
+  const vals={workspace_name:TPL_SAMPLE.workspace_name};
+  if(!c&&q&&typeof q==='object'&&q.name){const p=String(q.name).trim().split(/\s+/);return {contact:null,vals:Object.assign(vals,{first_name:p[0]||'',last_name:p.slice(1).join(' '),full_name:String(q.name).trim(),phone:q.phone||''})};}
+  if(!c)return {contact:null,vals};
+  const own=TEAM_MEMBERS.find(t=>t.avatar===c.owner);
+  const parts=String(c.name||'').trim().split(/\s+/);
+  return {contact:c,vals:Object.assign(vals,{first_name:c.first||parts[0]||'',last_name:c.last||parts.slice(1).join(' '),full_name:c.name||'',email:c.email||'',phone:c.phone||'',company_name:c.co||'',owner_first_name:own?own.name.split(' ')[0]:'',owner_full_name:own?own.name:''})};
+}
+// Plain-text copy of an email template for editors that hold plain text (sequence steps): list items keep a bullet.
+function tplHtmlToText(h){return mailHtmlToText(String(h||'').replace(/<li[^>]*>/gi,'<li>• '));}
+function tplMemberName(code){const m=TEAM_MEMBERS.find(t=>t.avatar===code);return m?m.name:'a teammate';}
+// Amber note under an inbox composer while known merge fields are still unfilled. Send stays disabled.
+function TplLeftoverNote({tags}){
+  if(!tags||!tags.length)return null;
+  return(<div role="alert" className="flex items-start gap-2 px-3 py-2 rounded-lg bg-amber-500/[0.08] border border-amber-500/25 text-[11.5px] text-amber-200"><I.AlertTriangle size={12} className="shrink-0 mt-0.5"/><span className="min-w-0">Fill in or remove {tags.length===1?'this merge field':'these merge fields'} before sending: <span className="font-mono">{tags.join(' ')}</span></span></div>);
+}
+// "Templates" picker. variant 'toolbar' (icon button in a composer footer, opens upward) or 'field' (full-width, opens downward).
+// When the target already has text, picking asks before replacing it.
+function TemplatePickerButton({channel,onPick,hasContent,note,variant='toolbar',disabled}){
+  const [list]=useMsgTemplates();
+  const [open,setOpen]=React.useState(false);
+  const [q,setQ]=React.useState('');
+  const ref=React.useRef(null);
+  const {confirmNode,openConfirm}=useConfirm();
+  React.useEffect(()=>{if(!open)return;const fn=e=>{if(ref.current&&!ref.current.contains(e.target))setOpen(false);};const k=e=>{if(e.key==='Escape'){e.stopPropagation();setOpen(false);}};document.addEventListener('mousedown',fn);document.addEventListener('keydown',k,true);return()=>{document.removeEventListener('mousedown',fn);document.removeEventListener('keydown',k,true);};},[open]);
+  const isSms=channel==='sms';
+  const all=list.filter(t=>t.channel===channel);
+  const s=q.trim().toLowerCase();
+  const rows=all.filter(t=>!s||(t.name+' '+(t.subject||'')+' '+(isSms?t.body:mailHtmlToText(t.body))).toLowerCase().includes(s)).sort((a,b)=>a.name.localeCompare(b.name));
+  const pick=(t)=>{setOpen(false);setQ('');if(hasContent)openConfirm({title:'Replace with “'+t.name+'”?',body:isSms?'The message you’ve written will be replaced by this template.':'The subject and message you’ve written will be replaced by this template.',confirmLabel:'Replace',danger:false,onConfirm:()=>onPick(t)});else onPick(t);};
+  const up=variant==='toolbar';
+  return(<div ref={ref} className={['relative',variant==='field'?'block':'inline-flex'].join(' ')}>
+    {variant==='field'
+      ?<button type="button" disabled={disabled} onClick={()=>setOpen(o=>!o)} aria-haspopup="dialog" aria-expanded={open} className="w-full inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-white/[0.04] border border-white/[0.10] hover:border-white/[0.18] text-[12.5px] text-white/70 hover:text-white transition-all disabled:opacity-40 disabled:cursor-not-allowed"><I.Note size={13} className="text-brand-300"/>Insert from a template<I.ChevronDown size={12} className="ml-auto text-white/35"/></button>
+      :<button type="button" disabled={disabled} onClick={()=>setOpen(o=>!o)} title="Insert a template" aria-label="Insert a template" aria-haspopup="dialog" aria-expanded={open} className={['inline-flex items-center gap-1.5 h-8 px-2 rounded-lg text-[12px] font-medium transition-colors disabled:opacity-35 disabled:cursor-not-allowed',open?'text-white bg-white/[0.08]':'text-white/50 hover:text-white hover:bg-white/[0.06]'].join(' ')}><I.Note size={13}/>Templates</button>}
+    {open&&(<div role="dialog" aria-label={(isSms?'SMS':'Email')+' templates'} data-testid="template-picker" className={['absolute left-0 z-[170] w-[320px] max-w-[calc(100vw-32px)] rounded-xl border border-white/[0.10] overflow-hidden',up?'bottom-full mb-2':'top-full mt-1.5'].join(' ')} style={{background:'var(--pop2)',boxShadow:'0 12px 40px rgba(0,0,0,0.5)'}}>
+      <div className="p-2 border-b border-white/[0.07]"><div className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-white/[0.04] border border-white/[0.08]"><I.Search size={12} className="text-white/35"/><input autoFocus value={q} onChange={e=>setQ(e.target.value)} placeholder={'Search '+(isSms?'SMS':'email')+' templates…'} className="flex-1 bg-transparent outline-none text-[12.5px] text-white placeholder:text-white/30"/></div></div>
+      <div className="max-h-[260px] overflow-y-auto scroll-area py-1">
+        {rows.length===0&&<p className="px-4 py-6 text-center text-[12px] text-white/45">{all.length===0?'No '+(isSms?'SMS':'email')+' templates yet.':'No templates match.'}</p>}
+        {rows.map(t=>(<button key={t.id} type="button" onClick={()=>pick(t)} className="w-full text-left px-3.5 py-2.5 hover:bg-white/[0.05] transition-colors"><p className="text-[12.5px] font-medium text-white truncate">{t.name}</p><p className="text-[11.5px] text-white/45 truncate">{isSms?t.body:t.subject}</p></button>))}
+      </div>
+      <div className="px-3.5 py-2 border-t border-white/[0.07] flex items-center justify-between gap-3"><span className="text-[10.5px] text-white/40 leading-snug">{note}</span><button type="button" onClick={()=>{setOpen(false);window.__nrturGoTo&&window.__nrturGoTo(isSms?'sms-templates':'email-templates');}} className="shrink-0 text-[11.5px] text-brand-300 hover:text-brand-200">Manage</button></div>
+    </div>)}
+    {confirmNode}
+  </div>);
+}
+// Create / edit / view a template. readOnly = view only (not the creator and not an admin, or a read-only workspace).
+function TemplateEditModal({channel,initial,others,readOnly,onClose,onSave,onDuplicate}){
+  const isSms=channel==='sms';
+  const [name,setName]=React.useState(initial?initial.name:'');
+  const [subject,setSubject]=React.useState(initial?(initial.subject||''):'');
+  const [body,setBody]=React.useState(initial?initial.body:'');
+  const [rtKey,setRtKey]=React.useState(0);
+  const [tried,setTried]=React.useState(false);
+  const subjRef=React.useRef(null);const smsRef=React.useRef(null);const rtWrap=React.useRef(null);
+  const dirty=!readOnly&&(name!==(initial?initial.name:'')||subject!==(initial?(initial.subject||''):'')||body!==(initial?initial.body:''));
+  const {attemptClose,guardNode}=useCloseGuard(dirty,onClose);
+  const trimmed=name.trim();
+  const text=isSms?body:mailHtmlToText(body);
+  const dup=!!trimmed&&others.some(t=>t.name.trim().toLowerCase()===trimmed.toLowerCase());
+  const unknown=tplUnknownTags(subject,text);
+  const filled=isSms?tplPreview(body):'';
+  const seg=SmsSegments(filled.length);
+  const errs={
+    name:!trimmed?'Give the template a name.':dup?(isSms?'An SMS':'An email')+' template with this name already exists.':null,
+    subject:!isSms&&!subject.trim()?'Add a subject line.':null,
+    body:!text.trim()?(isSms?'Write the message.':'Write the email.'):(isSms&&body.length>TPL_SMS_MAX)?('Keep it to '+TPL_SMS_MAX.toLocaleString()+' characters (10 SMS).'):null,
+    tags:unknown.length?('Unknown merge field'+(unknown.length>1?'s':'')+': '+unknown.join(' ')+'. Use one from the list below.'):null,
+  };
+  const valid=!errs.name&&!errs.subject&&!errs.body&&!errs.tags;
+  const save=()=>{setTried(true);if(!valid)return;onSave({name:trimmed,subject:isSms?undefined:subject.trim(),body});};
+  // Insert at the caret of whichever field has focus (chips keep focus via onMouseDown preventDefault); otherwise append to the body.
+  const insert=(tok)=>{
+    const a=document.activeElement;
+    if(!isSms&&a&&a===subjRef.current){const i=a.selectionStart??subject.length,j=a.selectionEnd??i;const nv=(subject.slice(0,i)+tok+subject.slice(j)).slice(0,TPL_SUBJECT_MAX);setSubject(nv);requestAnimationFrame(()=>{try{a.setSelectionRange(i+tok.length,i+tok.length);}catch(e){}});return;}
+    if(isSms){const el=smsRef.current;if(el&&a===el){const i=el.selectionStart,j=el.selectionEnd;setBody(body.slice(0,i)+tok+body.slice(j));requestAnimationFrame(()=>{try{el.setSelectionRange(i+tok.length,i+tok.length);}catch(e){}});}else setBody(b=>b+tok);return;}
+    if(rtWrap.current&&a&&rtWrap.current.contains(a)){document.execCommand('insertText',false,tok);return;}
+    setBody(b=>(b||'')+(b?' ':'')+tok);setRtKey(k=>k+1);
+  };
+  const L='text-[11px] font-medium text-white/45 uppercase tracking-[0.14em] block mb-1.5';
+  const INP=(bad)=>['w-full px-3 py-2.5 rounded-xl bg-white/[0.04] border text-[13px] text-white placeholder:text-white/25 outline-none transition-all disabled:opacity-70',bad?'border-red-500/50':'border-white/[0.10] focus:border-brand-500/40'].join(' ');
+  const Err=({m})=>tried&&m?<p className="text-[11px] text-red-400 mt-1 flex items-center gap-1"><I.Ban size={10}/>{m}</p>:null;
+  const title=readOnly?(initial?initial.name:'Template'):initial?'Edit '+(isSms?'SMS':'email')+' template':'New '+(isSms?'SMS':'email')+' template';
+  return(<div className="fixed inset-0 z-[160] flex items-center justify-center p-4" style={{background:'rgba(0,0,0,0.72)',backdropFilter:'blur(8px)'}} onClick={e=>{if(e.target===e.currentTarget)attemptClose();}}>
+    <div role="dialog" aria-modal="true" aria-label={title} data-testid="template-editor" style={{width:isSms?760:960,maxWidth:'100%',maxHeight:'92vh'}} className="relative flex flex-col rounded-2xl border border-white/[0.10] overflow-hidden">
+      <div className="flex items-center gap-3 px-6 py-4 border-b border-white/[0.07] shrink-0" style={{background:'var(--s850)'}}>
+        <span className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0 bg-brand-500/12 text-brand-300">{isSms?<I.Hash size={16}/>:<I.Mail size={16}/>}</span>
+        <div className="min-w-0 flex-1"><p className="text-white text-[15px] font-semibold truncate">{title}</p><p className="text-[12px] text-white/45">{readOnly?(initial&&initial.createdBy?'Created by '+tplMemberName(initial.createdBy)+'. Only they or an admin can edit it.':'View only.'):'Everyone in the workspace can use this template.'}</p></div>
+        <button onClick={attemptClose} aria-label="Close" className="text-white/40 hover:text-white"><I.X size={16}/></button>
+      </div>
+      <div className="flex-1 min-h-0 flex flex-col md:flex-row overflow-y-auto md:overflow-hidden" style={{background:'var(--s850)'}}>
+        <fieldset disabled={readOnly} className="md:w-[55%] shrink-0 px-6 py-5 flex flex-col gap-4 md:overflow-y-auto scroll-area border-0 m-0 min-w-0">
+          <div><label className={L} htmlFor="tpl-name">Template name</label><input id="tpl-name" autoFocus={!readOnly} value={name} maxLength={TPL_NAME_MAX} onChange={e=>setName(e.target.value.slice(0,TPL_NAME_MAX))} placeholder={isSms?'e.g. Meeting reminder':'e.g. Proposal follow-up'} className={INP(tried&&errs.name)}/><Err m={errs.name}/></div>
+          {!isSms&&(<div><label className={L} htmlFor="tpl-subject">Subject</label><input id="tpl-subject" ref={subjRef} value={subject} maxLength={TPL_SUBJECT_MAX} onChange={e=>setSubject(e.target.value.slice(0,TPL_SUBJECT_MAX))} placeholder="e.g. Following up on {{company_name}}" className={INP(tried&&errs.subject)}/><Err m={errs.subject}/></div>)}
+          <div><label className={L}>{isSms?'Message':'Email'}</label>
+            {isSms
+              ?<textarea ref={smsRef} value={body} onChange={e=>setBody(e.target.value)} rows={6} placeholder="Hi {{first_name}}, …" className={INP(tried&&errs.body)+' resize-none leading-relaxed'}/>
+              :readOnly?<div className="rounded-xl bg-white/[0.04] border border-white/[0.10] px-3 py-2.5 text-[13px] text-white/80 leading-relaxed [&_p]:mb-2 [&_ul]:list-disc [&_ul]:pl-5" dangerouslySetInnerHTML={{__html:coSanitizeHtml(body)}}/>
+              :<div ref={rtWrap}><RichTextField key={rtKey} value={body} onChange={setBody} error={tried&&errs.body} placeholder="Hi {{first_name}}, …" minH={200}/></div>}
+            <Err m={errs.body}/>
+            {isSms&&(<p className={['text-[11px] tabular-nums mt-1.5',body.length>TPL_SMS_MAX?'text-red-400':seg.segs>1?'text-amber-300':'text-white/45'].join(' ')}>{filled.length} characters · {seg.segs||0} SMS with sample values</p>)}
+          </div>
+          {!readOnly&&(<div><p className={L}>Insert merge field</p><div className="flex flex-wrap gap-1.5">{MERGE_TAGS.map(v=>(<button key={v.token} type="button" onMouseDown={e=>e.preventDefault()} onClick={()=>insert(v.token)} title={v.desc} className="px-2 py-1 rounded-md text-[11px] font-mono text-brand-200 bg-brand-500/12 border border-brand-500/25 hover:bg-brand-500/25 hover:text-white transition-all">{v.token}</button>))}</div>
+            <p className="text-[11px] text-white/40 mt-2 leading-relaxed">Add a fallback for when a value is missing: <span className="font-mono text-white/60">{'{{first_name|there}}'}</span>.</p>
+            {tried&&errs.tags&&<p className="text-[11px] text-red-400 mt-1.5 flex items-center gap-1"><I.Ban size={10}/>{errs.tags}</p>}
+            {!tried&&unknown.length>0&&<p className="text-[11px] text-amber-300 mt-1.5">Unknown merge field{unknown.length>1?'s':''}: <span className="font-mono">{unknown.join(' ')}</span></p>}
+          </div>)}
+        </fieldset>
+        <div className="flex-1 min-w-0 px-6 py-5 border-t md:border-t-0 md:border-l border-white/[0.07] md:overflow-y-auto scroll-area" style={{background:'var(--s900)'}}>
+          <p className={L}>Preview <span className="normal-case tracking-normal text-white/35 font-normal">· sample contact Sarah Chen, Meridian Agency</span></p>
+          {isSms
+            ?(<div className="mx-auto max-w-[300px] rounded-[28px] border border-white/[0.10] p-4 pt-6" style={{background:'var(--s950)'}}><p className="text-center text-[10.5px] text-white/40 mb-3">Text message</p>{body.trim()?<div className="ml-auto max-w-[85%] rounded-2xl rounded-br-sm bg-brand-500 text-white text-[13px] leading-relaxed px-3.5 py-2.5 whitespace-pre-wrap break-words">{tplPreview(body)}</div>:<p className="text-center text-[12px] text-white/35 py-8">Your message appears here.</p>}</div>)
+            :(<div className="rounded-xl bg-white text-[#1f1f1f] overflow-hidden"><div className="px-4 py-3 border-b border-black/[0.08]"><p className="text-[11px] text-black/45">To Sarah Chen</p><p className="text-[14px] font-semibold mt-0.5 break-words">{subject.trim()?tplPreview(subject):<span className="text-black/30 font-normal">Subject</span>}</p></div><div className="px-4 py-3 text-[13px] leading-relaxed [&_p]:mb-2.5 [&_ul]:list-disc [&_ul]:pl-5 [&_ul]:mb-2.5 [&_a]:text-[#2f6fd0] [&_a]:underline">{text.trim()?<div dangerouslySetInnerHTML={{__html:coSanitizeHtml(tplPreview(body))}}/>:<p className="text-black/30">Your email appears here.</p>}</div></div>)}
+          <p className="text-[11px] text-white/40 mt-3 leading-relaxed">{isSms?'In the inbox, merge fields fill in for the person you’re texting. In sequences and automations, they fill in when each message sends.':'In the inbox, merge fields fill in for the person in To. In sequences and automations, they fill in when each email sends.'}</p>
+        </div>
+      </div>
+      <div className="flex items-center gap-3 px-6 py-4 border-t border-white/[0.07] shrink-0" style={{background:'var(--s850)'}}>
+        {readOnly?(<React.Fragment><div className="flex-1"/>{onDuplicate&&<button onClick={onDuplicate} className="px-4 py-2.5 rounded-xl text-[13px] font-medium text-white/75 bg-white/[0.04] border border-white/[0.08] hover:bg-white/[0.07] transition-all">Duplicate</button>}<button onClick={onClose} className="px-5 py-2.5 rounded-xl text-[13px] font-semibold text-white bg-brand-500 hover:bg-brand-400 transition-all">Close</button></React.Fragment>)
+        :(<React.Fragment><div className="flex-1"/><button onClick={attemptClose} className="px-4 py-2.5 rounded-xl text-[13px] font-medium text-white/65 bg-white/[0.04] border border-white/[0.08] hover:bg-white/[0.07] transition-all">Cancel</button><button onClick={save} className={['px-5 py-2.5 rounded-xl text-[13px] font-semibold transition-all',(valid||!tried)?'text-white bg-brand-500 hover:bg-brand-400 shadow-brand':'text-white/30 bg-white/[0.06] cursor-not-allowed'].join(' ')}>{initial?'Save template':'Create template'}</button></React.Fragment>)}
+      </div>
+      {guardNode}
+    </div>
+  </div>);
+}
+// Engage › Templates › Email / SMS. Everyone can create; the creator or an owner/admin can edit or delete.
+function MessageTemplatesPage({goTo,channel}){
+  const isSms=channel==='sms';
+  const [list,setList]=useMsgTemplates();
+  const _bc=React.useContext(BillingContext);
+  const roWs=capWorkspaceReadOnly(_bc);
+  const isAdmin=settingsIsAdmin();
+  const canManage=(t)=>!roWs&&(isAdmin||t.createdBy===CURRENT_USER_CODE);
+  const [q,setQ]=React.useState('');
+  const [sort,setSort]=React.useState('updated');
+  const [editing,setEditing]=React.useState(null); // {t?:template, readOnly?:bool}
+  const [menu,setMenu]=React.useState(null);
+  const {confirmNode,openConfirm}=useConfirm();
+  React.useEffect(()=>{if(menu==null)return;const fn=()=>setMenu(null);document.addEventListener('click',fn);return()=>document.removeEventListener('click',fn);},[menu]);
+  const toast=(m,t)=>window.__nrturToast&&window.__nrturToast(m,t||'success');
+  const mine=list.filter(t=>t.channel===channel);
+  const atCap=mine.length>=TPL_PER_CHANNEL_MAX;
+  const canCreate=!roWs&&!atCap;
+  const s=q.trim().toLowerCase();
+  const rows=mine.filter(t=>!s||(t.name+' '+(t.subject||'')+' '+(isSms?t.body:mailHtmlToText(t.body))).toLowerCase().includes(s));
+  if(sort==='name')rows.sort((a,b)=>a.name.localeCompare(b.name));
+  const uniqueCopyName=(n)=>{let base=(n+' (copy)').slice(0,TPL_NAME_MAX),c=base,i=2;const taken=new Set(mine.map(t=>t.name.toLowerCase()));while(taken.has(c.toLowerCase())){c=(n+' (copy '+i+')').slice(0,TPL_NAME_MAX);i++;}return c;};
+  const save=(data)=>{
+    if(editing&&editing.t){setList(l=>l.map(x=>x.id===editing.t.id?{...x,...data,updated:'just now',updatedBy:CURRENT_USER_CODE}:x));toast('Template saved');}
+    else{setList(l=>[{id:'tpl_'+Date.now(),channel,...data,createdBy:CURRENT_USER_CODE,updatedBy:CURRENT_USER_CODE,updated:'just now'},...l]);toast('Template created');}
+    setEditing(null);
+  };
+  const duplicate=(t)=>{if(!canCreate)return;const c={...t,id:'tpl_'+Date.now(),name:uniqueCopyName(t.name),createdBy:CURRENT_USER_CODE,updatedBy:CURRENT_USER_CODE,updated:'just now'};setList(l=>[c,...l]);setEditing(null);toast('Duplicated as “'+c.name+'”');};
+  const del=(t)=>openConfirm({title:'Delete “'+t.name+'”?',body:'It’s removed for everyone in the workspace. Messages already sent, and sequence or automation steps that used it, keep their text. This can’t be undone.',confirmLabel:'Delete template',danger:true,onConfirm:()=>{setList(l=>l.filter(x=>x.id!==t.id));toast('Template deleted');}});
+  const open=(t)=>setEditing({t,readOnly:!canManage(t)});
+  const BTN='inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-[13px] font-semibold text-white bg-brand-500 hover:bg-brand-400 shadow-brand transition-all shrink-0';
+  return(<SettingsShell active={channel+'-templates'} goTo={goTo} subtitle={isSms?'Saved text messages anyone in the workspace can reuse.':'Saved emails anyone in the workspace can reuse.'}
+    actions={!roWs&&<span title={atCap?'You’ve reached '+TPL_PER_CHANNEL_MAX+' '+(isSms?'SMS':'email')+' templates. Delete one to add another.':undefined} className="inline-flex"><button disabled={atCap} onClick={()=>setEditing({})} className={BTN+' disabled:opacity-40 disabled:cursor-not-allowed'}><I.Plus size={15} stroke={2.4}/>New template</button></span>}>
+    {roWs&&(<div className="rounded-2xl border border-amber-500/20 bg-amber-500/[0.06] px-4 py-3 flex items-center gap-2.5 text-[12.5px] text-amber-200"><I.Lock size={14} className="shrink-0"/><span><span className="font-semibold">This workspace is read-only.</span> You can view templates, but not create, edit or delete them.</span></div>)}
+    <div className="rounded-2xl border border-white/[0.06] bg-white/[0.02] px-4 py-3 flex items-start gap-2.5 text-[12.5px] text-white/60"><I.Note size={14} className="shrink-0 mt-0.5 text-brand-300"/><span>Insert a template from the {isSms?'SMS composer in the Inbox, an SMS sequence step or a Send SMS automation step':'email composer in the Inbox, an email sequence step or a Send email automation step'}. It copies the text in, so editing a template later doesn’t change anything already sent or saved.</span></div>
+    <div className="flex items-center gap-2 text-[11.5px] text-white/45 -mt-1 flex-wrap">
+      <span>{mine.length} template{mine.length===1?'':'s'}</span>
+      <span className="ml-auto inline-flex items-center gap-1.5"><span>Sort</span><select value={sort} onChange={e=>setSort(e.target.value)} aria-label="Sort templates" className="px-2 py-1.5 rounded-lg bg-white/[0.04] border border-white/[0.08] text-[12px] text-white/80 outline-none cursor-pointer" style={{colorScheme:'dark'}}><option value="updated" style={{background:'var(--s850)'}}>Recently updated</option><option value="name" style={{background:'var(--s850)'}}>Name</option></select></span>
+      <span className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white/[0.04] border border-white/[0.08] w-[220px] max-w-full"><I.Search size={12} className="text-white/35"/><input value={q} onChange={e=>setQ(e.target.value)} placeholder="Search templates…" aria-label="Search templates" className="flex-1 min-w-0 bg-transparent outline-none text-[12.5px] text-white placeholder:text-white/30"/></span>
+    </div>
+    {rows.length===0?(<div className="rounded-2xl border border-white/[0.06] bg-white/[0.02] px-5 py-14 text-center"><div className="w-12 h-12 rounded-xl bg-white/[0.03] border border-white/[0.06] flex items-center justify-center mx-auto mb-3 text-white/25">{isSms?<I.Hash size={20}/>:<I.Mail size={20}/>}</div><p className="text-[13.5px] font-medium text-white/70">{s?'No templates match your search.':'No '+(isSms?'SMS':'email')+' templates yet.'}</p>{!s&&<p className="text-[12.5px] text-white/45 mt-1 max-w-sm mx-auto">Save {isSms?'a text':'an email'} you send often, with merge fields like <span className="font-mono">{'{{first_name}}'}</span>, and reuse it in a couple of clicks.</p>}{!s&&canCreate&&<button onClick={()=>setEditing({})} className="mt-4 inline-flex items-center gap-1.5 text-[12.5px] font-medium text-brand-300 hover:text-brand-200"><I.Plus size={13}/>Create your first template</button>}</div>)
+    :(<div data-testid="template-grid" className="grid grid-cols-1 md:grid-cols-2 gap-3">{rows.map(t=>{const txt=isSms?t.body:mailHtmlToText(t.body);const sg=isSms?SmsSegments(tplPreview(t.body).length):null;const mg=canManage(t);return(
+      <div key={t.id} className="relative rounded-2xl border border-white/[0.06] bg-white/[0.02] hover:border-white/[0.14] transition-colors flex flex-col">
+        <button type="button" onClick={()=>open(t)} className="text-left p-4 pb-3 flex-1 flex flex-col gap-1.5 min-w-0">
+          <p className="text-[13.5px] font-semibold text-white truncate pr-8">{t.name}</p>
+          {!isSms&&<p className="text-[12px] text-white/65 truncate"><span className="text-white/40">Subject:</span> {t.subject}</p>}
+          <p className="text-[12px] text-white/45 leading-relaxed whitespace-pre-line break-words" style={{display:'-webkit-box',WebkitLineClamp:3,WebkitBoxOrient:'vertical',overflow:'hidden'}}>{txt}</p>
+        </button>
+        <div className="px-4 py-2.5 border-t border-white/[0.05] flex items-center gap-2 text-[11px] text-white/40"><span className="truncate">Updated {t.updated} by {tplMemberName(t.updatedBy)}</span>{sg&&<span className="ml-auto shrink-0 tabular-nums">{sg.segs} SMS</span>}</div>
+        <div className="absolute top-3 right-3">
+          <button type="button" onClick={e=>{e.stopPropagation();setMenu(m=>m===t.id?null:t.id);}} aria-label={'Actions for '+t.name} aria-haspopup="menu" aria-expanded={menu===t.id} className="w-7 h-7 rounded-lg flex items-center justify-center text-white/40 hover:text-white hover:bg-white/[0.06] transition-colors"><I.More size={14}/></button>
+          {menu===t.id&&(<div role="menu" onClick={e=>e.stopPropagation()} className="absolute right-0 top-full mt-1 z-20 w-40 rounded-xl border border-white/[0.10] py-1 overflow-hidden" style={{background:'var(--pop2)',boxShadow:'0 12px 30px rgba(0,0,0,0.45)'}}>
+            <button role="menuitem" onClick={()=>{setMenu(null);open(t);}} className="w-full text-left px-3 py-2 text-[12.5px] text-white/80 hover:bg-white/[0.06] flex items-center gap-2">{mg?<I.Edit size={13}/>:<I.Eye size={13}/>}{mg?'Edit':'View'}</button>
+            {canCreate&&<button role="menuitem" onClick={()=>{setMenu(null);duplicate(t);}} className="w-full text-left px-3 py-2 text-[12.5px] text-white/80 hover:bg-white/[0.06] flex items-center gap-2"><I.Copy size={13}/>Duplicate</button>}
+            {mg&&<button role="menuitem" onClick={()=>{setMenu(null);del(t);}} className="w-full text-left px-3 py-2 text-[12.5px] text-red-300 hover:bg-red-500/10 flex items-center gap-2"><I.Trash size={13}/>Delete</button>}
+          </div>)}
+        </div>
+      </div>);})}</div>)}
+    {editing&&<TemplateEditModal channel={channel} initial={editing.t||null} readOnly={!!editing.readOnly} others={mine.filter(x=>!editing.t||x.id!==editing.t.id)} onClose={()=>setEditing(null)} onSave={save} onDuplicate={canCreate&&editing.t?()=>duplicate(editing.t):null}/>}
+    {confirmNode}
+  </SettingsShell>);
+}
+function EngageTemplates({sub,setSub,goTo}){
+  const items=[{k:'email',label:'Email templates',Icon:I.Mail},{k:'sms',label:'SMS templates',Icon:I.Hash}];
+  return(<React.Fragment>
+    <EngageSubBar items={items} value={sub} onChange={setSub}/>
+    <div className="flex-1 min-h-0"><MessageTemplatesPage key={sub} channel={sub==='sms'?'sms':'email'} goTo={goTo}/></div>
+  </React.Fragment>);
+}
 // ?? Engage hub — one operational home for the outreach builders ?????????????????
 // Old per-builder routes redirect here (resolved centrally in App.goTo), so every
 // existing entry point keeps working and nothing becomes unreachable.
@@ -16514,10 +16769,13 @@ const ENGAGE_REDIRECT={
   'settings-reengagement':{tab:'delivery',sub:'reengagement'},
   'settings-suppression':{tab:'delivery',sub:'suppression'},
   'settings-unsubscribes':{tab:'delivery',sub:'suppression'},
+  'email-templates':{tab:'templates',sub:'email'},
+  'sms-templates':{tab:'templates',sub:'sms'},
 };
 const ENGAGE_TABS=[
   {k:'sequences',  label:'Sequences',      Icon:I.Layers},
   {k:'automations',label:'Automations',    Icon:I.Zap},
+  {k:'templates',  label:'Templates',      Icon:I.Note},
   {k:'rules',      label:'Rules',          Icon:I.SliderH},
   {k:'delivery',   label:'Deliverability', Icon:I.SliderH},
 ];
@@ -16551,11 +16809,13 @@ function EngageHub({goTo,nav}){
   const [tab,setTab]=React.useState((nav&&nav.tab)||'sequences');
   const [delSub,setDelSub]=React.useState((nav&&nav.tab==='delivery'&&nav.sub)||'frequency');
   const [rulesSub,setRulesSub]=React.useState((nav&&nav.tab==='rules'&&nav.sub)||'scoring');
+  const [tplSub,setTplSub]=React.useState((nav&&nav.tab==='templates'&&nav.sub)||'email');
   React.useEffect(()=>{
     if(!nav||!nav.tab)return;
     setTab(nav.tab);
     if(nav.tab==='delivery'&&nav.sub)setDelSub(nav.sub);
     if(nav.tab==='rules'&&nav.sub)setRulesSub(nav.sub);
+    if(nav.tab==='templates'&&nav.sub)setTplSub(nav.sub);
   },[nav]);
   const _crm=React.useContext(CrmDataContext);
   const _failing=((_crm&&_crm.automations)||[]).filter(a=>a&&a.status==='error');
@@ -16566,6 +16826,7 @@ function EngageHub({goTo,nav}){
   let body;
   if(tab==='delivery')body=<EngageDelivery sub={delSub} setSub={setDelSub} goTo={goTo}/>;
   else if(tab==='rules')body=<EngageRules sub={rulesSub} setSub={setRulesSub} goTo={goTo}/>;
+  else if(tab==='templates')body=<EngageTemplates sub={tplSub} setSub={setTplSub} goTo={goTo}/>;
   else{
     const single=tab==='automations'?<SettingsAutomationsPage goTo={goTo}/>:<SettingsSequencesPage goTo={goTo}/>;
     body=<div className="flex-1 min-h-0">{single}</div>;

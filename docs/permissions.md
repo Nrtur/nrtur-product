@@ -57,6 +57,10 @@ Plan limits are checked **before** role checks where both apply. For example, se
 
 - **Lead API key** (generate, regenerate, revoke) and **Allow duplicate leads**: owner and admin; members read-only. See [../proposals/2026-10-lead-api.md](../proposals/2026-10-lead-api.md).
 
+## Proposed (not approved yet)
+
+- **Email and SMS templates:** everyone can see, insert, create and duplicate templates; editing or deleting one needs its creator, an owner or an admin. See [../proposals/2026-10-message-templates.md](../proposals/2026-10-message-templates.md).
+
 ## Known gaps (code, not design)
 
 - **The activity feed is not role-checked in the API.** `GET /activities` has no role gate, so a member can fetch the whole workspace's activity feed through the API. Only the UI hides it.

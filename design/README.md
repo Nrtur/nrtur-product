@@ -23,7 +23,7 @@ Screens are selected by a page id in `function App()` (`page==='…'`). Refer to
 | Engage | `engage` `automation-builder` `sms-sequence-builder` `email-sequence-builder` |
 | Settings | `profile` `settings-notifications` `settings-general` `settings-team` `settings-compliance` `settings-tasks` `settings-properties` `settings-tags` `settings-statuses` `settings-duplicates` `settings-integrations` `settings-phone-numbers` `settings-billing` |
 
-In the browser console, `window.__nrturGoTo('<page id>')` jumps to a page. `window.__nrturBillingState(...)` switches the billing page between its states (trial, active, read-only and so on).
+In the browser console, `window.__nrturGoTo('<page id>')` jumps to a page. `window.__nrturBillingState(...)` switches the billing page between its states (trial, active, read-only and so on). `window.__nrturTemplates('empty')` empties the template library (`'seed'` restores it).
 
 ## Screens from proposals (not built yet)
 
@@ -33,5 +33,6 @@ The design also shows features that are **proposed** (open PR) or **approved but
 |---|---|---|---|
 | Lead API | approved (not built) | `settings-integrations` (Lead API card), `leads` and `lead-detail` (Source "API") | [proposals/2026-10-lead-api.md](../proposals/2026-10-lead-api.md) |
 | Billing page polish | approved (not built) | `settings-billing` (wallet history infinite scroll; Plan usage layout and subtitle) | [proposals/2026-10-billing-page-polish.md](../proposals/2026-10-billing-page-polish.md) |
+| Email and SMS templates | proposed | `engage` (new Templates tab; `email-templates` and `sms-templates` open it), `inbox` (Templates button in new email, reply/forward, SMS thread and New SMS), `email-sequence-builder` and `sms-sequence-builder` (step editor), `automation-builder` (Send email / Send SMS steps) | [proposals/2026-10-message-templates.md](../proposals/2026-10-message-templates.md) |
 
 When a feature ships, its row is removed here as part of the close-out.
