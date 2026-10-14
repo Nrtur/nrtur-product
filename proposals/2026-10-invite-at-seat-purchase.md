@@ -1,6 +1,6 @@
 ---
 title: Invite teammates right after buying users (plus billing copy fixes)
-status: proposed        # proposed | approved | in-progress | built | dropped
+status: approved        # proposed | approved | in-progress | built | dropped
 owner: Qamar Ul Islam
 area: docs/areas/billing.md, docs/areas/workspace-settings.md
 screens: [settings-billing, settings-team, settings-phone-numbers]
