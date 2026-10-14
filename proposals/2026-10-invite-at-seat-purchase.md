@@ -36,8 +36,9 @@ Offer **"Invite teammates"** at the three places where users are bought or visib
 - Title "Invite teammates". The seat line reads "6 of 9 seats in use on the Pro plan · 3 open".
 - One row per person, each with an email and a role (Admin or Member; Member by default).
   - From the Team page it opens with **1 row** and an **"+ Add another"** link.
-  - From Billing it opens with **one empty row per open seat**, so buying 3 users gives 3 rows.
-  - Rows can't exceed the open seats (at most 25). At that point "One row per open seat." replaces "Add another".
+  - From Billing it opens with **one empty row per open seat, up to 5**. Buying 3 users gives 3 rows; buying 9 gives 5, and "Add another" adds the rest.
+  - Rows can't exceed the open seats (at most 25). At that point "All N open seats have a row." replaces "Add another".
+  - **Long lists:** the rows area stops growing at about 5 rows (296px) and scrolls on its own, with a thin scrollbar and a fade at the bottom while there are more rows below. The title, seat line and buttons stay put. "Add another" scrolls to the new row and focuses its email.
   - Each row can be removed with ×. **Blank rows are skipped.**
 - The button reads "Send invite" or "Send N invites", counting the filled rows.
 - **Checks before sending, per row:**
