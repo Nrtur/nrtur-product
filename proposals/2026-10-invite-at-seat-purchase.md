@@ -1,10 +1,10 @@
 ---
-title: Invite teammates right after buying users
+title: Invite teammates right after buying users (plus billing copy fixes)
 status: proposed        # proposed | approved | in-progress | built | dropped
 owner: Qamar Ul Islam
 area: docs/areas/billing.md, docs/areas/workspace-settings.md
-screens: [settings-billing, settings-team]
-tickets: [SCRUM-1225]
+screens: [settings-billing, settings-team, settings-phone-numbers]
+tickets: [SCRUM-1225 (invite at seat purchase), SCRUM-1229 ("line" → "phone number"), SCRUM-1230 (shorter top-up text)]
 created: 2026-10-14
 ---
 
@@ -20,7 +20,7 @@ What's still missing is the moment that matters: when an owner **buys users**, n
 Paid seats sit empty.
 
 ## Proposal
-Offer **"Invite teammates"** at the three places where users are bought or visible. Each one opens the **existing** Invite member dialog on Settings › Team. No new invite UI and no backend change.
+Offer **"Invite teammates"** at the three places where users are bought or visible. Each one opens the Invite dialog on Settings › Team, which now takes **several people at once**. No backend change.
 
 **Screens** (design.nrtur.io):
 - `settings-billing` › Subscription Details › Seats:
@@ -28,7 +28,48 @@ Offer **"Invite teammates"** at the three places where users are bought or visib
   2. **Under the Seats field**, whenever seats are open: "K open seats · **Invite teammates**".
 - **Return from Stripe checkout** (the app's `/billing/success` page; in the design, a dialog on `settings-billing` after "Continue to checkout"):
   3. "Payment received — welcome to <plan>". When seats are open: "You bought N users, and K seats are open. Invite your team now, or any time from Settings › Team." Buttons: **View billing** and **Invite your team**.
-- `settings-team`: a deep link (`/settings?tab=team&invite=1`) opens the Invite member dialog straight away.
+- `settings-team`:
+  - the **Invite dialog** takes several people (below);
+  - a deep link (`/settings?tab=team&invite=1&rows=K`) opens it straight away with K empty rows.
+
+**The Invite dialog, several people at once** (replaces today's one-email dialog everywhere):
+- Title "Invite teammates". The seat line reads "6 of 9 seats in use on the Pro plan · 3 open".
+- One row per person, each with an email and a role (Admin or Member; Member by default).
+  - From the Team page it opens with **1 row** and an **"+ Add another"** link.
+  - From Billing it opens with **one empty row per open seat**, so buying 3 users gives 3 rows.
+  - Rows can't exceed the open seats (at most 25). At that point "One row per open seat." replaces "Add another".
+  - Each row can be removed with ×. **Blank rows are skipped.**
+- The button reads "Send invite" or "Send N invites", counting the filled rows.
+- **Checks before sending, per row:**
+  - a valid email;
+  - not already a member;
+  - not already invited (pending);
+  - not the same email twice in the form.
+
+  A row that fails shows its reason and isn't sent.
+- **Sending:** the rows go **one after another** to the existing `POST /workspaces/{id}/invite`, with a short gap (about 400ms) between requests.
+  - Each row shows a spinner while sending, then ✓.
+  - A row the API refuses keeps its reason. For example, `PLAN_LIMIT_REACHED` shows "No seat left for this invite. Add a user in Billing, or revoke a pending invite."
+- **Afterwards:**
+  - If everything was sent, the dialog closes with "N invites sent".
+  - Otherwise the sent rows clear and the failed rows stay, with the toast "2 of 3 invites sent".
+- **Closing:** "Skip for now" (from Billing) or "Cancel" (from Team) closes it at any time, except while sending.
+
+**Billing copy fixes** (same screen):
+- **SCRUM-1229, "line" → "phone number" everywhere a customer reads it:**
+  - "Extra local lines" → "Extra local numbers" and "Toll-free lines" → "Toll-free numbers" (checkout and add-ons);
+  - "Lines: N" → "Phone numbers: N" (Subscription Details);
+  - "mailboxes and lines" → "mailboxes and phone numbers";
+  - the Phone numbers page's buy prompts ("Add a local number for $5 a month").
+
+  Stripe and the code keep saying "line".
+- **SCRUM-1230, shorter Add credit dialog:**
+  - The subtitle becomes "Charged to your card on file. Minimum $20."
+  - The three lines of fine print become one: "Used for calls and texts, sent and received. Non-refundable."
+  - A **"How credit works"** link expands the full rules:
+    - received calls and texts cost the same;
+    - when the balance is empty, sending stops and receiving continues;
+    - credit doesn't expire while the account is open, and stays usable for 12 months after cancelling.
 
 ## Rules
 - **Open seats** = seats on the plan − (accepted members + live pending invitations). A pending invitation holds a seat (`checkInviteCap`). This is the same count the Invite dialog's seat line already uses (`GET /settings/usage`).
@@ -39,10 +80,11 @@ Offer **"Invite teammates"** at the three places where users are bought or visib
 - **Solo** sells no seats and can't invite, so none of this appears on Solo.
 - **The deep link** opens the dialog only for owners and admins, the same people who can invite today. Anyone else lands on Team with no dialog.
   - It opens once per click. Coming back to Team later doesn't reopen it.
-- **The Invite member dialog doesn't change:** one email and a role (Admin or Member), its seat line, and its refusals (`PLAN_LIMIT_REACHED` and so on). To fill several seats, the owner sends several invites, as today.
-- **After Stripe checkout** the new seat count may arrive a moment later, because the webhook may not have run yet.
-  - The return page reads usage when it loads. If the count hasn't landed, it shows the plan as active without the open-seats line.
-  - The Invite dialog always reads live usage when it opens, so its seat line is right either way.
+- **The invite rules don't change:** roles, the seat cap, rate limits and the refusals stay as they are. The dialog sends the same request once per row.
+- **After Stripe checkout** the new seat count may arrive a few seconds later, because the webhook may not have run yet.
+  - The return page shows **"Invite your team" whenever the plan bought has more than 1 user**, without waiting for the count.
+  - The return page re-reads usage a few times, so the "K seats are open" line appears once the count lands.
+  - The Invite dialog reads live usage when it opens, so its seat line and row limit are always right.
 - **Who sees it:** only the owner. Buying users and the Subscription Details card are owner-only.
 
 ## Permissions
@@ -52,7 +94,6 @@ No change. Owners buy users; owners and admins invite.
 None. No price, limit or plan changes.
 
 ## Out of scope
-- Inviting several people at once (a multi-email invite form).
 - Putting an invite step back into onboarding.
 - Any backend change. The invite and seat endpoints already exist.
 - Inviting during a trial from Billing. On the trial (3 seats) the Team page already invites, and buying users happens only through checkout.
@@ -61,6 +102,9 @@ None. No price, limit or plan changes.
 - **FE:** SCRUM-1225 (already exists). The onboarding half is done (SCRUM-1090). What's left:
   - the "Users added" done state with Invite teammates in `SeatDoorDialog`;
   - the "K open seats · Invite teammates" line on `SubscriptionDetailsCard`;
-  - "Invite your team" on `BillingSuccessNotice` when seats are open;
-  - `?invite=1` on Settings › Team opening `InviteMemberDialog`.
+  - "Invite your team" on `BillingSuccessNotice` when more than 1 user was bought, with a usage re-read;
+  - `InviteMemberDialog` becoming multi-row (sequential sends, per-row status);
+  - `?invite=1&rows=K` on Settings › Team.
+- **FE:** SCRUM-1229 (already exists): the "line" → "phone number" copy.
+- **FE:** SCRUM-1230 (already exists): the shorter Add credit dialog.
 - **BE:** none.

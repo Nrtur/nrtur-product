@@ -15,6 +15,8 @@ Where each number comes from:
 
 All prices are in US dollars and exclude tax. Existing customers keep their price for 12 months after any change. The app says so under the plan grid, and the backend accepts a list of price IDs per plan so older prices keep working.
 
+> In the product, a "line" is called a **phone number** (SCRUM-1229). Stripe and the code still say "line".
+
 ## Plans and prices
 
 | | Solo | Team | Pro | Business |
@@ -48,8 +50,8 @@ Contacts, leads, companies and deals are capped **separately**: each type has it
 | Pending invitations | unlimited | 0 | unlimited | unlimited | unlimited |
 | Mailboxes included | 0 | 1 | 1 per user | 1 per user | 1 per user |
 | Most mailboxes you can hold | 0 | 2 | 10 or 2 per user, whichever is more | 20 or 2 per user, whichever is more | 50 or 2 per user, whichever is more |
-| Phone lines included | 0 | 0 | 1 per user | 1 per user | 1 per user |
-| Most phone lines you can hold | 0 | 1 | 2 per user | 2 per user | 2 per user |
+| Phone numbers included | 0 | 0 | 1 per user | 1 per user | 1 per user |
+| Most phone numbers you can hold | 0 | 1 | 2 per user | 2 per user | 2 per user |
 | File storage | 25 GB per user | 2 GB per user | 10 GB per user | 25 GB per user | 100 GB per user |
 | Pipelines | 25 | 1 | 3 | 25 | 100 |
 | Stages per pipeline | unlimited | unlimited | unlimited | unlimited | unlimited |
@@ -63,7 +65,7 @@ Contacts, leads, companies and deals are capped **separately**: each type has it
 How the limits are measured:
 - "Per user" counts accepted members.
 - Storage uses decimal gigabytes (1 GB = 1,000,000,000 bytes).
-- The mailbox and line cap is the smaller of the hold and (included + purchased add-ons).
+- The mailbox and phone-number cap is the smaller of the hold and (included + purchased add-ons).
 - An automated send is one email or text sent by an automation or a sequence. Manual email is not capped.
 - The send allowance resets each billing cycle. For a trial the cycle is anchored on the signup day.
 
@@ -94,8 +96,8 @@ Enforcement: every limit, feature and the automated-sends meter is **enforced** 
 | Add-on | Price per month | Notes |
 |---|---|---|
 | Extra mailbox | $5 | Above the included allowance, up to the plan's hold |
-| Extra local phone line | $5 | Solo includes none but may buy one |
-| Toll-free line | $8 | None included on any plan |
+| Extra local number | $5 | Solo includes none but may buy one |
+| Toll-free number | $8 | None included on any plan |
 | Texting | $9 | Per workspace. **Not on sale**: refused until carrier (A2P) registration exists |
 | Texting, high volume | $29 | **Not on sale**, as above |
 
@@ -126,7 +128,7 @@ Wallet rules:
   - up to 3 users
   - 2,500 of each record type
   - otherwise Pro's counts and features
-  - except **no** mailbox, phone line, sequences or automated sends: these need a paid plan
+  - except **no** mailbox, phone number, sequences or automated sends: these need a paid plan
 - **Card:** none is needed to start.
 - **When it ends:** a background job moves the workspace to `read_only` once `trial_ends_at` passes. Data is kept and the app shows "Your trial ended on {date}". Buying a plan restores access.
 
@@ -148,7 +150,7 @@ The old spec is `nrtur-docs/nrtur-pricing.html` (v4, 2 Sep 2026). In every case 
 | Automated sends per month, Business | 100,000 | **35,000**. Matches the ground rule. |
 | Business users | "5 or more" users; "Business starts at five users" | No minimum. Seats are 1 + purchased like Team and Pro. "5+ users recommended" is display copy only. |
 | Trial length | 21 days | 21 days. Matches; no change. The prototype now says 21 days everywhere (`TRIAL_LEN`). |
-| Trial mailbox and line | No mailbox, no phone line (§03) | Matches: 0 / 0. The 2026-09-18 internal handoff guide still says 1 / 1, which is out of date. |
+| Trial mailbox and phone number | No mailbox, no phone number (§03) | Matches: 0 / 0. The 2026-09-18 internal handoff guide still says 1 / 1, which is out of date. |
 | Records limit | "each of contacts, leads, companies and deals" in §02; "2,500 records of each type" for the trial | Matches: four separate caps. The 2026-09-18 internal guide describing one pooled `records` cap is out of date. |
 | Data migration (Business, "1 source, 8 hrs") | Listed as a plan feature | Not in the catalog or the product. Removed from the pricing source of truth. |
 | Support level per plan (email / priority email / phone + named contact) | Listed in §02 | Not modelled in code. The app's plan cards still mention priority email (Pro) and phone support (Business) as copy only. |
@@ -158,7 +160,7 @@ The old spec is `nrtur-docs/nrtur-pricing.html` (v4, 2 Sep 2026). In every case 
 | What happens when the trial ends | "read-only for 12 months, with an export link, then it is deleted" | Read-only: **verified**. 12-month retention, export link and deletion: **unverified**. No such job or flow was found in the code. |
 | Failed payment grace | "14 days of full access, then read-only, then deletion at 12 months" | Full access while `past_due`: **verified**. The **14-day length is unverified**: it is Stripe's retry and dunning configuration, not code. Read-only follows only when Stripe cancels the subscription. Deletion at 12 months: **unverified**, not found. |
 | Removing users | "the seat stops billing at the next renewal, not immediately" | **Verified**, with a nuance. The quantity drops immediately with no refund, so the seat is paid through period end and is not billed at renewal. |
-| Mailboxes and lines left over after removing a seat | Roll to $5 a month rather than disconnecting | **Verified.** Extras above the new included allowance are billed as add-ons on the next invoice. |
+| Mailboxes and phone numbers left over after removing a seat | Roll to $5 a month rather than disconnecting | **Verified.** Extras above the new included allowance are billed as add-ons on the next invoice. |
 | Wallet balance after cancellation | Usable for 12 months | The app's top-up copy says so. No expiry logic was found in code, so the balance simply persists: **unverified** as a rule. |
 | Inbound messages and minutes drawing from the wallet | "Incoming … draw from it too"; incoming is free once the balance is empty | **Verified.** Inbound is settled against the wallet. When the balance is empty it is still received, and what could not be covered is recorded as an unpaid charge that is never collected. |
 | What a failed payment does to the plan | Read-only after the grace period | The code only goes read-only when Stripe **deletes** the subscription. An `unpaid` status keeps the paid tier. So the actual timing depends entirely on Stripe's dunning settings. |
