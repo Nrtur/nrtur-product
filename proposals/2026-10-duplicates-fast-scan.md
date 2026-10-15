@@ -4,7 +4,7 @@ status: approved        # proposed | approved | in-progress | built | dropped
 owner: Qamar Ul Islam
 area: docs/areas/workspace-settings.md (Duplicates), docs/areas/contacts.md, docs/areas/companies.md, docs/areas/leads.md (duplicates mode)
 screens: [settings-duplicates, contacts, companies, leads]
-tickets: [SCRUM-1285]   # the rest are filled in after approval
+tickets: [SCRUM-1285 (BE phase 1), SCRUM-1287 (FE phase 1), SCRUM-1288 (BE phase 2), SCRUM-1289 (FE phase 2), SCRUM-1290 (BE phase 3), SCRUM-1291 (FE phase 3); blocked by SCRUM-1286 (merge orphans tasks) for phase 3]
 created: 2026-10-15
 ---
 
