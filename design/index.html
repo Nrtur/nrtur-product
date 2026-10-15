@@ -6049,14 +6049,39 @@ function DupListTable({object,groups,primaryFor,onMerge,onDismiss,canMerge}){
 }
 
 // -- Part B: reusable DuplicatesView (used by Settings page + per-object tabs) --
+// Approved-not-built (proposals/2026-10-duplicates-fast-scan.md):
+// - the scan runs in a background job; opening the page only READS the saved results, so it never waits.
+// - results are paged (25 groups a page); only the open tab loads.
+// - "Not a duplicate" is saved for the workspace and can be restored.
+// Demo: the Duplicates preview toggle switches the scan state (window.__nrturDupScan).
+const DUP_PAGE_SIZE=25;
+const DUP_PAIR_CAP='250,000';
+const _dupStore={scan:'ready',lastScanned:'12 min ago',many:false,dismissed:{contact:[],company:[],lead:[]},subs:new Set()};
+function _dupSet(p){Object.assign(_dupStore,p);_dupStore.subs.forEach(f=>f());}
+try{window.__nrturDupScan=(state)=>_dupSet({scan:state});}catch(e){}
+function useDupStore(){const [,b]=React.useReducer(x=>x+1,0);React.useEffect(()=>{_dupStore.subs.add(b);return()=>{_dupStore.subs.delete(b);};},[]);return _dupStore;}
+function DupScanStatus({st,onScan,meta}){
+  // One line under the toolbar: when the results are from, and what the background scan is doing.
+  const busy=st.scan==='updating';
+  return(<div data-testid="dup-scan-status" className="flex items-center gap-2 flex-wrap text-[11.5px] text-white/45 mb-3 -mt-1">
+    {busy?<span className="inline-flex items-center gap-1.5 text-brand-200"><span className="w-3 h-3 rounded-full border-2 border-brand-300/40 border-t-brand-300 animate-spin"/>Updating in the background…</span>
+      :<span className="inline-flex items-center gap-1.5"><I.Check size={11} className="text-emerald-300"/>Up to date</span>}
+    <span>·</span><span>Last scanned {st.lastScanned}</span>
+    <span className="text-white/30">· Rescans run automatically after changes, after imports and nightly.</span>
+  </div>);
+}
 function DuplicatesView({object,showToolbar}){
+  const st=useDupStore();
   const meta=DUP_META[object];
   const crm=React.useContext(CrmDataContext);
   const cal=React.useContext(CalendarContext);     // tasks live here — re-parented on a contact merge
   const canMerge=true; // every role can merge duplicates (no role gate in the app or the API)
   const records=crm[meta.listKey]||[];
   const setter=crm[meta.setKey];
-  const [dismissed,setDismissed]=React.useState([]);
+  const dismissed=st.dismissed[object]||[];
+  const setDismissed=(fn)=>_dupSet({dismissed:{...st.dismissed,[object]:typeof fn==='function'?fn(dismissed):fn}});
+  const [showDismissed,setShowDismissed]=React.useState(false);
+  const [page,setPage]=React.useState(0);
   const [primaryBy,setPrimaryBy]=React.useState({});
   const [mergeGroup,setMergeGroup]=React.useState(null);
   const [scanKey,setScanKey]=React.useState(0);
@@ -6068,13 +6093,23 @@ function DuplicatesView({object,showToolbar}){
   // Minimum match confidence (app toolbar select → `min_confidence`; backend floor 0.4). The prototype's
   // detector scores high = 0.9, medium = 0.6.
   const [minConf,setMinConf]=React.useState(0.4);
-  const groups=allGroups.filter(g=>dismissed.indexOf(g.id)<0&&(g.confidence==='high'?0.9:0.6)>=minConf);
+  const matching=allGroups.filter(g=>(g.confidence==='high'?0.9:0.6)>=minConf);
+  const dismissedGroups=matching.filter(g=>dismissed.indexOf(g.id)>=0);
+  const groupsAll=matching.filter(g=>dismissed.indexOf(g.id)<0);
+  // Server paging: 25 groups a page, highest confidence first. The demo's "Many results" state pages by 1 so the pager shows.
+  const pageSize=st.many?1:DUP_PAGE_SIZE;
+  const pages=Math.max(1,Math.ceil(groupsAll.length/pageSize));
+  const pg=Math.min(page,pages-1);
+  const groups=groupsAll.slice(pg*pageSize,(pg+1)*pageSize);
+  React.useEffect(()=>{setPage(0);},[minConf,object]);
+  const isAdminBulk=settingsIsAdmin();
+  const nearCertain=groupsAll.filter(g=>g.confidence==='high');
   const primaryFor=(g)=>primaryBy[g.id]||g.records[0].id;
   const setPrimary=(g,id)=>setPrimaryBy(s=>({...s,[g.id]:id}));
   // A real, non-destructive merge (mirrors the deal merge doMergeDeals): the survivor is written, the losers are
   // soft-deleted, and every child relationship is RE-PARENTED to
   // the survivor so nothing is orphaned. Without this, merge silently stranded the losers' deals + timelines.
-  const applyMerge=(merged,removedIds,combineActs)=>{
+  const applyMerge=(merged,removedIds,combineActs,silent)=>{
     setter(arr=>arr.map(r=>r.id===merged.id?merged:(removedIds.indexOf(r.id)<0?r:{...r,deleted:true,mergedInto:merged.id,deletedAt:Date.now(),deletedBy:CURRENT_USER.name})));
     // Losers' central activities: re-parent to the survivor (combine), or drop them if the timelines aren't combined.
     crm.setActivities(a=>combineActs===false
@@ -6098,9 +6133,13 @@ function DuplicatesView({object,showToolbar}){
       if(cal&&cal.items&&cal.updateItem)cal.items.forEach(it=>{if(it&&removedIds.indexOf(it.leadId)>=0)cal.updateItem({id:it.id,leadId:merged.id,contact:merged.name});});
     }
     crm.addActivity(object,merged.id,mkAct('note',{ts:0,by:CURRENT_USER.avatar,title:'🔀 Merged '+removedIds.length+' duplicate '+meta.label+(removedIds.length>1?'s':''),body:'Fields resolved to this record; tags combined; their deals'+(combineActs===false?'':', activities')+({contact:', tasks and enrollments',company:', tasks',lead:', tasks'}[object]||'')+' and links re-parented here. The duplicate'+(removedIds.length>1?'s were':' was')+' merged into this record.'}));
-    toast('Merged '+removedIds.length+' duplicate'+(removedIds.length>1?'s':'')+' ✓');setMergeGroup(null);};
-  const dismiss=(g)=>{setDismissed(d=>[...d,g.id]);toast('Hidden for now — “Not a duplicate” isn’t saved yet, this pair comes back when you reload.');};
-  const scan=()=>{setScanKey(k=>k+1);const n=detectDuplicates(object,records).filter(g=>dismissed.indexOf(g.id)<0).length;toast('Scan complete - '+n+' duplicate'+(n===1?'':'s')+' found');};
+    if(!silent)toast('Merged '+removedIds.length+' duplicate'+(removedIds.length>1?'s':'')+' ✓');setMergeGroup(null);};
+  const dismiss=(g)=>{setDismissed(d=>[...d,g.id]);toast('Marked as not a duplicate. It won’t come back for anyone in the workspace.');};
+  const restore=(g)=>{setDismissed(d=>d.filter(x=>x!==g.id));toast('Restored to the duplicates list');};
+  // Scan now queues a background scan; the current results stay on screen until it finishes.
+  const scan=()=>{if(st.scan==='updating'||st.scan==='first')return;_dupSet({scan:'updating'});setTimeout(()=>{setScanKey(k=>k+1);_dupSet({scan:'ready',lastScanned:'just now'});const n=detectDuplicates(object,records).filter(g=>dismissed.indexOf(g.id)<0).length;toast('Scan finished · '+n+' possible duplicate'+(n===1?'':'s'));},1600);};
+  // Bulk merge (phase 3, owner/admin): every near-certain group, keeping the oldest record in each.
+  const bulkMerge=()=>openConfirm({title:'Merge '+nearCertain.length+' near-certain group'+(nearCertain.length===1?'':'s')+'?',body:'Each group is merged into its oldest record: fields keep the oldest record’s values, tags are combined, and everything linked moves over. Merges can’t be undone.',confirmLabel:'Merge all',danger:true,onConfirm:()=>{nearCertain.forEach(g=>{const {merged,removedIds}=dupBuildMerged(object,g,{primaryId:g.records[0].id});applyMerge(merged,removedIds,true,true);});toast('Merged '+nearCertain.length+' group'+(nearCertain.length===1?'':'s'));}});
   const Obj=dupObjIcon(object);
   const cols=(g)=>({display:'grid',gap:'10px',gridTemplateColumns:'repeat('+Math.min(g.records.length,3)+',minmax(0,1fr))'});
   const detailRow=(Ic,val)=>(<div className="flex items-center gap-1.5 text-[11.5px]"><Ic size={11} className="text-white/30 shrink-0"/><span className={val?'text-white/65 truncate':'text-white/25 truncate'}>{val||'-'}</span></div>);
@@ -6114,11 +6153,25 @@ function DuplicatesView({object,showToolbar}){
         <div className="ml-auto flex items-center gap-2">
           <label className="inline-flex items-center gap-1.5 rounded-lg border border-white/[0.08] bg-white/[0.04] px-2.5 py-1.5 text-[12px] text-white/55"><I.SliderH size={13} className="text-white/45"/><select value={minConf} onChange={e=>setMinConf(Number(e.target.value))} aria-label="Minimum match confidence" className="cursor-pointer bg-transparent text-[12px] font-medium text-white/75 outline-none">{[[0.4,'All matches (40%+)'],[0.6,'Likely (60%+)'],[0.8,'High confidence (80%+)'],[0.95,'Near-certain (95%+)']].map(([v,l])=><option key={v} value={v} style={{background:'#1a1d24'}}>{l}</option>)}</select></label>
           <div className="inline-flex p-0.5 rounded-lg bg-white/[0.04] border border-white/[0.08]">{[['cards','Cards'],['list','List']].map(([k,l])=>{const a=dupView===k;return(<button key={k} onClick={()=>setDupViewP(k)} className={['px-2.5 py-1 rounded-md text-[12px] font-medium transition-all',a?'bg-brand-500 text-white shadow-brand':'text-white/55 hover:text-white'].join(' ')}>{l}</button>);})}</div>
-          <button onClick={scan} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12.5px] font-medium text-white/75 bg-white/[0.05] border border-white/[0.10] hover:bg-white/[0.08] transition-all"><I.Sparkles size={13}/>Scan now</button>
+          {isAdminBulk&&nearCertain.length>0&&st.scan!=='first'&&<button onClick={bulkMerge} data-testid="dup-bulk-merge" className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12.5px] font-medium text-white/75 bg-white/[0.05] border border-white/[0.10] hover:bg-white/[0.08] transition-all"><I.Layers size={13}/>Merge all near-certain ({nearCertain.length})</button>}
+          <button onClick={scan} disabled={st.scan==='updating'||st.scan==='first'} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12.5px] font-medium text-white/75 bg-white/[0.05] border border-white/[0.10] hover:bg-white/[0.08] transition-all disabled:opacity-40 disabled:cursor-not-allowed"><I.Sparkles size={13}/>Scan now</button>
         </div>
       </div>
     )}
-    {groups.length===0?(
+    {showToolbar&&st.scan!=='first'&&<DupScanStatus st={st} onScan={scan} meta={meta}/>}
+    {st.scan==='failed'&&(<div role="alert" className="mb-3 flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl bg-amber-500/[0.08] border border-amber-500/25 text-[12px] text-amber-200"><I.AlertTriangle size={13} className="shrink-0"/><span className="flex-1 min-w-0">Couldn’t finish the last scan. These results are from {st.lastScanned}.</span><button onClick={()=>{_dupSet({scan:'ready'});scan();}} className="shrink-0 font-semibold underline-offset-2 hover:underline">Try again</button></div>)}
+    {st.scan==='truncated'&&(<div className="mb-3 flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl bg-white/[0.03] border border-white/[0.08] text-[12px] text-white/60"><I.Info size={13} className="shrink-0 text-white/45"/><span>Showing the top {DUP_PAIR_CAP} matches, highest confidence first. Merge some, then rescan to see the rest.</span></div>)}
+    {dismissedGroups.length>0&&!showDismissed&&<div className="mb-3 text-[11.5px] text-white/45">{dismissedGroups.length} marked not a duplicate · <button onClick={()=>setShowDismissed(true)} className="font-medium text-brand-300 hover:text-brand-200">Show</button></div>}
+    {showDismissed&&(<div data-testid="dup-dismissed" className="mb-4 rounded-2xl border border-white/[0.06] bg-white/[0.02] overflow-hidden">
+      <div className="flex items-center justify-between px-4 py-2.5 border-b border-white/[0.05]"><p className="text-[12px] font-medium text-white/70">Marked not a duplicate</p><button onClick={()=>setShowDismissed(false)} className="text-[11.5px] text-white/50 hover:text-white">Hide</button></div>
+      {dismissedGroups.length===0&&<p className="px-4 py-4 text-[12px] text-white/45">Nothing here.</p>}
+      {dismissedGroups.map(g=>(<div key={g.id} className="flex items-center gap-3 px-4 py-2.5 border-b border-white/[0.04] last:border-0"><span className="text-[12.5px] text-white/80 truncate flex-1 min-w-0">{g.records.map(r=>r.name).join(' · ')}</span><span className="text-[11px] text-white/40 shrink-0">Matched on {g.matchedOn}</span><button onClick={()=>restore(g)} className="shrink-0 text-[11.5px] font-medium text-brand-300 hover:text-brand-200">Restore</button></div>))}
+    </div>)}
+    {st.scan==='first'?(
+      <div data-testid="dup-first-scan" className="flex items-center justify-center py-16 rounded-2xl border border-white/[0.06] bg-white/[0.01]">
+        <div className="text-center max-w-sm"><div className="w-12 h-12 rounded-xl bg-brand-500/10 border border-brand-500/20 flex items-center justify-center mx-auto mb-3"><span className="w-5 h-5 rounded-full border-2 border-brand-300/40 border-t-brand-300 animate-spin"/></div><p className="text-[14px] font-medium text-white/75">Scanning your {meta.plural} for duplicates…</p><p className="text-[12px] text-white/50 mt-1">This runs in the background. You can leave this page; results appear here when it’s done.</p></div>
+      </div>
+    ):groups.length===0?(
       <div className="flex items-center justify-center py-16 rounded-2xl border border-white/[0.06] bg-white/[0.01]">
         <div className="text-center"><div className="w-12 h-12 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center mx-auto mb-3 text-emerald-300"><I.Check size={22}/></div><p className="text-[14px] font-medium text-white/70">No duplicates found</p><p className="text-[12px] text-white/50 mt-1">Your {meta.plural} look clean. Run a scan after importing new records.</p></div>
       </div>
@@ -6156,11 +6209,16 @@ function DuplicatesView({object,showToolbar}){
           <button onClick={()=>dismiss(g)} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12.5px] font-medium text-white/50 hover:text-white/80 hover:bg-white/[0.04] transition-all"><I.X size={13}/>Not a duplicate</button>
         </div>
       </div>);})}
+    {st.scan!=='first'&&groupsAll.length>pageSize&&(<div data-testid="dup-pager" className="flex items-center justify-between gap-3 mt-1 text-[12px] text-white/50">
+      <span>Showing {pg*pageSize+1}–{Math.min((pg+1)*pageSize,groupsAll.length)} of {groupsAll.length.toLocaleString()}</span>
+      <div className="flex items-center gap-1.5"><button disabled={pg===0} onClick={()=>setPage(pg-1)} className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-white/[0.08] bg-white/[0.03] text-white/70 hover:text-white disabled:opacity-35 disabled:cursor-not-allowed"><I.ChevronLeft size={12}/>Previous</button><span className="px-1 tabular-nums">Page {pg+1} of {pages}</span><button disabled={pg>=pages-1} onClick={()=>setPage(pg+1)} className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-white/[0.08] bg-white/[0.03] text-white/70 hover:text-white disabled:opacity-35 disabled:cursor-not-allowed">Next<I.ChevronRight size={12}/></button></div>
+    </div>)}
     {mergeGroup&&<MergeDrawer object={object} activities={crm.activities} group={{id:mergeGroup.id,confidence:mergeGroup.confidence,matchedOn:mergeGroup.matchedOn,records:mergeGroup._pid?[...mergeGroup.records].sort((a,b)=>(a.id===mergeGroup._pid?-1:b.id===mergeGroup._pid?1:0)):mergeGroup.records}} close={()=>setMergeGroup(null)} onMerge={applyMerge}/>}
     {confirmNode}
   </div>);
 }
 // -- Part D: global Settings -> Duplicates page --
+function DupDemoToggle(){const st=useDupStore();const v=st.many?'many':st.scan;return(<PreviewStateToggle label="Duplicates" options={[{k:'ready',l:'Up to date'},{k:'updating',l:'Updating'},{k:'first',l:'First scan'},{k:'failed',l:'Scan failed'},{k:'truncated',l:'Top matches only'},{k:'many',l:'Many results'}]} value={v} onChange={k=>k==='many'?_dupSet({many:true,scan:'ready'}):_dupSet({many:false,scan:k})}/>);}
 // P3: Lead Scoring — READ-ONLY explainer. Scoring is owned + computed by the backend (activity + fit + decay).
 // This page documents what moves the score; it does not configure it. The prototype's client-side recomputeScore
 // is a SIMULATION stand-in so the Hot/Warm/Cold badge works with no backend — not a second production engine.
@@ -6460,12 +6518,14 @@ function SettingsScoringPage({goTo}){
 }
 function SettingsDuplicatesPage({goTo}){
   const crm=React.useContext(CrmDataContext);
+  const st=useDupStore(); // counts leave out groups marked "Not a duplicate"
+  const live=(o,recs)=>detectDuplicates(o,recs).filter(g=>(st.dismissed[o]||[]).indexOf(g.id)<0).length;
   const [tab,setTab]=React.useState('contact');
   const totals=React.useMemo(()=>({
-    contact:detectDuplicates('contact',crm.contacts).length,
-    company:detectDuplicates('company',crm.companies).length,
-    lead:detectDuplicates('lead',crm.leads).length,
-  }),[crm.contacts,crm.companies,crm.leads]);
+    contact:live('contact',crm.contacts),
+    company:live('company',crm.companies),
+    lead:live('lead',crm.leads),
+  }),[crm.contacts,crm.companies,crm.leads,st.dismissed]);
   const grand=totals.contact+totals.company+totals.lead;
   const tabs=[['contact','Contacts'],['company','Companies'],['lead','Leads']];
   return(
@@ -6478,6 +6538,7 @@ function SettingsDuplicatesPage({goTo}){
           </button>);})}
       </div>}>
       <div><DuplicatesView key={tab} object={tab} showToolbar/></div>
+      <DupDemoToggle/>
     </SettingsShell>
   );
 }
