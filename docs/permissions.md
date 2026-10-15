@@ -58,8 +58,6 @@ Plan limits are checked **before** role checks where both apply. For example, se
 - **Lead API key** (generate, regenerate, revoke) and **Allow duplicate leads**: owner and admin; members read-only. See [../proposals/2026-10-lead-api.md](../proposals/2026-10-lead-api.md).
 - **Email and SMS templates:** everyone can see, insert, create and duplicate templates; editing or deleting one needs its creator, an owner or an admin. See [../proposals/2026-10-message-templates.md](../proposals/2026-10-message-templates.md).
 
-## Proposed (not approved yet)
-
 - **Duplicates bulk merge** ("Merge all near-certain"): owner and admin only. Single merge, Not a duplicate and Restore stay open to every member. See [../proposals/2026-10-duplicates-fast-scan.md](../proposals/2026-10-duplicates-fast-scan.md).
 
 ## Known gaps (code, not design)

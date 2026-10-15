@@ -1,6 +1,6 @@
 ---
 title: Duplicates — instant open, background scan, saved dismiss, bulk merge
-status: proposed        # proposed | approved | in-progress | built | dropped
+status: approved        # proposed | approved | in-progress | built | dropped
 owner: Qamar Ul Islam
 area: docs/areas/workspace-settings.md (Duplicates), docs/areas/contacts.md, docs/areas/companies.md, docs/areas/leads.md (duplicates mode)
 screens: [settings-duplicates, contacts, companies, leads]
