@@ -90,7 +90,11 @@ Opening **Settings › Data management › Duplicates** is slow (SCRUM-1285, fou
 
 **Bulk merge**
 - **Owner or admin only.** Shown only when near-certain groups exist.
-- Near-certain = confidence 95% or more: the same email or phone, or the same normalized name, the backend's 1.0 / 0.9 matches.
+- **Near-certain = an exact match on a strong identifier.** This is not the confidence score: a same-name match scores 100% but is not enough on its own.
+  - **Leads:** the same email, or the same phone digits.
+  - **Companies:** the same phone digits, or the same normalized name **and** the same website domain.
+  - **Contacts:** the same full name **and** the same company. Contacts never share an email or phone (both are unique per workspace), so a name alone would merge two different people with the same name.
+  - **Name-only matches are never bulk-merged.** They stay in the list for a person to review and merge one by one.
 - Each group is merged into its **oldest** record. Fields keep the oldest record's values, tags are combined, and everything linked moves over, as a normal merge does.
 - A confirm says "Merges can't be undone". The toast reports how many groups were merged.
 
@@ -139,6 +143,9 @@ Accepted as recommended:
 3. Bulk merge in phase 3, for owner and admin only.
 4. Single merge stays open to every member.
 5. SCRUM-1285 becomes the phase-1 BE ticket.
+
+## Follow-up (owner, 2026-10-15)
+- **Bulk merge "near-certain" means an exact match on a strong identifier, not 95%+ confidence.** The first version would have bulk-merged every pair of contacts with the same full name, because contacts only match on name. The rule is now: leads on email or phone; companies on phone, or name plus website domain; contacts on name plus company; never on name alone.
 
 ## Tickets (to create after approval)
 - **Phase 1**

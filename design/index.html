@@ -6103,7 +6103,12 @@ function DuplicatesView({object,showToolbar}){
   const groups=groupsAll.slice(pg*pageSize,(pg+1)*pageSize);
   React.useEffect(()=>{setPage(0);},[minConf,object]);
   const isAdminBulk=settingsIsAdmin();
-  const nearCertain=groupsAll.filter(g=>g.confidence==='high');
+  // Near-certain = an exact match on a strong identifier (spec › Bulk merge), never a name alone:
+  // leads on email or phone; companies on phone, or name + website domain; contacts on name + company.
+  const _same=(g,fn)=>{const v=fn(g.records[0]);return !!v&&g.records.every(r=>fn(r)===v);};
+  const nearCertain=groupsAll.filter(g=>object==='lead'?(_same(g,r=>dupNormEmail(r.email))||_same(g,r=>dupNormPhone(r.phone)))
+    :object==='company'?(_same(g,r=>dupNormPhone(r.phone))||(_same(g,r=>dupNormCompany(r.name))&&_same(g,r=>dupNormDomain(r.domain||r.website))))
+    :(_same(g,r=>dupNormName(r.name))&&_same(g,r=>dupNormCompany(r.co))));
   const primaryFor=(g)=>primaryBy[g.id]||g.records[0].id;
   const setPrimary=(g,id)=>setPrimaryBy(s=>({...s,[g.id]:id}));
   // A real, non-destructive merge (mirrors the deal merge doMergeDeals): the survivor is written, the losers are
@@ -6139,7 +6144,7 @@ function DuplicatesView({object,showToolbar}){
   // Scan now queues a background scan; the current results stay on screen until it finishes.
   const scan=()=>{if(st.scan==='updating'||st.scan==='first')return;_dupSet({scan:'updating'});setTimeout(()=>{setScanKey(k=>k+1);_dupSet({scan:'ready',lastScanned:'just now'});const n=detectDuplicates(object,records).filter(g=>dismissed.indexOf(g.id)<0).length;toast('Scan finished · '+n+' possible duplicate'+(n===1?'':'s'));},1600);};
   // Bulk merge (phase 3, owner/admin): every near-certain group, keeping the oldest record in each.
-  const bulkMerge=()=>openConfirm({title:'Merge '+nearCertain.length+' near-certain group'+(nearCertain.length===1?'':'s')+'?',body:'Each group is merged into its oldest record: fields keep the oldest record’s values, tags are combined, and everything linked moves over. Merges can’t be undone.',confirmLabel:'Merge all',danger:true,onConfirm:()=>{nearCertain.forEach(g=>{const {merged,removedIds}=dupBuildMerged(object,g,{primaryId:g.records[0].id});applyMerge(merged,removedIds,true,true);});toast('Merged '+nearCertain.length+' group'+(nearCertain.length===1?'':'s'));}});
+  const bulkMerge=()=>openConfirm({title:'Merge '+nearCertain.length+' near-certain group'+(nearCertain.length===1?'':'s')+'?',body:'Only exact matches on email, phone, or name plus company are included. Each group is merged into its oldest record: fields keep the oldest record’s values, tags are combined, and everything linked moves over. Merges can’t be undone.',confirmLabel:'Merge all',danger:true,onConfirm:()=>{nearCertain.forEach(g=>{const {merged,removedIds}=dupBuildMerged(object,g,{primaryId:g.records[0].id});applyMerge(merged,removedIds,true,true);});toast('Merged '+nearCertain.length+' group'+(nearCertain.length===1?'':'s'));}});
   const Obj=dupObjIcon(object);
   const cols=(g)=>({display:'grid',gap:'10px',gridTemplateColumns:'repeat('+Math.min(g.records.length,3)+',minmax(0,1fr))'});
   const detailRow=(Ic,val)=>(<div className="flex items-center gap-1.5 text-[11.5px]"><Ic size={11} className="text-white/30 shrink-0"/><span className={val?'text-white/65 truncate':'text-white/25 truncate'}>{val||'-'}</span></div>);
