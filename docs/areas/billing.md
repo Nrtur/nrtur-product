@@ -71,6 +71,7 @@ The full price and limit table is in [`pricing/pricing.md`](../../pricing/pricin
 - The seat door is hidden on Solo (`409 SEATS_NOT_AVAILABLE`).
 - Seat changes are refused with `409 PLAN_NOT_SWITCHABLE` while the plan subscription is `PAST_DUE`, `INCOMPLETE` or `CANCEL_SCHEDULED` (the same `switchableStatus` check as a plan switch, `service/quantity_change.go`).
 - A pending invitation reserves a seat when an invite is sent. Invite accept and member reactivation are judged against accepted members only.
+- **Removing a member doesn't change paid seats.** `seats_used` drops and `seats_paid` stays. The seat stays paid as an open seat until the owner lowers it here ("Remove users"). Seats are capacity: you buy a seat, then fill it (decision 2026-09-10; confirmed for SCRUM-1297).
 
 **Add-ons** (`service/addon_change.go`)
 - Five Stripe items exist: mailbox, local line, toll-free line, texting and high-volume texting. All are monthly.
