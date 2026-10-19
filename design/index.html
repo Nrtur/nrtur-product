@@ -13952,7 +13952,7 @@ function SettingsTeamPage({goTo,nav}){
     :(isOwner?'Move to Team to add users.':'Ask your workspace owner about moving to Team.'));
   const seatFullLink=isOwner?(_tier==='paid'?'Add a user':'See plans'):null;
   const revokeInvite=(m)=>openConfirm({title:'Revoke invite for '+m.email+'?',body:'They will no longer be able to join with this invite. You can invite them again any time.',confirmLabel:'Revoke invite',danger:true,onConfirm:()=>{setTeamInvites(a=>a.filter(x=>(x.email||'').toLowerCase()!==(m.email||'').toLowerCase()));_tToast('Invite revoked');}});
-  const removeMember=(m)=>openConfirm({title:`Remove ${m.name}?`,body:'They will lose access immediately. You can re-invite them at any time.',confirmLabel:'Remove',danger:true,onConfirm:()=>{setMembers(ms=>ms.filter(x=>x.email!==m.email));_tToast(m.name+' removed from the workspace');}});
+  const removeMember=(m)=>openConfirm({title:`Remove ${m.name}?`,body:'They will lose access immediately. Their seat stays paid: invite someone else into it, or remove the user in Billing to stop paying for it from your next renewal. You can re-invite them at any time.',confirmLabel:'Remove',danger:true,onConfirm:()=>{setMembers(ms=>ms.filter(x=>x.email!==m.email));_tToast(m.name+' removed from the workspace');}});
   const COL='1.5fr 1.5fr 110px 110px 80px';
   const roleBadge=(r)=>{const c=r==='Owner'?'#9D6C20':(CRM_ROLES.find(x=>x.key===r)||CRM_ROLES[1]).color;return(<span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium w-fit" style={{background:c+'1F',color:c}}>{r}</span>);};
   return(
