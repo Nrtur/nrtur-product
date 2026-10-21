@@ -35,7 +35,7 @@ In **Settings › Integrations** (`settings-integrations` on design.nrtur.io), t
 - **Name:** required, trimmed, at most **50 characters**, and unique among the workspace's **active** keys, ignoring case ("zapier" clashes with "Zapier"). A revoked key's name can be reused.
 - **New key** asks for a name, then shows the full key **once** in the existing dialog ("You won't see this key again", Copy). After that only the masked prefix is shown, e.g. `nrtur_live_7Kd2…`.
 - **Rename** uses the same name rules. It doesn't change the key value, so anything using the key keeps working.
-- **Regenerate** replaces one key's value. The old value stops working **immediately**. A confirm dialog says so. The name and the key's request history stay. The new value is shown once. As in v1, the member who regenerates becomes the key's creator (see Open questions).
+- **Regenerate** replaces one key's value. The old value stops working **immediately**. A confirm dialog says so. The name and the key's request history stay. The new value is shown once. The key **keeps its original creator** and created date: its leads stay owned by that member, and it's auto-revoked only if they leave. Last used resets to "Never used".
 - **Revoke** deletes one key after a confirm dialog. It stops working immediately and leaves the active list. The workspace's other keys keep working.
 - Each key row shows: name, masked prefix, "Created by <member> · <date>", "Last used <time ago>" or "Never used", and "<N> leads (30d)", the number of leads that key created in the last 30 days.
 - The list shows about 5 rows, then scrolls.
@@ -66,7 +66,7 @@ In **Settings › Integrations** (`settings-integrations` on design.nrtur.io), t
 - Every request with a valid key is recorded: time, key, result and, for refusals, the status code, error code and field.
 - **Result** is one of: **Created**, **Duplicate** (`409 DUPLICATE_LEAD` or `409 LEAD_EMAIL_IS_CONTACT`), **Invalid** (`400`, `413`, `415` or `422 VALIDATION_ERROR`), **Rate limited** (`429`) and **Plan refused** (`422 PLAN_FEATURE_UNAVAILABLE` or `PLAN_LIMIT_REACHED`).
 - Each row shows the time, key name, a result chip, and either **View lead** (Created, opens the lead) or the detail, e.g. `422 · phone` or `409 · DUPLICATE_LEAD · matched on email`.
-- **Filters:** key (All keys, or one key) and result (All, Created, Duplicate, Invalid, Rate limited). Rows from a revoked key show its last name with "(revoked)" and stay filterable.
+- **Filters:** key (All keys, or one key) and result (All, Created, Duplicate, Invalid, Rate limited, Plan refused). Rows from a revoked key show its last name with "(revoked)" and stay filterable.
 - Newest first, **25 rows at a time** with **Load more**.
 - The screen shows **the last 30 days** only, with the note "Showing the last 30 days."
 - **Retention:** the backend keeps the log for **12 months**, then a cleanup job deletes older rows.
@@ -102,9 +102,9 @@ None. Still the `api_access` plan feature on Trial, Pro and Business. No limit o
 2. **Leads are owned by the key's creator**, and a removed or suspended member's keys are revoked automatically.
 3. **The full request history is kept (12 months); the screen shows the last 30 days.**
 
-## Open questions
-1. **Regenerate and the key's creator.** The design follows v1: whoever regenerates a key becomes its creator, so future leads are owned by them and the key is revoked if they leave. The alternative is to keep the original creator. Which does the owner want?
-2. **Plan refused in the result filter.** The brief lists the result filter as All, Created, Duplicate, Invalid and Rate limited, so Plan refused rows show only under All. Add Plan refused as a filter option?
+## Follow-up (owner, 2026-10-21)
+1. **Regenerate keeps the original creator.** It doesn't change who owns the key's leads or whose removal revokes it.
+2. **"Plan refused" is its own option** in the request log's result filter.
 
 ## Tickets (to create after approval)
 - **BE**
