@@ -71,7 +71,8 @@ In **Settings › Integrations** (`settings-integrations` on design.nrtur.io), t
 - The screen shows **the last 30 days** only, with the note "Showing the last 30 days."
 - **Retention:** the backend keeps the log for **12 months**, then a cleanup job deletes older rows.
 - **Privacy:** request bodies are **never stored**, only the result, codes and field name.
-- Requests with an unknown or invalid key can't be tied to a key, so they aren't listed. A single line above the list counts them: "N requests with an invalid key in the last 30 days".
+- **Old keys are recognised.** When a key is revoked or regenerated, its hash is kept (marked revoked), so a request that still uses it can be tied to the workspace and the key. Those requests are refused with `401` as today, and a single line above the list counts them: "N requests used a revoked or replaced key in the last 30 days. Update whatever is still sending it."
+- **Keys nrtur never issued** (typos, random strings) can't be tied to any workspace, so they aren't counted or listed anywhere. They only count toward the per-IP failed-lookup limit, as today.
 - On Solo and Team the log is behind the plan gate with the rest of the card.
 
 ## Permissions
@@ -112,9 +113,9 @@ None. Still the `api_access` plan feature on Trial, Pro and Business. No limit o
   - Migration: the existing key becomes a row named "Default key", same hash, creator and dates; it keeps working.
   - Endpoints to create, list, rename, regenerate and revoke a key, owner/admin only (`config:manage`). Revoke allowed on every plan and in read-only; the rest plan-gated. The list includes "leads (30d)" per key.
   - Automatic revoke of every key a member created when they are removed or suspended. API leads owned by the key's creator.
-  - Request-log table (time, key id, result, status, error code, field; no bodies) with 12-month retention and a cleanup job. An invalid-key counter per workspace.
-  - `GET` log endpoint: filters by key and result, 30-day window, paged by 25, plus the invalid-key count for the window. Owner/admin only.
+  - Request-log table (time, key id, result, status, error code, field; no bodies) with 12-month retention and a cleanup job. Revoked and replaced keys keep their hash (status revoked) so later requests with them are recognised; a per-workspace count of those requests.
+  - `GET` log endpoint: filters by key and result, 30-day window, paged by 25, plus the count of requests that used a revoked or replaced key in the window. Owner/admin only.
 - **FE**
   - Key list with New key / Rename / Regenerate / Revoke dialogs and the 10-key limit, the plan-gate list with Revoke, and the member read-only view.
   - View API docs drawer (Overview, Fields, Responses, Examples).
-  - Recent requests section with filters, Load more and the invalid-key count.
+  - Recent requests section with filters, Load more and the revoked/replaced-key count.

@@ -14895,7 +14895,7 @@ const LEAD_API_LOG_SEED=[
   ['Oct 12, 10:15','k1','invalid','422 · estimated_value'],['Oct 11, 14:50','k2','created',103],['Oct 10, 11:27','k1','duplicate','409 · DUPLICATE_LEAD · matched on phone'],['Oct 9, 15:36','k2','created',103],
   ['Oct 6, 09:12','k1','created',103],['Oct 3, 10:41','k1','created',103],
 ].map((r,i)=>({id:'lr'+i,at:r[0],keyId:r[1],keyName:(LEAD_API_SEED_KEYS.find(k=>k.id===r[1])||{}).name,result:r[2],leadId:r[2]==='created'?r[3]:null,detail:r[2]==='created'?null:r[3]}));
-const LEAD_API_INVALID_KEY_30D=7; // requests with an unknown key can't be tied to a key: counted, never listed
+const LEAD_API_INVALID_KEY_30D=7; // requests that used one of THIS workspace's revoked or replaced keys (recognised by its stored hash). A key nrtur never issued can't be tied to any workspace, so it isn't counted anywhere.
 const LEAD_API_LOG_PAGE=25;
 // Prototype store (survives navigation).
 let _leadApiStore={keys:LEAD_API_SEED_KEYS.map(k=>({...k})),allowDup:false,log:LEAD_API_LOG_SEED};
@@ -14972,10 +14972,12 @@ function LeadApiKeyRow({k,leads30,isAdmin,canAct,onRename,onRegenerate,onRevoke,
   </div>);
 }
 // Copyable code block (docs drawer).
+// Example bodies are stored on one line; show them indented, so nothing needs a horizontal scroll bar.
+function leadApiPretty(body){const t=String(body||'');const nl=t.indexOf('{');const head=nl>0?t.slice(0,nl).trim():'';const js=nl>=0?t.slice(nl):t;try{return (head?head+'\n':'')+JSON.stringify(JSON.parse(js.replace(/"…"/g,'"…"')),null,2);}catch(e){return t.replace(/\\n/g,'\n');}}
 function LeadApiCode({label,text}){
   return(<div>
     <div className="flex items-center justify-between gap-2 mb-1.5"><p className="text-[11px] font-medium text-white/45 uppercase tracking-[0.14em]">{label}</p><button onClick={()=>leadApiCopy(text)} className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11.5px] font-medium text-white/70 hover:text-white bg-white/[0.04] border border-white/[0.08] hover:bg-white/[0.07] transition-all"><I.Copy size={12}/>Copy</button></div>
-    <pre className="px-3.5 py-3 rounded-xl bg-black/30 border border-white/[0.08] font-mono text-[11.5px] leading-relaxed text-white/75 overflow-x-auto scroll-area whitespace-pre">{text}</pre>
+    <pre className="px-3.5 py-3 rounded-xl bg-black/30 border border-white/[0.08] font-mono text-[11.5px] leading-relaxed text-white/75 whitespace-pre-wrap break-all">{text}</pre>
   </div>);
 }
 // In-app API docs (no separate docs site): Overview, Fields, Responses, Examples. Everyone who can see the card can open it.
@@ -15024,7 +15026,7 @@ function LeadApiDocsDrawer({allowDup,onClose}){
           {[{k:'overview',l:'Overview'},{k:'fields',l:'Fields'},{k:'responses',l:'Responses'},{k:'examples',l:'Examples'}].map(t=>(<button key={t.k} type="button" role="tab" aria-selected={tab===t.k} onClick={()=>setTab(t.k)} className={segBtn(tab===t.k)+' flex-1'}>{t.l}</button>))}
         </div>
       </div>
-      <div className="flex-1 overflow-y-auto scroll-area px-5 py-5 flex flex-col gap-5" role="tabpanel">
+      <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden scroll-area px-5 py-5 flex flex-col gap-5 [&>*]:shrink-0" role="tabpanel">
         {tab==='overview'&&<React.Fragment>
           <div>
             <p className={H}>Endpoint</p>
@@ -15041,17 +15043,12 @@ function LeadApiDocsDrawer({allowDup,onClose}){
           <div><p className={H}>Duplicates</p><p className={P}>“Allow duplicate leads” is <span className="text-white/85 font-medium">{allowDup?'on':'off'}</span> for this workspace. When it’s off, a lead whose email or phone matches an active lead is refused with <span className={MONO}>409 DUPLICATE_LEAD</span>. When it’s on, the lead is created anyway. An email that belongs to a contact is always refused with <span className={MONO}>409 LEAD_EMAIL_IS_CONTACT</span>.</p></div>
         </React.Fragment>}
         {tab==='fields'&&<React.Fragment>
-          <div className="rounded-xl border border-white/[0.06] overflow-x-auto scroll-area">
-            <table className="w-full min-w-[560px] text-[12px]">
-              <thead className="bg-white/[0.03]"><tr><th className={TH}>Field</th><th className={TH}>Type</th><th className={TH}>Required</th><th className={TH}>Notes</th><th className={TH}>Example</th></tr></thead>
-              <tbody>{LEAD_API_FIELDS.map(r=>(<tr key={r.f} className="border-t border-white/[0.04] align-top">
-                <td className="px-3 py-2.5 font-mono text-[11.5px] text-white/85 whitespace-nowrap">{r.f}</td>
-                <td className="px-3 py-2.5 text-white/55 whitespace-nowrap">{r.type}</td>
-                <td className="px-3 py-2.5 text-white/55 whitespace-nowrap">{r.req}</td>
-                <td className="px-3 py-2.5 text-white/60 leading-relaxed">{r.notes}</td>
-                <td className="px-3 py-2.5 font-mono text-[11px] text-white/70 whitespace-nowrap">{r.ex}</td>
-              </tr>))}</tbody>
-            </table>
+          <div className="rounded-xl border border-white/[0.06] overflow-hidden">
+            {LEAD_API_FIELDS.map((r,i)=>(<div key={r.f} className={['px-3.5 py-3 flex flex-col gap-1.5',i?'border-t border-white/[0.04]':''].join(' ')}>
+              <div className="flex items-center gap-2 flex-wrap"><span className="font-mono text-[12px] text-white/90">{r.f}</span><span className="text-[11px] text-white/45">{r.type}</span><span className={['ml-auto px-1.5 py-0.5 rounded-md text-[10.5px] font-medium ring-1',r.req==='No'?'text-white/50 bg-white/[0.04] ring-white/[0.08]':'text-amber-200 bg-amber-500/10 ring-amber-500/25'].join(' ')}>{r.req==='No'?'Optional':r.req==='Yes'?'Required':r.req}</span></div>
+              <p className="text-[12px] text-white/60 leading-relaxed">{r.notes}</p>
+              <p className="text-[11.5px] text-white/45">Example <span className="font-mono text-white/75 break-all">{r.ex}</span></p>
+            </div>))}
           </div>
           <p className="text-[11px] text-white/40">Status and owner can’t be set per request: the lead gets the default lead status and is owned by the member who created the key.</p>
         </React.Fragment>}
@@ -15063,7 +15060,7 @@ function LeadApiDocsDrawer({allowDup,onClose}){
                 <span className="font-mono text-[11.5px] text-white/80 shrink-0">{r.code}</span>
                 <span className="text-[12px] text-white/60 leading-relaxed flex-1 min-w-[200px]">{r.when}</span>
               </div>
-              <pre className="px-3 py-2 rounded-lg bg-black/30 border border-white/[0.08] font-mono text-[11px] text-white/70 overflow-x-auto scroll-area whitespace-pre">{r.body}</pre>
+              <pre className="px-3 py-2.5 rounded-lg bg-black/30 border border-white/[0.08] font-mono text-[11px] leading-relaxed text-white/70 whitespace-pre-wrap break-words">{leadApiPretty(r.body)}</pre>
             </div>))}
           </div>
           <p className="text-[11px] text-white/40">Every error uses the same envelope: error.code, error.message and, when there is more to say, error.details. Branch on error.code, never on the message.</p>
@@ -15107,7 +15104,7 @@ function LeadApiRequestLog({keys,log,goTo}){
       </div>
     </div>
     <p className="text-[11px] text-white/40 mb-2">Showing the last 30 days. Request bodies aren’t stored.</p>
-    {LEAD_API_INVALID_KEY_30D>0&&<div className="flex items-center gap-2 px-3 py-2 mb-2 rounded-lg bg-white/[0.03] border border-white/[0.06] text-[11.5px] text-white/60" data-lead-api-invalid-count><I.Ban size={12} className="text-white/40 shrink-0"/>{LEAD_API_INVALID_KEY_30D} request{LEAD_API_INVALID_KEY_30D===1?'':'s'} with an invalid key in the last 30 days</div>}
+    {LEAD_API_INVALID_KEY_30D>0&&<div className="flex items-center gap-2 px-3 py-2 mb-2 rounded-lg bg-white/[0.03] border border-white/[0.06] text-[11.5px] text-white/60" data-lead-api-invalid-count><I.Ban size={12} className="text-white/40 shrink-0"/>{LEAD_API_INVALID_KEY_30D} request{LEAD_API_INVALID_KEY_30D===1?'':'s'} used a revoked or replaced key in the last 30 days. Update whatever is still sending it.</div>}
     {!log.length?<p className="text-[12px] text-white/45 px-3 py-3 rounded-lg bg-white/[0.03] border border-white/[0.06]">No requests yet. Requests sent with your keys will appear here.</p>
     :!rows.length?<p className="text-[12px] text-white/45 px-3 py-3 rounded-lg bg-white/[0.03] border border-white/[0.06]">No requests match these filters.</p>
     :<React.Fragment>
