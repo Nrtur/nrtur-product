@@ -14858,15 +14858,50 @@ function SettingsPhoneNumbersPage({goTo}){
     {!readOnly&&<PreviewStateToggle label="Phone numbers" options={[{k:'open',l:'Room on plan'},{k:'limit',l:'At limit'},{k:'refuse',l:'Buy refused (422)'}]} value={capDemo} onChange={setCapDemo}/>}
   </SettingsShell>);
 }
-// ── Lead API (proposals/2026-10-lead-api.md) ── one workspace key that lets outside systems CREATE leads (nothing else).
-// Plan: api_access (Trial, Pro, Business); Solo/Team get the plan gate and no key controls. Read-only workspace: notice + controls disabled.
-// Members (no config:manage) see the card read-only and never the key. The full key is shown ONCE, right after generating.
+// ── Lead API (proposals/2026-10-lead-api.md; v2 PROPOSED in proposals/2026-10-lead-api-v2.md) ── named workspace keys that let outside systems CREATE leads (nothing else).
+// Plan: api_access (Trial, Pro, Business); Solo/Team get the plan gate, and each key keeps only Revoke. Read-only workspace: notice + every action but Revoke disabled.
+// Members (no config:manage) see the key list read-only, never a full key and never the request log. A full key is shown ONCE, right after it is created or regenerated.
+// v2: up to 10 active keys, each named (required, ≤50 chars, unique case-insensitive among active keys). Leads a key creates are owned by the member who created that key.
 const LEAD_API_ENDPOINT='https://api.nrtur.io/api/public/v1/leads';
 const LEAD_API_CURL=['curl -X POST '+LEAD_API_ENDPOINT+' \\','  -H "Authorization: Bearer nrtur_live_YOUR_KEY" \\','  -H "Content-Type: application/json" \\',"  -d '{",'    "name": "Jordan Lee",','    "email": "jordan@example.com",','    "phone": "+14155550123",','    "company_name": "Example Co",','    "job_title": "Operations Manager",','    "source": "Web form",','    "estimated_value": "5000.00",','    "notes": "Asked for a demo"',"  }'"].join('\n');
-// Prototype store (survives navigation): the seeded key is the one that created the seeded API lead (Priya Desai).
-let _leadApiStore={key:{prefix:'nrtur_live_7Kd2',createdBy:'Alex Morgan',createdOn:'Oct 2, 2026',lastUsed:'1h ago'},allowDup:false};
+const LEAD_API_FETCH=["const res = await fetch('"+LEAD_API_ENDPOINT+"', {","  method: 'POST',","  headers: {","    'Authorization': 'Bearer ' + process.env.NRTUR_LEAD_API_KEY,","    'Content-Type': 'application/json',","  },","  body: JSON.stringify({","    name: 'Jordan Lee',","    email: 'jordan@example.com',","    source: 'Web form',","    estimated_value: '5000.00',","  }),","});","if (res.status === 201) {","  const lead = await res.json(); // the new lead's id and its link in nrtur","}"].join('\n');
+const LEAD_API_MAX_KEYS=10;
+const LEAD_API_NAME_MAX=50;
+const LEAD_API_SOURCES=['Web form','Referral','Event','Cold outreach','Ad','LinkedIn','Import','API'];
+// Prototype seed: "Default key" is the v1 key after the migration (same value, still working). Its creator owns the seeded API lead (Priya Desai, id 103).
+const LEAD_API_SEED_KEYS=[
+  {id:'k1',name:'Default key',prefix:'nrtur_live_7Kd2',createdBy:'Alex Morgan',createdOn:'Oct 2, 2026',lastUsed:'1h ago'},
+  {id:'k2',name:'Website form',prefix:'nrtur_live_Qm8f',createdBy:'Sarah Chen',createdOn:'Oct 9, 2026',lastUsed:'4 min ago'},
+  {id:'k3',name:'Zapier',prefix:'nrtur_live_Hx3v',createdBy:'Alex Morgan',createdOn:'Oct 15, 2026',lastUsed:null},
+];
+// "At limit (10)" demo: extra made-up keys that fill the workspace up to the cap.
+const LEAD_API_FILL_KEYS=[['Make','nrtur_live_Pw4n','2d ago'],['Landing page','nrtur_live_Ty6c',null],['Partner: Example Co','nrtur_live_Bv9r','5d ago'],['Webinar form','nrtur_live_Lz2q',null],['Pricing page','nrtur_live_Nc5h','1d ago'],['Chat widget','nrtur_live_Ge8m',null],['Event check-in','nrtur_live_Ru3k','3d ago'],['Ad lead form','nrtur_live_Wd7j',null],['Referral form','nrtur_live_Fs4t','6d ago'],['Trade show','nrtur_live_Jm9x',null]];
+function leadApiFillToLimit(keys){const out=keys.slice();const taken=out.map(k=>k.name.toLowerCase());LEAD_API_FILL_KEYS.forEach((f,i)=>{if(out.length<LEAD_API_MAX_KEYS&&taken.indexOf(f[0].toLowerCase())<0)out.push({id:'kf'+i,name:f[0],prefix:f[1],createdBy:'Sarah Chen',createdOn:'Oct 12, 2026',lastUsed:f[2]});});return out;}
+// Request log: one row per request (time, key, result + code/field). Request bodies are never stored. The screen shows the last 30 days; the backend keeps 12 months.
+const LEAD_API_RESULTS={
+  created:{l:'Created',cls:'text-emerald-300 bg-emerald-500/10 ring-emerald-500/25'},
+  duplicate:{l:'Duplicate',cls:'text-amber-200 bg-amber-500/10 ring-amber-500/25'},
+  invalid:{l:'Invalid',cls:'text-red-300 bg-red-500/10 ring-red-500/25'},
+  rate:{l:'Rate limited',cls:'text-white/65 bg-white/[0.05] ring-white/[0.10]'},
+  plan:{l:'Plan refused',cls:'text-white/65 bg-white/[0.05] ring-white/[0.10]'},
+};
+const LEAD_API_LOG_SEED=[
+  ['4 min ago','k2','created',103],['11 min ago','k2','duplicate','409 · DUPLICATE_LEAD · matched on email'],['26 min ago','k2','created',103],['48 min ago','k2','invalid','422 · phone'],
+  ['1h ago','k1','created',103],['1h ago','k2','created',103],['2h ago','k2','rate','429 · Retry-After 18s'],['2h ago','k2','rate','429 · Retry-After 9s'],
+  ['3h ago','k1','duplicate','409 · DUPLICATE_LEAD · matched on phone'],['5h ago','k2','created',103],['Yesterday 18:12','k2','invalid','422 · source'],['Yesterday 16:40','k1','created',103],
+  ['Yesterday 11:05','k2','duplicate','409 · LEAD_EMAIL_IS_CONTACT'],['Yesterday 09:30','k2','created',103],['Oct 18, 14:22','k1','invalid','422 · name or email'],['Oct 18, 10:03','k2','created',103],
+  ['Oct 17, 15:48','k2','created',103],['Oct 17, 08:55','k1','plan','422 · PLAN_LIMIT_REACHED'],['Oct 16, 19:10','k2','duplicate','409 · DUPLICATE_LEAD · matched on email'],['Oct 16, 12:31','k1','created',103],
+  ['Oct 15, 17:02','k2','invalid','422 · email'],['Oct 15, 09:44','k2','created',103],['Oct 14, 13:20','k1','created',103],['Oct 13, 16:08','k2','rate','429 · Retry-After 31s'],
+  ['Oct 12, 10:15','k1','invalid','422 · estimated_value'],['Oct 11, 14:50','k2','created',103],['Oct 10, 11:27','k1','duplicate','409 · DUPLICATE_LEAD · matched on phone'],['Oct 9, 15:36','k2','created',103],
+  ['Oct 6, 09:12','k1','created',103],['Oct 3, 10:41','k1','created',103],
+].map((r,i)=>({id:'lr'+i,at:r[0],keyId:r[1],keyName:(LEAD_API_SEED_KEYS.find(k=>k.id===r[1])||{}).name,result:r[2],leadId:r[2]==='created'?r[3]:null,detail:r[2]==='created'?null:r[3]}));
+const LEAD_API_INVALID_KEY_30D=7; // requests with an unknown key can't be tied to a key: counted, never listed
+const LEAD_API_LOG_PAGE=25;
+// Prototype store (survives navigation).
+let _leadApiStore={keys:LEAD_API_SEED_KEYS.map(k=>({...k})),allowDup:false,log:LEAD_API_LOG_SEED};
 function leadApiNewKey(){const c='ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789';let s='';for(let i=0;i<32;i++)s+=c[Math.floor(Math.random()*c.length)];return 'nrtur_live_'+s;}
 function leadApiCopy(text){try{navigator.clipboard&&navigator.clipboard.writeText(text).catch(()=>{});}catch(e){}custToast('Copied');}
+function leadApiToday(){try{return new Date().toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});}catch(e){return 'Today';}}
 function LeadApiKeyDialog({fullKey,onDone}){
   const dref=React.useRef(null);useFocusTrap(dref);
   return(
@@ -14886,26 +14921,244 @@ function LeadApiKeyDialog({fullKey,onDone}){
     </div>
   );
 }
+// Name a key (New key / Rename). Required, at most 50 characters, unique (case-insensitive) among the workspace's active keys.
+function LeadApiNameDialog({title,body,initial,confirmLabel,taken,onSave,onCancel}){
+  const dref=React.useRef(null);useFocusTrap(dref);
+  React.useEffect(()=>{const fn=(e)=>{if(e.key==='Escape')onCancel();};document.addEventListener('keydown',fn);return()=>document.removeEventListener('keydown',fn);},[onCancel]);
+  const [v,setV]=React.useState(initial||'');
+  const [tried,setTried]=React.useState(false);
+  const t=v.trim();
+  const dup=!!t&&taken.indexOf(t.toLowerCase())>=0;
+  const err=!t?'Give the key a name.':(t.length>LEAD_API_NAME_MAX?('Use '+LEAD_API_NAME_MAX+' characters or fewer.'):(dup?('You already have a key named “'+t+'”.'):null));
+  const showErr=dup||(tried&&err);
+  const submit=()=>{setTried(true);if(!err)onSave(t);};
+  return(
+    <div className="fixed inset-0 z-[200] flex items-center justify-center p-4" style={{background:'rgba(0,0,0,0.72)',backdropFilter:'blur(8px)'}}>
+      <div ref={dref} role="dialog" aria-modal="true" aria-label={title} tabIndex={-1} style={{width:420,maxWidth:'100%',background:'var(--pop)',border:'1px solid rgba(255,255,255,0.08)',borderRadius:16,backdropFilter:'blur(24px)',boxShadow:'0 0 0 1px rgba(255,255,255,0.04),0 32px 80px rgba(0,0,0,0.65)',padding:24}}>
+        <div className="flex items-start gap-4 mb-5">
+          <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ring-1 bg-brand-500/10 ring-brand-500/25 text-brand-300"><I.Key size={17}/></div>
+          <div><p className="text-white text-[15px] font-semibold leading-snug">{title}</p><p className="text-white/55 text-[13px] mt-2 leading-relaxed">{body}</p></div>
+        </div>
+        <div className="mb-5">
+          <div className="flex items-center justify-between mb-1.5"><label htmlFor="lead-api-key-name" className="block text-[12px] text-white/55">Name</label><span className="text-[11px] text-white/35 tabular-nums">{v.length}/{LEAD_API_NAME_MAX}</span></div>
+          <input id="lead-api-key-name" autoFocus value={v} maxLength={LEAD_API_NAME_MAX} onChange={e=>setV(e.target.value)} onKeyDown={e=>{if(e.key==='Enter')submit();}} placeholder="e.g. Website form" aria-invalid={showErr?'true':'false'} className={['w-full px-3 py-2.5 rounded-xl bg-white/[0.04] border text-[13px] text-white placeholder:text-white/25 outline-none transition-colors',showErr?'border-red-500/40':'border-white/[0.10] focus:border-brand-500/40'].join(' ')} style={{colorScheme:'dark'}}/>
+          {showErr?<p role="alert" className="text-[11.5px] text-red-300 mt-1.5">{err}</p>:<p className="text-[11px] text-white/40 mt-1.5">Name it after where it’s used, like “Website form” or “Zapier”.</p>}
+        </div>
+        <div className="flex gap-3">
+          <button onClick={onCancel} className="flex-1 py-2.5 rounded-xl text-[13px] font-medium text-white/65 bg-white/[0.04] border border-white/[0.08] hover:bg-white/[0.07] transition-all">Cancel</button>
+          <button onClick={submit} className="flex-1 py-2.5 rounded-xl text-[13px] font-semibold text-white bg-brand-500 hover:bg-brand-400 border-none transition-all">{confirmLabel}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+// One key row: name + masked prefix · created by/on · last used · leads in the last 30 days · ⋯ (Rename, Regenerate, Revoke) for owner/admin.
+function LeadApiKeyRow({k,leads30,isAdmin,canAct,onRename,onRegenerate,onRevoke,last}){
+  const menuRef=React.useRef(null);
+  const [menuOpen,setMenuOpen]=React.useState(false);
+  const ITEM='w-full flex items-center gap-2.5 px-3 py-2 text-[13px] transition-colors disabled:opacity-40 disabled:cursor-not-allowed';
+  return(<div className={['grid grid-cols-1 sm:grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)_118px_100px_28px] items-center gap-x-4 gap-y-0.5 px-3 py-2.5',last?'':'border-b border-white/[0.04]'].join(' ')} data-lead-api-key-row={k.name}>
+    <div className="min-w-0"><p className="text-[12.5px] text-white/85 font-medium truncate">{k.name}</p><p className="font-mono text-[11px] text-white/40 truncate" data-lead-api-masked>{k.prefix}…</p></div>
+    <p className="text-[11.5px] text-white/50 truncate">Created by {k.createdBy} · {k.createdOn}</p>
+    <p className="text-[11.5px] text-white/50">{k.lastUsed?('Last used '+k.lastUsed):'Never used'}</p>
+    <p className="text-[11.5px] text-white/60 tabular-nums sm:text-right">{leads30} lead{leads30===1?'':'s'} (30d)</p>
+    <div className="flex sm:justify-end">{isAdmin&&<button ref={menuRef} onClick={()=>setMenuOpen(o=>!o)} title="Key actions" aria-label={'Actions for '+k.name} aria-haspopup="menu" aria-expanded={menuOpen} className="w-7 h-7 rounded-lg flex items-center justify-center text-white/35 hover:text-white hover:bg-white/[0.06] transition-all shrink-0"><I.More size={14}/></button>}</div>
+    {isAdmin&&menuOpen&&<AnchoredMenu anchorRef={menuRef} open onClose={()=>setMenuOpen(false)} align="right" width={176} className="py-1 rounded-xl border border-white/[0.10]" style={{background:'var(--pop2)',backdropFilter:'blur(16px)',boxShadow:'0 16px 50px rgba(0,0,0,0.6)'}}>
+      <button disabled={!canAct} onClick={()=>{setMenuOpen(false);onRename(k);}} className={ITEM+' text-white/80 hover:bg-white/[0.05] hover:text-white'}><I.Edit size={13}/>Rename</button>
+      <button disabled={!canAct} onClick={()=>{setMenuOpen(false);onRegenerate(k);}} className={ITEM+' text-white/80 hover:bg-white/[0.05] hover:text-white'}><I.History size={13}/>Regenerate</button>
+      {/* Revoke works on every plan and in a read-only workspace. */}
+      <button onClick={()=>{setMenuOpen(false);onRevoke(k);}} className={ITEM+' text-red-300 hover:bg-red-500/10'}><I.Trash size={13}/>Revoke</button>
+    </AnchoredMenu>}
+  </div>);
+}
+// Copyable code block (docs drawer).
+function LeadApiCode({label,text}){
+  return(<div>
+    <div className="flex items-center justify-between gap-2 mb-1.5"><p className="text-[11px] font-medium text-white/45 uppercase tracking-[0.14em]">{label}</p><button onClick={()=>leadApiCopy(text)} className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11.5px] font-medium text-white/70 hover:text-white bg-white/[0.04] border border-white/[0.08] hover:bg-white/[0.07] transition-all"><I.Copy size={12}/>Copy</button></div>
+    <pre className="px-3.5 py-3 rounded-xl bg-black/30 border border-white/[0.08] font-mono text-[11.5px] leading-relaxed text-white/75 overflow-x-auto scroll-area whitespace-pre">{text}</pre>
+  </div>);
+}
+// In-app API docs (no separate docs site): Overview, Fields, Responses, Examples. Everyone who can see the card can open it.
+const LEAD_API_FIELDS=[
+  {f:'name',type:'string',req:'Name or email',notes:'The lead’s full name.',ex:'"Jordan Lee"'},
+  {f:'email',type:'string',req:'Name or email',notes:'A valid email address. Checked for duplicates.',ex:'"jordan@example.com"'},
+  {f:'phone',type:'string',req:'No',notes:'7–15 digits after removing spaces, dashes, dots and brackets, with an optional leading +. Checked for duplicates.',ex:'"+1 (415) 555-0123"'},
+  {f:'company_name',type:'string',req:'No',notes:'The company, as text.',ex:'"Example Co"'},
+  {f:'job_title',type:'string',req:'No',notes:'The lead’s job title.',ex:'"Operations Manager"'},
+  {f:'source',type:'string',req:'No',notes:'One of '+LEAD_API_SOURCES.join(', ')+' (case-insensitive). Defaults to “API” when missing or blank. Anything else is refused.',ex:'"Web form"'},
+  {f:'estimated_value',type:'string (decimal)',req:'No',notes:'A decimal string, not a number.',ex:'"5000.00"'},
+  {f:'notes',type:'string',req:'No',notes:'Becomes the first note on the lead’s timeline.',ex:'"Asked for a demo"'},
+];
+const LEAD_API_RESPONSES=[ // Matches nrtur-backend api/openapi.yaml (publicCreateLead). Every error uses the standard {error:{code,message,details}} envelope.
+  {s:'201',code:'—',when:'The lead was created.',body:'{ "id": "<lead id>", "url": "https://app.nrtur.io/leads/<lead id>" }'},
+  {s:'400',code:'BAD_REQUEST',when:'The body is not a JSON object.',body:'{ "error": { "code": "BAD_REQUEST", "message": "…" } }'},
+  {s:'401',code:'UNAUTHORIZED',when:'The key is missing, malformed, wrong, revoked or replaced. No detail is given, by design.',body:'{ "error": { "code": "UNAUTHORIZED", "message": "…" } }'},
+  {s:'409',code:'DUPLICATE_LEAD',when:'“Allow duplicate leads” is off and an active lead has the same email or phone. The existing lead’s name is never returned.',body:'{ "error": { "code": "DUPLICATE_LEAD", "message": "…", "details": [ { "existing_lead_id": "<id>", "matched_on": "email" } ] } }'},
+  {s:'409',code:'LEAD_EMAIL_IS_CONTACT',when:'The email belongs to an existing contact. Refused whatever the duplicates setting.',body:'{ "error": { "code": "LEAD_EMAIL_IS_CONTACT", "message": "…", "details": [ { "contact_id": "<id>" } ] } }'},
+  {s:'413',code:'PAYLOAD_TOO_LARGE',when:'The body is over 64 KB.',body:'{ "error": { "code": "PAYLOAD_TOO_LARGE", "message": "…" } }'},
+  {s:'415',code:'UNSUPPORTED_MEDIA_TYPE',when:'The body is not application/json.',body:'{ "error": { "code": "UNSUPPORTED_MEDIA_TYPE", "message": "…" } }'},
+  {s:'422',code:'VALIDATION_ERROR',when:'One entry per failing field. code is REQUIRED (neither name nor email), INVALID (bad email, phone, estimated_value or source), TOO_LONG or PATTERN (phone shape).',body:'{ "error": { "code": "VALIDATION_ERROR", "message": "…", "details": [ { "field": "phone", "code": "PATTERN", "message": "…" } ] } }'},
+  {s:'422',code:'PLAN_FEATURE_UNAVAILABLE',when:'The plan has no API access (Solo, Team), or the workspace is read-only. details names the tier.',body:'{ "error": { "code": "PLAN_FEATURE_UNAVAILABLE", "message": "…", "details": [ { "tier": "read_only" } ] } }'},
+  {s:'422',code:'PLAN_LIMIT_REACHED',when:'The workspace is at its leads records cap.',body:'{ "error": { "code": "PLAN_LIMIT_REACHED", "message": "…" } }'},
+  {s:'429',code:'RATE_LIMITED',when:'More than 60 requests in a minute for this workspace (shared by all its keys), or too many failed key lookups from one IP. Wait the Retry-After seconds, then retry.',body:'Retry-After: 30\n{ "error": { "code": "RATE_LIMITED", "message": "…" } }'},
+];
+function LeadApiDocsDrawer({allowDup,onClose}){
+  const dref=React.useRef(null);useFocusTrap(dref);
+  React.useEffect(()=>{const fn=(e)=>{if(e.key==='Escape')onClose();};document.addEventListener('keydown',fn);return()=>document.removeEventListener('keydown',fn);},[onClose]);
+  const [tab,setTab]=React.useState('overview');
+  const H='text-[12.5px] font-semibold text-white mb-1.5';
+  const P='text-[12px] text-white/60 leading-relaxed';
+  const MONO='font-mono text-[11.5px] px-1.5 py-0.5 rounded-md bg-black/30 border border-white/[0.08] text-white/80';
+  const TH='text-left text-[10.5px] font-medium text-white/40 uppercase tracking-[0.12em] px-3 py-2';
+  return(<React.Fragment>
+    <div className="fixed inset-0 bg-black/40 z-[179]" onClick={onClose}/>
+    <div ref={dref} role="dialog" aria-modal="true" aria-label="Lead API docs" tabIndex={-1} data-lead-api-docs
+      className="fixed z-[180] flex flex-col border-white/[0.08] left-0 right-0 bottom-0 max-h-[90vh] rounded-t-2xl border-t sm:left-auto sm:right-0 sm:top-0 sm:bottom-0 sm:w-[640px] sm:max-w-full sm:max-h-none sm:rounded-none sm:border-t-0 sm:border-l"
+      style={{background:'var(--panel98)',backdropFilter:'blur(16px)',boxShadow:'-8px 0 40px rgba(0,0,0,0.5)',animation:'arIn .22s ease'}}>
+      <div className="shrink-0 flex items-center justify-between px-5 py-4 border-b border-white/[0.06]">
+        <div className="flex items-center gap-2.5 min-w-0"><span className="w-8 h-8 rounded-lg bg-brand-500/12 ring-1 ring-brand-500/25 flex items-center justify-center text-brand-300 shrink-0"><I.Key size={15}/></span><p className="text-[14px] font-semibold text-white truncate">Lead API docs</p></div>
+        <button onClick={onClose} title="Close" aria-label="Close" className="text-white/40 hover:text-white transition-colors shrink-0"><I.X size={16}/></button>
+      </div>
+      <div className="shrink-0 px-5 pt-4">
+        <div className={SEG_WRAP+' w-full overflow-x-auto'} role="tablist" aria-label="Lead API docs sections">
+          {[{k:'overview',l:'Overview'},{k:'fields',l:'Fields'},{k:'responses',l:'Responses'},{k:'examples',l:'Examples'}].map(t=>(<button key={t.k} type="button" role="tab" aria-selected={tab===t.k} onClick={()=>setTab(t.k)} className={segBtn(tab===t.k)+' flex-1'}>{t.l}</button>))}
+        </div>
+      </div>
+      <div className="flex-1 overflow-y-auto scroll-area px-5 py-5 flex flex-col gap-5" role="tabpanel">
+        {tab==='overview'&&<React.Fragment>
+          <div>
+            <p className={H}>Endpoint</p>
+            <div className="flex items-center gap-2">
+              <div className="flex-1 min-w-0 flex items-center gap-2 px-3 py-2.5 rounded-xl bg-black/30 border border-white/[0.08] font-mono text-[12px] text-white/80 overflow-hidden"><span className="px-1.5 py-0.5 rounded-md bg-brand-500/15 text-brand-300 text-[10.5px] font-semibold shrink-0">POST</span><span className="truncate">{LEAD_API_ENDPOINT}</span></div>
+              <button onClick={()=>leadApiCopy(LEAD_API_ENDPOINT)} className="inline-flex items-center gap-1.5 px-3 h-10 rounded-xl text-[12px] font-medium text-white/70 hover:text-white bg-white/[0.04] border border-white/[0.08] hover:bg-white/[0.07] transition-all shrink-0"><I.Copy size={13}/>Copy</button>
+            </div>
+            <p className="text-[11px] text-white/40 mt-1.5">This is production. Staging uses the staging API host with the same path.</p>
+          </div>
+          <div><p className={H}>Authentication</p><p className={P}>Send one of your workspace’s keys in a header on every request: <span className={MONO}>Authorization: Bearer &lt;key&gt;</span>. A missing or wrong key gets <span className={MONO}>401</span> with no detail.</p></div>
+          <div><p className={H}>Request body</p><p className={P}>JSON, with <span className={MONO}>Content-Type: application/json</span>. Name or email is required. See Fields for the rest.</p></div>
+          <div><p className={H}>What it does</p><p className={P}>Creates a lead. Nothing else: the API can’t read, edit or delete anything. The new lead gets the workspace’s default lead status, is owned by the member who created the key, and its timeline says “Created via Lead API”.</p></div>
+          <div><p className={H}>Rate limit</p><p className={P}>60 requests per minute per workspace, shared by all its keys. Above that the API returns <span className={MONO}>429</span> with a <span className={MONO}>Retry-After</span> header (seconds).</p></div>
+          <div><p className={H}>Duplicates</p><p className={P}>“Allow duplicate leads” is <span className="text-white/85 font-medium">{allowDup?'on':'off'}</span> for this workspace. When it’s off, a lead whose email or phone matches an active lead is refused with <span className={MONO}>409 DUPLICATE_LEAD</span>. When it’s on, the lead is created anyway. An email that belongs to a contact is always refused with <span className={MONO}>409 LEAD_EMAIL_IS_CONTACT</span>.</p></div>
+        </React.Fragment>}
+        {tab==='fields'&&<React.Fragment>
+          <div className="rounded-xl border border-white/[0.06] overflow-x-auto scroll-area">
+            <table className="w-full min-w-[560px] text-[12px]">
+              <thead className="bg-white/[0.03]"><tr><th className={TH}>Field</th><th className={TH}>Type</th><th className={TH}>Required</th><th className={TH}>Notes</th><th className={TH}>Example</th></tr></thead>
+              <tbody>{LEAD_API_FIELDS.map(r=>(<tr key={r.f} className="border-t border-white/[0.04] align-top">
+                <td className="px-3 py-2.5 font-mono text-[11.5px] text-white/85 whitespace-nowrap">{r.f}</td>
+                <td className="px-3 py-2.5 text-white/55 whitespace-nowrap">{r.type}</td>
+                <td className="px-3 py-2.5 text-white/55 whitespace-nowrap">{r.req}</td>
+                <td className="px-3 py-2.5 text-white/60 leading-relaxed">{r.notes}</td>
+                <td className="px-3 py-2.5 font-mono text-[11px] text-white/70 whitespace-nowrap">{r.ex}</td>
+              </tr>))}</tbody>
+            </table>
+          </div>
+          <p className="text-[11px] text-white/40">Status and owner can’t be set per request: the lead gets the default lead status and is owned by the member who created the key.</p>
+        </React.Fragment>}
+        {tab==='responses'&&<React.Fragment>
+          <div className="rounded-xl border border-white/[0.06] overflow-hidden">
+            {LEAD_API_RESPONSES.map((r,i)=>(<div key={i} className={['px-3.5 py-3 flex flex-col gap-2',i?'border-t border-white/[0.04]':''].join(' ')}>
+              <div className="flex items-start gap-3 flex-wrap">
+                <span className={['px-1.5 py-0.5 rounded-md text-[11px] font-semibold font-mono ring-1 shrink-0',r.s==='201'?'text-emerald-300 bg-emerald-500/10 ring-emerald-500/25':(r.s==='429'?'text-white/70 bg-white/[0.05] ring-white/[0.10]':'text-amber-200 bg-amber-500/10 ring-amber-500/25')].join(' ')}>{r.s}</span>
+                <span className="font-mono text-[11.5px] text-white/80 shrink-0">{r.code}</span>
+                <span className="text-[12px] text-white/60 leading-relaxed flex-1 min-w-[200px]">{r.when}</span>
+              </div>
+              <pre className="px-3 py-2 rounded-lg bg-black/30 border border-white/[0.08] font-mono text-[11px] text-white/70 overflow-x-auto scroll-area whitespace-pre">{r.body}</pre>
+            </div>))}
+          </div>
+          <p className="text-[11px] text-white/40">Every error uses the same envelope: error.code, error.message and, when there is more to say, error.details. Branch on error.code, never on the message.</p>
+        </React.Fragment>}
+        {tab==='examples'&&<React.Fragment>
+          <LeadApiCode label="curl" text={LEAD_API_CURL}/>
+          <div className="flex flex-col gap-1.5">
+            <LeadApiCode label="JavaScript (fetch)" text={LEAD_API_FETCH}/>
+            <p className="text-[11px] text-white/40">Send requests from your server, never from code that runs in a visitor’s browser, so the key stays private.</p>
+          </div>
+          <div className="rounded-xl border border-white/[0.06] bg-white/[0.03] px-3.5 py-3">
+            <p className={H}>Using Zapier or Make</p>
+            <p className={P}>Use their Webhooks or HTTP action:</p>
+            <ol className="list-decimal pl-5 mt-1.5 flex flex-col gap-1 text-[12px] text-white/60 leading-relaxed">
+              <li>Method <span className={MONO}>POST</span>, URL <span className={MONO+' break-all'}>{LEAD_API_ENDPOINT}</span></li>
+              <li>Header <span className={MONO}>Authorization</span> with the value <span className={MONO}>Bearer &lt;key&gt;</span>. Create a key just for it, like “Zapier”, so you can see its requests and revoke it on its own.</li>
+              <li>Body type JSON, mapping your form’s fields to the field names in Fields.</li>
+            </ol>
+          </div>
+        </React.Fragment>}
+      </div>
+    </div>
+  </React.Fragment>);
+}
+// Recent requests (owner/admin only): last 30 days on screen, filters by key and result, 25 at a time.
+function LeadApiRequestLog({keys,log,goTo}){
+  const [keyF,setKeyF]=React.useState('all');
+  const [resF,setResF]=React.useState('all');
+  const [shown,setShown]=React.useState(LEAD_API_LOG_PAGE);
+  React.useEffect(()=>{setShown(LEAD_API_LOG_PAGE);},[keyF,resF]);
+  const nameOf=(r)=>{const k=keys.find(x=>x.id===r.keyId);return k?k.name:(r.keyName+' (revoked)');};
+  const keyOpts=[];keys.forEach(k=>keyOpts.push({v:k.id,l:k.name}));log.forEach(r=>{if(!keyOpts.some(o=>o.v===r.keyId))keyOpts.push({v:r.keyId,l:r.keyName+' (revoked)'});});
+  const rows=log.filter(r=>(keyF==='all'||r.keyId===keyF)&&(resF==='all'||r.result===resF));
+  const SEL='pl-3 pr-8 py-1.5 rounded-lg bg-white/[0.04] border border-white/[0.10] text-[12px] text-white/80 outline-none appearance-none cursor-pointer max-w-[180px] truncate';
+  return(<div data-lead-api-log>
+    <div className="flex items-center justify-between gap-3 flex-wrap mb-1.5">
+      <p className="text-[11px] font-medium text-white/45 uppercase tracking-[0.14em]">Recent requests</p>
+      <div className="flex items-center gap-2 flex-wrap">
+        <div className="relative"><select aria-label="Filter by key" value={keyF} onChange={e=>setKeyF(e.target.value)} className={SEL} style={{colorScheme:'dark',background:'var(--s850)'}}><option value="all">All keys</option>{keyOpts.map(o=>(<option key={o.v} value={o.v}>{o.l}</option>))}</select><I.ChevronDown size={12} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-white/35 pointer-events-none"/></div>
+        <div className="relative"><select aria-label="Filter by result" value={resF} onChange={e=>setResF(e.target.value)} className={SEL} style={{colorScheme:'dark',background:'var(--s850)'}}><option value="all">All results</option>{['created','duplicate','invalid','rate'].map(k=>(<option key={k} value={k}>{LEAD_API_RESULTS[k].l}</option>))}</select><I.ChevronDown size={12} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-white/35 pointer-events-none"/></div>
+      </div>
+    </div>
+    <p className="text-[11px] text-white/40 mb-2">Showing the last 30 days. Request bodies aren’t stored.</p>
+    {LEAD_API_INVALID_KEY_30D>0&&<div className="flex items-center gap-2 px-3 py-2 mb-2 rounded-lg bg-white/[0.03] border border-white/[0.06] text-[11.5px] text-white/60" data-lead-api-invalid-count><I.Ban size={12} className="text-white/40 shrink-0"/>{LEAD_API_INVALID_KEY_30D} request{LEAD_API_INVALID_KEY_30D===1?'':'s'} with an invalid key in the last 30 days</div>}
+    {!log.length?<p className="text-[12px] text-white/45 px-3 py-3 rounded-lg bg-white/[0.03] border border-white/[0.06]">No requests yet. Requests sent with your keys will appear here.</p>
+    :!rows.length?<p className="text-[12px] text-white/45 px-3 py-3 rounded-lg bg-white/[0.03] border border-white/[0.06]">No requests match these filters.</p>
+    :<React.Fragment>
+      <div tabIndex={0} aria-label="Recent Lead API requests" className="scroll-area flex flex-col overflow-y-auto rounded-lg border border-white/[0.06] bg-white/[0.02] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40" style={{maxHeight:320}}>
+        {rows.slice(0,shown).map((r,i,a)=>{const m=LEAD_API_RESULTS[r.result];return(<div key={r.id} className={['flex items-center gap-x-3 gap-y-1 px-3 py-2 flex-wrap',i<a.length-1?'border-b border-white/[0.04]':''].join(' ')}>
+          <span className="w-[108px] shrink-0 text-[11px] text-white/40 tabular-nums">{r.at}</span>
+          <span className="flex-1 min-w-[90px] text-[12px] text-white/75 truncate">{nameOf(r)}</span>
+          <span className={'inline-flex items-center px-1.5 py-0.5 rounded-md text-[10.5px] font-medium ring-1 shrink-0 '+m.cls}>{m.l}</span>
+          <span className="sm:w-[300px] shrink-0 sm:text-right whitespace-nowrap">{r.result==='created'?<button onClick={()=>goTo&&goTo('lead-detail',r.leadId)} className="inline-flex items-center gap-1 text-[11.5px] font-medium text-brand-300 hover:text-brand-200">View lead<I.ArrowUpRight size={11}/></button>:<span className="font-mono text-[11px] text-white/50">{r.detail}</span>}</span>
+        </div>);})}
+      </div>
+      <div className="flex items-center justify-between gap-3 mt-2"><span className="text-[11px] text-white/40 tabular-nums">Showing {Math.min(shown,rows.length)} of {rows.length}</span>{shown<rows.length&&<button onClick={()=>setShown(s=>s+LEAD_API_LOG_PAGE)} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] font-medium text-white/70 hover:text-white bg-white/[0.04] border border-white/[0.08] hover:bg-white/[0.07] transition-all">Load more</button>}</div>
+    </React.Fragment>}
+  </div>);
+}
 function LeadApiCard({goTo,stackToggle}){
   const _bc=React.useContext(BillingContext);
   const {confirmNode,openConfirm}=useConfirm();
-  const [demo,setDemo]=React.useState('plan'); // plan | solo | team | readonly | member
-  const [apiKey,setApiKeyS]=React.useState(_leadApiStore.key);
+  const [demo,setDemo]=React.useState('plan'); // plan | nokeys | limit | solo | team | readonly | member
+  const [keys,setKeysS]=React.useState(_leadApiStore.keys);
+  const [log,setLogS]=React.useState(_leadApiStore.log);
   const [allowDup,setAllowDupS]=React.useState(_leadApiStore.allowDup);
   const [shownKey,setShownKey]=React.useState(null); // the full key — held only while its one-time dialog is open
-  const setApiKey=(k)=>{_leadApiStore.key=k;setApiKeyS(k);};
+  const [nameDlg,setNameDlg]=React.useState(null); // {mode:'new'} | {mode:'rename',key}
+  const [docsOpen,setDocsOpen]=React.useState(false);
+  const setKeys=(u)=>{const next=typeof u==='function'?u(_leadApiStore.keys):u;_leadApiStore.keys=next;setKeysS(next);};
+  const setLog=(u)=>{const next=typeof u==='function'?u(_leadApiStore.log):u;_leadApiStore.log=next;setLogS(next);};
   const setAllowDup=(v)=>{_leadApiStore.allowDup=v;setAllowDupS(v);};
+  const pickDemo=(k)=>{
+    if(k==='nokeys')setKeys([]);
+    else if(k==='limit')setKeys(leadApiFillToLimit(_leadApiStore.keys.length?_leadApiStore.keys:LEAD_API_SEED_KEYS.map(x=>({...x}))));
+    else if(demo==='nokeys'||demo==='limit')setKeys(LEAD_API_SEED_KEYS.map(x=>({...x})));
+    setDemo(k);
+  };
   const tier=(demo==='solo'||demo==='team')?demo:(_bc.billingState==='trial'?'trial':((_bc.sub||BILLING_SUB_SEED).tier));
   const readOnly=demo==='readonly'||capWorkspaceReadOnly(_bc);
   const gateReason=!readOnly&&(tier==='solo'||tier==='team')?('The Lead API isn’t included in the '+(tier==='solo'?'Solo':'Team')+' plan. It’s available on the Pro plan.'):null;
   const isAdmin=settingsIsAdmin()&&demo!=='member'; // config:manage — owner/admin
   const canAct=isAdmin&&!readOnly;
-  const generate=()=>{const full=leadApiNewKey();const now=(()=>{try{return new Date().toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});}catch(e){return 'Today';}})();setApiKey({prefix:full.slice(0,15),createdBy:CURRENT_USER.name,createdOn:now,lastUsed:null});setShownKey(full);custToast('Key generated');};
-  const regenerate=()=>openConfirm({title:'Regenerate the Lead API key?',body:'The current key stops working immediately. Anything still sending it will be refused until you update it with the new key.',confirmLabel:'Regenerate key',danger:true,onConfirm:generate});
-  const revoke=()=>openConfirm({title:'Revoke the Lead API key?',body:'The key is deleted and the Lead API stops accepting requests until a new key is generated.',confirmLabel:'Revoke key',danger:true,onConfirm:()=>{setApiKey(null);custToast('Key revoked');}});
-  const LBL='text-[11px] font-medium text-white/45 uppercase tracking-[0.14em] mb-1.5';
+  const atLimit=keys.length>=LEAD_API_MAX_KEYS;
+  const leads30=(id)=>log.filter(r=>r.keyId===id&&r.result==='created').length;
+  const takenExcept=(id)=>keys.filter(k=>k.id!==id).map(k=>k.name.toLowerCase());
+  const createKey=(name)=>{const full=leadApiNewKey();setKeys(ks=>[...ks,{id:'k_'+Date.now().toString(36),name,prefix:full.slice(0,15),createdBy:CURRENT_USER.name,createdOn:leadApiToday(),lastUsed:null}]);setNameDlg(null);setShownKey(full);custToast('Key created');};
+  const renameKey=(k,name)=>{setKeys(ks=>ks.map(x=>x.id===k.id?{...x,name}:x));setLog(rs=>rs.map(r=>r.keyId===k.id?{...r,keyName:name}:r));setNameDlg(null);custToast('Key renamed');};
+  // Regenerate keeps the name, history and lead count; the old value stops working at once. Like v1, the member who regenerates becomes the key's creator.
+  const regenerate=(k)=>openConfirm({title:'Regenerate “'+k.name+'”?',body:'The current value of this key stops working immediately. Anything still sending it will be refused until you update it with the new key. The name and request history stay.',confirmLabel:'Regenerate key',danger:true,onConfirm:()=>{const full=leadApiNewKey();setKeys(ks=>ks.map(x=>x.id===k.id?{...x,prefix:full.slice(0,15),createdBy:CURRENT_USER.name,createdOn:leadApiToday(),lastUsed:null}:x));setShownKey(full);custToast('Key regenerated');}});
+  const revoke=(k)=>openConfirm({title:'Revoke “'+k.name+'”?',body:'The key is deleted and stops working immediately. Anything still sending it will be refused. Your other keys keep working.',confirmLabel:'Revoke key',danger:true,onConfirm:()=>{setKeys(ks=>ks.filter(x=>x.id!==k.id));custToast('Key revoked');}});
+  const LBL='text-[11px] font-medium text-white/45 uppercase tracking-[0.14em]';
   const COPY_BTN='inline-flex items-center gap-1.5 px-3 h-10 rounded-xl text-[12px] font-medium text-white/70 hover:text-white bg-white/[0.04] border border-white/[0.08] hover:bg-white/[0.07] transition-all shrink-0';
-  const toggleEl=(<PreviewStateToggle label="Lead API" options={[{k:'plan',l:'Plan OK'},{k:'solo',l:'Solo (gated)'},{k:'team',l:'Team (gated)'},{k:'readonly',l:'Read-only'},{k:'member',l:'Member view'}]} value={demo} onChange={setDemo}/>);
+  const LIMIT_TIP='You can have up to '+LEAD_API_MAX_KEYS+' active keys. Revoke one to add another.';
+  const toggleEl=(<PreviewStateToggle label="Lead API" options={[{k:'plan',l:'Plan OK'},{k:'nokeys',l:'No keys'},{k:'limit',l:'At limit (10)'},{k:'solo',l:'Solo (gated)'},{k:'team',l:'Team (gated)'},{k:'readonly',l:'Read-only'},{k:'member',l:'Member view'}]} value={demo} onChange={pickDemo}/>);
   return(
     <React.Fragment>
       <div className="rounded-2xl border border-white/[0.06] bg-white/[0.03] p-5" data-lead-api-card>
@@ -14915,50 +15168,49 @@ function LeadApiCard({goTo,stackToggle}){
         </div>
         {gateReason?<div className="flex flex-col gap-3"><CapGateBox reason={gateReason} remedy="See plans" goTo={goTo}/>
           {/* Revoke works on every plan, so a leaked key can't come back on a re-upgrade. Every other action stays gated. */}
-          {isAdmin&&apiKey&&<div className="flex items-center justify-between gap-4 flex-wrap px-3 py-2.5 rounded-xl bg-white/[0.03] border border-white/[0.06]"><p className="text-[12px] text-white/60 min-w-0">A key still exists (<span className="font-mono">{apiKey.prefix}…</span>). Revoke it so it can’t be used again if you upgrade.</p><button onClick={revoke} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] font-medium text-red-300 bg-red-500/10 border border-red-500/20 hover:bg-red-500/15 transition-all"><I.Trash size={12}/>Revoke</button></div>}
+          {isAdmin&&keys.length>0&&<div className="rounded-xl bg-white/[0.03] border border-white/[0.06]">
+            <p className="text-[12px] text-white/60 px-3 pt-2.5 pb-1.5">{keys.length===1?'A key still exists.':(keys.length+' keys still exist.')} Revoke {keys.length===1?'it':'them'} so {keys.length===1?'it':'they'} can’t be used again if you upgrade.</p>
+            <div className="scroll-area overflow-y-auto" style={{maxHeight:250}}>{keys.map((k,i)=>(<div key={k.id} className={['flex items-center justify-between gap-4 px-3 py-2',i<keys.length-1?'border-b border-white/[0.04]':''].join(' ')}>
+              <div className="min-w-0"><p className="text-[12.5px] text-white/85 font-medium truncate">{k.name}</p><p className="font-mono text-[11px] text-white/40 truncate">{k.prefix}…</p></div>
+              <button onClick={()=>revoke(k)} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] font-medium text-red-300 bg-red-500/10 border border-red-500/20 hover:bg-red-500/15 transition-all shrink-0"><I.Trash size={12}/>Revoke</button>
+            </div>))}</div>
+          </div>}
         </div>:<div className="flex flex-col gap-4">
           {readOnly&&<CapGateBox reason={CAP_READ_ONLY_REASON} remedy="See plans" goTo={goTo}/>}
-          {!isAdmin&&<div role="note" className="rounded-xl border border-white/[0.08] bg-white/[0.03] px-3.5 py-2.5 flex items-center gap-2.5 text-[12px] text-white/70"><I.Lock size={13} className="text-white/45 shrink-0"/>Ask an owner or admin to manage the Lead API key.</div>}
-          {/* Key */}
+          {!isAdmin&&<div role="note" className="rounded-xl border border-white/[0.08] bg-white/[0.03] px-3.5 py-2.5 flex items-center gap-2.5 text-[12px] text-white/70"><I.Lock size={13} className="text-white/45 shrink-0"/>Ask an owner or admin to manage Lead API keys.</div>}
+          {/* Keys */}
           <div>
-            <p className={LBL}>API key</p>
-            {apiKey?(<React.Fragment>
-              <div className="flex items-center gap-2 mb-3">
-                <div className="flex-1 min-w-0 flex items-center gap-2 px-3 py-2.5 rounded-xl bg-black/30 border border-white/[0.08] font-mono text-[12.5px] text-white/80 overflow-hidden"><I.Lock size={12} className="text-white/30 shrink-0"/><span className="truncate" data-lead-api-masked>{apiKey.prefix}…</span></div>
-              </div>
-              <div className="flex items-center justify-between gap-4 flex-wrap">
-                <div className="flex items-center gap-x-3 gap-y-1 flex-wrap text-[11px] text-white/40"><span>Created by {apiKey.createdBy}</span><span>·</span><span>Created {apiKey.createdOn}</span><span>·</span><span>{apiKey.lastUsed?('Last used '+apiKey.lastUsed):'Never used'}</span></div>
-                {isAdmin&&<div className="flex items-center gap-2">
-                  <button onClick={regenerate} disabled={!canAct} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] font-medium text-white/70 hover:text-white bg-white/[0.04] border border-white/[0.08] hover:bg-white/[0.07] transition-all disabled:opacity-40 disabled:cursor-not-allowed"><I.History size={12}/>Regenerate</button>
-                  <button onClick={revoke} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] font-medium text-red-300 bg-red-500/10 border border-red-500/20 hover:bg-red-500/15 transition-all disabled:opacity-40 disabled:cursor-not-allowed"><I.Trash size={12}/>Revoke</button>
-                </div>}
-              </div>
-            </React.Fragment>):(<div className="flex items-center justify-between gap-4 flex-wrap px-3 py-2.5 rounded-xl bg-white/[0.03] border border-white/[0.06]">
-              <p className="text-[12px] text-white/55">No key yet. Generate one to start sending leads to nrtur.</p>
-              {isAdmin&&<button onClick={generate} disabled={!canAct} className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-[12px] font-semibold text-brand-300 bg-brand-500/10 border border-brand-500/25 hover:bg-brand-500/15 transition-all disabled:opacity-40 disabled:cursor-not-allowed"><I.Plus size={12} stroke={2.4}/>Generate key</button>}
-            </div>)}
+            <div className="flex items-center justify-between gap-3 flex-wrap mb-1.5">
+              <p className={LBL}>API keys <span className="normal-case tracking-normal text-white/35 font-normal">· {keys.length} of {LEAD_API_MAX_KEYS} active</span></p>
+              {isAdmin&&<span title={atLimit?LIMIT_TIP:undefined} className="inline-flex"><button onClick={()=>setNameDlg({mode:'new'})} disabled={!canAct||atLimit} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] font-semibold text-brand-300 bg-brand-500/10 border border-brand-500/25 hover:bg-brand-500/15 transition-all disabled:opacity-40 disabled:cursor-not-allowed"><I.Plus size={12} stroke={2.4}/>New key</button></span>}
+            </div>
+            {keys.length?(<div className="scroll-area overflow-y-auto rounded-xl bg-white/[0.03] border border-white/[0.06]" style={{maxHeight:290}} data-lead-api-keys>
+              {keys.map((k,i)=>(<LeadApiKeyRow key={k.id} k={k} leads30={leads30(k.id)} isAdmin={isAdmin} canAct={canAct} onRename={(x)=>setNameDlg({mode:'rename',key:x})} onRegenerate={regenerate} onRevoke={revoke} last={i===keys.length-1}/>))}
+            </div>):(<div className="px-3 py-3 rounded-xl bg-white/[0.03] border border-white/[0.06]"><p className="text-[12px] text-white/55">No keys yet. Create one to start sending leads to nrtur.</p></div>)}
+            {isAdmin&&atLimit&&<p className="text-[11px] text-white/40 mt-1.5">{LIMIT_TIP}</p>}
           </div>
-          {/* Endpoint */}
+          {/* Endpoint + docs */}
           <div>
-            <p className={LBL}>Endpoint</p>
-            <div className="flex items-center gap-2">
+            <p className={LBL+' mb-1.5'}>Endpoint</p>
+            <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
               <div className="flex-1 min-w-0 flex items-center gap-2 px-3 py-2.5 rounded-xl bg-black/30 border border-white/[0.08] font-mono text-[12.5px] text-white/80 overflow-hidden"><span className="px-1.5 py-0.5 rounded-md bg-brand-500/15 text-brand-300 text-[10.5px] font-semibold shrink-0">POST</span><span className="truncate">{LEAD_API_ENDPOINT}</span></div>
               <button onClick={()=>leadApiCopy(LEAD_API_ENDPOINT)} className={COPY_BTN}><I.Copy size={13}/>Copy</button>
+              <button onClick={()=>setDocsOpen(true)} className={COPY_BTN}><I.Note size={13}/>View API docs</button>
             </div>
+            <p className="text-[11px] text-white/40 mt-1.5">Send a key as <span className="font-mono">Authorization: Bearer &lt;key&gt;</span> with a JSON body. Name or email is required.</p>
           </div>
-          {/* Example request */}
-          <div>
-            <div className="flex items-center justify-between gap-2 mb-1.5"><p className="text-[11px] font-medium text-white/45 uppercase tracking-[0.14em]">Example request</p><button onClick={()=>leadApiCopy(LEAD_API_CURL)} className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11.5px] font-medium text-white/70 hover:text-white bg-white/[0.04] border border-white/[0.08] hover:bg-white/[0.07] transition-all"><I.Copy size={12}/>Copy</button></div>
-            <pre className="px-3.5 py-3 rounded-xl bg-black/30 border border-white/[0.08] font-mono text-[11.5px] leading-relaxed text-white/75 overflow-x-auto scroll-area whitespace-pre">{LEAD_API_CURL}</pre>
-            <p className="text-[11px] text-white/40 mt-1.5">Name or email is required. Source defaults to “API” when it’s left out.</p>
-          </div>
-          {/* Duplicates */}
+          {/* Duplicates (one workspace-wide setting for every key) */}
           <div className="flex items-center gap-3 px-3 py-2.5 rounded-lg bg-white/[0.03] border border-white/[0.06]">
             <div className="min-w-0 flex-1"><p className="text-[12.5px] text-white/85 font-medium">Allow duplicate leads</p><p className="text-[11.5px] text-white/50 mt-0.5">When on, an API lead is created even if its email or phone matches an existing lead. A match with a contact’s email is always refused.</p></div>
             {isAdmin?<Toggle on={allowDup} onChange={setAllowDup} disabled={!canAct}/>:<span className="text-[12px] font-medium text-white/55 shrink-0">{allowDup?'On':'Off'}</span>}
           </div>
+          {/* Recent requests: owner/admin only */}
+          {isAdmin&&<LeadApiRequestLog keys={keys} log={log} goTo={goTo}/>}
         </div>}
       </div>
+      {nameDlg&&nameDlg.mode==='new'&&<LeadApiNameDialog title="New Lead API key" body="Give the key a name so you can tell your keys apart. You’ll see the full key once, right after it’s created." confirmLabel="Create key" taken={takenExcept(null)} onSave={createKey} onCancel={()=>setNameDlg(null)}/>}
+      {nameDlg&&nameDlg.mode==='rename'&&<LeadApiNameDialog title={'Rename “'+nameDlg.key.name+'”'} body="Renaming doesn’t change the key. Anything using it keeps working." initial={nameDlg.key.name} confirmLabel="Save name" taken={takenExcept(nameDlg.key.id)} onSave={(n)=>renameKey(nameDlg.key,n)} onCancel={()=>setNameDlg(null)}/>}
+      {docsOpen&&<LeadApiDocsDrawer allowDup={allowDup} onClose={()=>setDocsOpen(false)}/>}
       {shownKey&&<LeadApiKeyDialog fullKey={shownKey} onDone={()=>setShownKey(null)}/>}
       {confirmNode}
       {stackToggle?<div className="fixed left-0 right-0 bottom-[52px] h-0 z-[80]" style={{transform:'translateZ(0)'}}>{toggleEl}</div>:toggleEl}
