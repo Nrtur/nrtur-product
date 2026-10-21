@@ -20,7 +20,7 @@ The backend **doesn't fill merge fields for inbox sends**, and it shouldn't be t
 
 **The rule (owner, 2026-10-21):** when we know who the email is for, nrtur fills every merge field itself. Only when the person isn't in nrtur does the salesperson fill the rest, using the fill panel.
 
-- **Email from the record:** "Send email" on a **contact** page, the **Email** action on a **lead** page, and the **Email** action on a **deal** page open the in-app composer with **To already set** and the record attached. Picking a template fills every field at once. From a deal page, `deal_name` and `deal_amount` fill too, and the email goes to the deal's primary contact. (Before, the contact page's "Send Email" opened the computer's mail app.)
+- **Email from the record:** "Send email" on a **contact** page, the **Send email** button in a **lead** page header (also the Email tab in its Activity box), and the **Email** action on a **deal** page open the in-app composer with **To already set** and the record attached. Picking a template fills every field at once. From a deal page, `deal_name` and `deal_amount` fill too, and the email goes to the deal's primary contact. (Before, the contact page's "Send Email" opened the computer's mail app.)
 - **To suggestions:** typing two or more letters in **To** lists matching **contacts and leads** (name, email, company, and a Contact / Lead label). Picking one sets the address and the record, so every field fills.
 
 - The composer **keeps the inserted template's merge fields live**. As soon as **To** matches a contact, and again whenever **To** changes, every field fills with that person's details.
