@@ -1,6 +1,6 @@
 ---
 title: Lead API v2 (named keys, in-app docs, request log)
-status: proposed        # proposed | approved | in-progress | built | dropped
+status: approved        # proposed | approved | in-progress | built | dropped
 owner: Qamar Ul Islam
 area: docs/areas/leads.md, docs/areas/workspace-settings.md
 screens: [settings-integrations]
