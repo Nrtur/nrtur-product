@@ -4,7 +4,7 @@ status: approved        # proposed | approved | in-progress | built | dropped
 owner: Qamar Ul Islam
 area: docs/areas/leads.md, docs/areas/workspace-settings.md
 screens: [settings-integrations]
-tickets: []             # filled in after approval
+tickets: [SCRUM-1304 (BE named keys + request log), SCRUM-1305 (FE key list, docs, log)]
 created: 2026-10-20
 ---
 

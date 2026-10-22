@@ -4,7 +4,7 @@ status: approved        # proposed | approved | in-progress | built | dropped
 owner: Qamar Ul Islam
 area: docs/areas/inbox.md; changes proposals/2026-10-message-templates.md (template editor) and builds on proposals/2026-10-live-merge-fields.md
 screens: [engage (Templates › email template editor, SMS template editor), inbox (New email, reply and forward)]
-tickets: []             # filled in after approval
+tickets: [SCRUM-1306 (BE allowlist, images, inlining, test send), SCRUM-1307 (FE editor)]
 created: 2026-10-20
 ---
 

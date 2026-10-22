@@ -4,7 +4,7 @@ status: approved        # proposed | approved | in-progress | built | dropped
 owner: Qamar Ul Islam
 area: docs/areas/inbox.md (templates in the composers); changes proposals/2026-10-message-templates.md › Inserting a template
 screens: [inbox, contact-detail, lead-detail, deal-detail]
-tickets: []             # filled in after approval
+tickets: [SCRUM-1303 (FE live merge fields)]
 created: 2026-10-20
 ---
 
