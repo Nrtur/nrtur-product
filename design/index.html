@@ -22,6 +22,22 @@ body{background:var(--paper);color:var(--ink);font:400 14px/1.5 var(--font);-web
 .rt-edit a,.rt-view a{color:var(--accent-ink);text-decoration:underline}
 .rt-edit b,.rt-view b,.rt-edit strong,.rt-view strong{font-weight:700}
 .rt-edit:empty::before{content:attr(data-ph);color:var(--ink-4)}
+/* Template editor upgrades (proposed: proposals/2026-10-template-editor-upgrades.md) — only reachable through RichTextField `full` */
+.rt-edit :is(h1,h2,h3),.rt-view :is(h1,h2,h3),.rt-mail :is(h1,h2,h3){font-family:inherit;letter-spacing:normal;color:inherit}
+.rt-edit h1,.rt-view h1,.rt-mail h1{font-size:1.45em;font-weight:700;line-height:1.25;margin:.5em 0 .3em}
+.rt-edit h2,.rt-view h2,.rt-mail h2{font-size:1.25em;font-weight:700;line-height:1.3;margin:.5em 0 .3em}
+.rt-edit h3,.rt-view h3,.rt-mail h3{font-size:1.08em;font-weight:600;line-height:1.35;margin:.45em 0 .25em}
+.rt-edit blockquote,.rt-view blockquote,.rt-mail blockquote{border-left:3px solid rgba(127,127,127,.45);padding-left:.75em;margin:.4em 0;opacity:.85}
+.rt-edit hr,.rt-view hr,.rt-mail hr{border:0;border-top:1px solid rgba(127,127,127,.35);margin:.75em 0}
+.rt-edit img,.rt-view img,.rt-mail img{max-width:100%;height:auto;border-radius:6px;display:inline-block;vertical-align:middle}
+.rt-edit u,.rt-view u,.rt-mail u{text-decoration:underline}
+.rt-edit s,.rt-view s,.rt-mail s,.rt-edit strike,.rt-mail strike{text-decoration:line-through}
+.rt-mail p{margin:0 0 .65em}.rt-mail ul{list-style:disc;padding-left:1.25rem;margin:0 0 .65em}.rt-mail ol{list-style:decimal;padding-left:1.25rem;margin:0 0 .65em}
+.rt-mail a{color:#2f6fd0;text-decoration:underline}.rt-mail b,.rt-mail strong{font-weight:700}
+.rt-chip{display:inline-block;padding:0 7px;margin:0 1px;border-radius:9999px;line-height:1.55;font-weight:500;white-space:nowrap;cursor:pointer;user-select:none;vertical-align:baseline}
+.rt-chip[data-state="tag"]{background:var(--accent-soft);color:var(--accent-ink);box-shadow:inset 0 0 0 1px var(--accent-line);font-size:0}
+.rt-chip[data-state="tag"]::before{content:attr(data-label);font-size:11.5px}
+.rt-chip[data-state="filled"]{background:var(--accent-soft);color:inherit;box-shadow:inset 0 0 0 1px var(--accent-line)}
 .app-shell input[type="date"],.app-shell input[type="time"]{color-scheme:dark}
 [data-theme="light"] .app-shell input[type="date"],[data-theme="light"] .app-shell input[type="time"]{color-scheme:light}
 @keyframes fadeUp{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
@@ -3394,14 +3410,17 @@ function CoFileField({value,onChange,error}){
 }
 // R9-9: sanitize rich-text HTML — allow only basic formatting tags, strip scripts / event handlers / unsafe URLs.
 // Runs in a detached <template> (inert: no scripts execute, no images load) and is applied on store (sync) AND on every render.
-function coSanitizeHtml(html){
+// full=true (template editor upgrades, proposed): the email-safe allowlist of RichTextField `full` — headings, underline,
+// strikethrough, quote, divider, images, palette colours, alignment, button links and merge-field chips (span[data-merge]).
+function coSanitizeHtml(html,full){
   if(html==null)return '';
   try{
     const tpl=document.createElement('template');tpl.innerHTML=String(html);
-    const ALLOW={B:1,STRONG:1,I:1,EM:1,U:1,UL:1,OL:1,LI:1,P:1,BR:1,A:1,SPAN:1,DIV:1};
+    const ALLOW=full?RT_FULL_ALLOW:{B:1,STRONG:1,I:1,EM:1,U:1,UL:1,OL:1,LI:1,P:1,BR:1,A:1,SPAN:1,DIV:1};
     const walk=(node)=>{[...node.childNodes].forEach(n=>{
       if(n.nodeType===1){
         if(!ALLOW[n.tagName]){n.replaceWith(document.createTextNode(n.textContent||''));return;} // unwrap disallowed element to plain text
+        if(full){if(!rtCleanAttrs(n))return;walk(n);return;}
         [...n.attributes].forEach(a=>{const an=a.name.toLowerCase();if(!(n.tagName==='A'&&an==='href'&&/^(https?:|mailto:|\/|#)/i.test(a.value)))n.removeAttribute(a.name);}); // drop all attrs except a safe href on <a>
         if(n.tagName==='A'){n.setAttribute('rel','noopener noreferrer');n.setAttribute('target','_blank');}
         walk(n);
@@ -3412,7 +3431,294 @@ function coSanitizeHtml(html){
   }catch(e){return String(html).replace(/<[^>]*>/g,'');} // fail closed: strip all markup
 }
 // Rich-text field — a contenteditable with a small toolbar. Uncontrolled (initial HTML on mount) so the caret never jumps; value is HTML.
-function RichTextField({value,onChange,error,placeholder,minH,bare}){
+// `full` (opt-in) = the upgraded email editor from proposals/2026-10-template-editor-upgrades.md (proposed). Used ONLY by the
+// email template editor and the inbox email composers; every other caller keeps the basic B / I / list / link editor below.
+function RichTextField(props){return props.full?<RichTextFull {...props}/>:<RichTextBasic {...props}/>;}
+// ?? Template editor upgrades (PROPOSED: proposals/2026-10-template-editor-upgrades.md) ??????????????????????
+// The real app uses TipTap; the prototype simulates the same email-safe feature set with contentEditable + execCommand.
+const RT_FULL_ALLOW={B:1,STRONG:1,I:1,EM:1,U:1,S:1,STRIKE:1,DEL:1,UL:1,OL:1,LI:1,P:1,BR:1,A:1,SPAN:1,DIV:1,H1:1,H2:1,H3:1,BLOCKQUOTE:1,HR:1,IMG:1};
+// Fixed, email-safe palettes. Colours outside them are dropped by the sanitizer.
+const RT_TEXT_COLORS=[['Grey','#6B7280'],['Red','#DC2626'],['Orange','#EA580C'],['Amber','#D97706'],['Green','#16A34A'],['Teal','#0D9488'],['Blue','#2563EB'],['Purple','#7C3AED']];
+const RT_HL_COLORS=[['Yellow','#FEF08A'],['Green','#BBF7D0'],['Blue','#BFDBFE'],['Pink','#FBCFE8'],['Orange','#FED7AA'],['Purple','#DDD6FE'],['Grey','#E5E7EB'],['Red','#FECACA']];
+const RT_BTN_BG='#2FA877'; // Button block: brand green, white label
+const RT_IMG_W={small:160,medium:320,full:null};
+const RT_IMG_MAX_MB=5;
+const RT_EMAIL_CLIP=100*1024; // Gmail clips messages over ~102 KB
+function rtRgb(h){const n=parseInt(h.slice(1),16);return 'rgb('+(n>>16)+', '+((n>>8)&255)+', '+(n&255)+')';}
+const RT_COLOR_OK=new Set([...RT_TEXT_COLORS,...RT_HL_COLORS].map(c=>rtRgb(c[1])).concat([rtRgb(RT_BTN_BG),rtRgb('#FFFFFF'),'transparent','rgba(0, 0, 0, 0)']));
+// Keep only allowlisted inline styles (longhands, as the browser serialises them). Returns the cleaned style string.
+function rtCleanStyle(n){const tg=n.tagName,isBtn=tg==='A'&&n.hasAttribute('data-button'),isImg=tg==='IMG',isBlk=/^(P|DIV|H1|H2|H3|BLOCKQUOTE|LI)$/.test(tg);
+  const st=n.style;if(!st||!st.length)return '';
+  const out=[];
+  for(let i=0;i<st.length;i++){
+    const p=st[i];const v=String(st.getPropertyValue(p)||'').trim();if(!v||/url\(|expression|javascript:/i.test(v))continue;
+    let ok=false;
+    if(p==='color'||p==='background-color')ok=RT_COLOR_OK.has(v.toLowerCase());
+    else if(p==='text-align')ok=isBlk&&/^(left|center|right|start)$/.test(v);
+    else if(p==='display')ok=isBtn&&v==='inline-block';
+    else if(p==='font-weight')ok=isBtn&&/^(bold|[4-7]00)$/.test(v);
+    else if(p==='text-decoration-line')ok=isBtn&&/^(none|underline|line-through)$/.test(v);
+    else if(p==='width'||p==='max-width')ok=isImg&&/^(\d{1,4}px|100%)$/.test(v);
+    else if(p==='height')ok=isImg&&v==='auto';
+    else if(/^padding-(top|right|bottom|left)$/.test(p))ok=isBtn&&/^\d{1,2}px$/.test(v);
+    else if(/^border-(top|bottom)-(left|right)-radius$/.test(p))ok=isBtn&&/^\d{1,2}px$/.test(v);
+    if(ok)out.push(p+': '+v);
+  }
+  return out.join('; ');
+}
+// Full-mode attribute allowlist. Returns false when the element was removed (an image with no safe src).
+function rtCleanAttrs(n){
+  const t=n.tagName;const keep={};
+  [...n.attributes].forEach(a=>{const an=a.name.toLowerCase(),v=a.value;
+    if(t==='A'&&an==='href'&&/^(https?:|mailto:|\/|#)/i.test(v))keep.href=v;
+    else if(t==='A'&&an==='target'&&v==='_blank')keep.target='_blank';
+    else if(t==='A'&&an==='data-button')keep['data-button']='1';
+    // Prototype only: the "upload" samples are inline SVG data URLs. In the app, images are hosted by nrtur and referenced by https URL.
+    else if(t==='IMG'&&an==='src'&&/^(https:\/\/|data:image\/(png|jpeg|gif|svg\+xml)[;,])/i.test(v))keep.src=v;
+    else if(t==='IMG'&&an==='alt')keep.alt=v.slice(0,200);
+    else if(t==='IMG'&&an==='width'&&/^\d{1,4}$/.test(v))keep.width=v;
+    else if(t==='SPAN'&&an==='data-merge'&&TPL_KNOWN.has(v))keep['data-merge']=v;
+  });
+  const st=rtCleanStyle(n);
+  [...n.attributes].forEach(a=>n.removeAttribute(a.name));
+  if(t==='IMG'&&!keep.src){n.remove();return false;}
+  Object.keys(keep).forEach(k=>n.setAttribute(k,keep[k]));
+  if(st)n.setAttribute('style',st);
+  if(t==='A')n.setAttribute('rel','noopener noreferrer');
+  return true;
+}
+// Merge-field chips. The stored HTML keeps the literal token INSIDE the chip — <span data-merge="first_name">{{first_name}}</span> —
+// so tplFill / tplLeftoverTags / useTplLive keep working on the string. After a fill the span holds the value ("Sarah") and shows as a filled chip.
+const RT_TOKEN_ONE=/^\{\{\s*([a-zA-Z_]+)\s*(?:\|([^}]*))?\}\}$/;
+function rtFieldLabel(k){const s=String(k).replace(/_/g,' ');return s.charAt(0).toUpperCase()+s.slice(1);}
+function rtChipUi(sp){
+  const m=(sp.textContent||'').match(RT_TOKEN_ONE);
+  sp.setAttribute('contenteditable','false');sp.className='rt-chip';
+  if(m){const k=m[1].toLowerCase();sp.setAttribute('data-state','tag');sp.setAttribute('data-label',rtFieldLabel(k)+(m[2]?' · '+m[2]:''));sp.setAttribute('title','{{'+k+(m[2]?'|'+m[2]:'')+'}} · click to set a fallback');}
+  else{sp.setAttribute('data-state','filled');sp.removeAttribute('data-label');sp.setAttribute('title','Merge field, filled for this recipient');}
+}
+// Wraps raw {{tokens}} found in text into chips (ui=true adds the editor-only attributes). Returns the last chip created.
+function rtDecorate(root,ui){
+  let last=null;const doc=root.ownerDocument||document;
+  root.querySelectorAll('span[data-merge]').forEach(sp=>{if(!(sp.textContent||'')){sp.remove();return;}if(ui)rtChipUi(sp);});
+  const tw=doc.createTreeWalker(root,NodeFilter.SHOW_TEXT);const nodes=[];let tn;while((tn=tw.nextNode()))nodes.push(tn);
+  nodes.forEach(node=>{
+    if(node.parentElement&&node.parentElement.closest('span[data-merge]'))return;
+    const s=node.data;const re=new RegExp(TPL_TAG_RE.source,'g');const parts=[];let m,idx=0;
+    while((m=re.exec(s))){if(!TPL_KNOWN.has(m[1].toLowerCase()))continue;parts.push(s.slice(idx,m.index),{tok:m[0],key:m[1].toLowerCase()});idx=m.index+m[0].length;}
+    if(!parts.length)return;parts.push(s.slice(idx));
+    const frag=doc.createDocumentFragment();
+    parts.forEach(p=>{if(typeof p==='string'){if(p)frag.appendChild(doc.createTextNode(p));}else{const sp=doc.createElement('span');sp.setAttribute('data-merge',p.key);sp.textContent=p.tok;if(ui)rtChipUi(sp);frag.appendChild(sp);last=sp;}});
+    node.parentNode.replaceChild(frag,node);
+  });
+  return last;
+}
+function rtChipify(html){try{const t=document.createElement('template');t.innerHTML=String(html||'');rtDecorate(t.content,true);return t.innerHTML;}catch(e){return String(html||'');}}
+function rtWrapTokens(html){try{const t=document.createElement('template');t.innerHTML=String(html||'');rtDecorate(t.content,false);return t.innerHTML;}catch(e){return String(html||'');}}
+// The auto-generated plain-text part sent alongside the formatted email.
+function rtHtmlToPlain(html){
+  try{
+    const t=document.createElement('template');t.innerHTML=String(html||'');const out=[];
+    const walk=(node)=>{[...node.childNodes].forEach(n=>{
+      if(n.nodeType===3){out.push(n.data.replace(/\s+/g,' '));return;}
+      if(n.nodeType!==1)return;const tg=n.tagName;
+      if(tg==='BR'){out.push('\n');return;}
+      if(tg==='HR'){out.push('\n----------\n');return;}
+      if(tg==='IMG'){const a=n.getAttribute('alt');if(a)out.push('['+a+']');return;}
+      if(tg==='A'){const h=n.getAttribute('href')||'';const tx=(n.textContent||'').trim();out.push(n.hasAttribute('data-button')?(tx+': '+h):(tx&&tx!==h?tx+' ('+h+')':h));return;}
+      if(tg==='LI'){const par=n.parentElement;const ol=par&&par.tagName==='OL';out.push('\n'+(ol?([...par.children].indexOf(n)+1)+'. ':'• '));walk(n);return;}
+      const block=/^(P|DIV|H1|H2|H3|BLOCKQUOTE|UL|OL)$/.test(tg);
+      if(block)out.push('\n');
+      if(tg==='BLOCKQUOTE'||/^H[123]$/.test(tg)){const s=out.length;walk(n);const inner=out.splice(s).join('').trim();out.push(tg==='BLOCKQUOTE'?inner.split('\n').map(l=>'> '+l.trim()).join('\n'):tg==='H1'?inner.toUpperCase():inner,'\n');return;}
+      walk(n);if(block)out.push('\n');
+    });};
+    walk(t.content);
+    return out.join('').replace(/ /g,' ').replace(/[ \t]+\n/g,'\n').replace(/\n[ \t]+/g,'\n').replace(/\n{3,}/g,'\n\n').trim();
+  }catch(e){return mailHtmlToText(html);}
+}
+function rtNormUrl(u,httpsOnly){u=String(u||'').trim();if(!u)return '';if(/^https:\/\/\S+\.\S+$/i.test(u))return u;if(!httpsOnly&&/^(http:\/\/\S+\.\S+|mailto:\S+@\S+)$/i.test(u))return u;if(/^[\w-]+(\.[\w-]+)+(\/\S*)?$/.test(u))return 'https://'+u;return '';}
+function rtEscAttr(s){return String(s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+const RT_SAMPLE_IMAGES=[{name:'Product screenshot',a:'#2FA877',b:'#0D9488'},{name:'Team photo',a:'#7C3AED',b:'#2563EB'},{name:'Event banner',a:'#EA580C',b:'#DB2777'}];
+function rtSampleImg(s){const svg='<svg xmlns="http://www.w3.org/2000/svg" width="600" height="300"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="'+s.a+'"/><stop offset="1" stop-color="'+s.b+'"/></linearGradient></defs><rect width="600" height="300" fill="url(#g)"/><text x="300" y="160" font-family="Arial,sans-serif" font-size="30" fill="#ffffff" text-anchor="middle">'+s.name+'</text></svg>';return 'data:image/svg+xml,'+encodeURIComponent(svg);}
+const RT_SLASH=[{id:'h1',label:'Heading 1',hint:'Large section heading'},{id:'h2',label:'Heading 2',hint:'Medium heading'},{id:'h3',label:'Heading 3',hint:'Small heading'},{id:'ul',label:'Bullet list',hint:'A simple list'},{id:'ol',label:'Numbered list',hint:'A list with numbers'},{id:'quote',label:'Quote',hint:'Indented quote'},{id:'hr',label:'Divider',hint:'A horizontal line'},{id:'button',label:'Button',hint:'A call-to-action link'},{id:'image',label:'Image',hint:'Upload or paste a link'},{id:'merge',label:'Merge field',hint:'First name, company and more'}];
+// Small glyphs for the toolbar (not in I.*).
+const RT_G={
+  alignL:<><line x1="3" x2="21" y1="6" y2="6"/><line x1="3" x2="15" y1="12" y2="12"/><line x1="3" x2="18" y1="18" y2="18"/></>,
+  alignC:<><line x1="3" x2="21" y1="6" y2="6"/><line x1="7" x2="17" y1="12" y2="12"/><line x1="5" x2="19" y1="18" y2="18"/></>,
+  alignR:<><line x1="3" x2="21" y1="6" y2="6"/><line x1="9" x2="21" y1="12" y2="12"/><line x1="6" x2="21" y1="18" y2="18"/></>,
+  ol:<><line x1="10" x2="21" y1="6" y2="6"/><line x1="10" x2="21" y1="12" y2="12"/><line x1="10" x2="21" y1="18" y2="18"/><path d="M4 6h1v4"/><path d="M4 10h2"/><path d="M6 18H4c0-1 2-2 2-3s-1-1.5-2-1"/></>,
+  quote:<><path d="M3 21c3 0 7-1 7-8V5c0-1.25-.76-2-2-2H4c-1.25 0-2 .75-2 2v6c0 1.25.75 2 2 2 1 0 1 0 1 1v1c0 1-1 2-2 2s-1 0-1 1v3c0 1 0 1 1 1z"/><path d="M15 21c3 0 7-1 7-8V5c0-1.25-.76-2-2-2h-4c-1.25 0-2 .75-2 2v6c0 1.25.75 2 2 2h.75c0 2.25.25 4-2.75 4v3c0 1 0 1 1 1z"/></>,
+  hr:<><line x1="3" x2="21" y1="12" y2="12"/><path d="M8 6h8M8 18h8" opacity=".45"/></>,
+  link:<><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></>,
+  button:<><rect x="2" y="7" width="20" height="10" rx="5"/><line x1="8" x2="16" y1="12" y2="12"/></>,
+  hl:<><path d="m9 11-6 6v3h9l3-3"/><path d="m22 12-4.6 4.6a2 2 0 0 1-2.8 0l-5.2-5.2a2 2 0 0 1 0-2.8L14 4"/></>,
+  clear:<><path d="M4 7V4h16v3"/><path d="M5 20h6"/><path d="M13 4 8 20"/><path d="m15 15 5 5"/><path d="m20 15-5 5"/></>,
+  undo:<><path d="M3 7v6h6"/><path d="M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3L3 13"/></>,
+  redo:<><path d="M21 7v6h-6"/><path d="M3 17a9 9 0 0 1 9-9 9 9 0 0 1 6 2.3l3 2.7"/></>,
+};
+// A small popover rendered in a portal (composers and the template dialog clip overflow). Closes on outside click and Escape
+// (Escape is caught in the capture phase so it doesn't also close the dialog underneath).
+function RtPopover({anchor,onClose,width=260,label,children}){
+  const ref=React.useRef(null);
+  const closeRef=React.useRef(onClose);closeRef.current=onClose;
+  React.useEffect(()=>{
+    const md=e=>{if(ref.current&&ref.current.contains(e.target))return;if(anchor&&anchor.el&&anchor.el.contains&&anchor.el.contains(e.target))return;closeRef.current();};
+    const k=e=>{if(e.key==='Escape'){e.stopPropagation();e.preventDefault();closeRef.current();}};
+    document.addEventListener('mousedown',md);document.addEventListener('keydown',k,true);
+    return()=>{document.removeEventListener('mousedown',md);document.removeEventListener('keydown',k,true);};
+  },[anchor]);
+  const r=(anchor&&anchor.rect)||{left:20,top:20,bottom:20};
+  const vw=window.innerWidth,vh=window.innerHeight;const w=Math.min(width,vw-16);
+  const style={position:'fixed',left:Math.max(8,Math.min(r.left,vw-w-8)),width:w,zIndex:400,background:'var(--pop2)',boxShadow:'0 16px 50px rgba(0,0,0,0.55)',maxHeight:Math.max(200,vh-24),overflowY:'auto'};
+  if(r.bottom+340<vh||r.top<340)style.top=r.bottom+6;else style.bottom=vh-r.top+6;
+  return ReactDOM.createPortal(<div ref={ref} role="dialog" aria-label={label} className="rounded-xl border border-white/[0.10] p-2.5 text-[12px] text-white/80" style={style}>{children}</div>,document.body);
+}
+function RichTextFull({value,onChange,error,placeholder,minH,bare}){
+  const ref=React.useRef(null);
+  const saved=React.useRef(null);   // last selection inside the editor (popovers and selects steal focus)
+  const [init]=React.useState(()=>rtChipify(coSanitizeHtml(value||'',true))); // truly uncontrolled: parents remount (key) to replace the body
+  const [pop,setPop]=React.useState(null);   // {kind, anchor:{rect,el}, d:{…form state}}
+  const [menu,setMenu]=React.useState(null); // {kind:'slash'|'merge', q, idx, node, offset, rect}
+  const [blk,setBlk]=React.useState('p');
+  React.useEffect(()=>{
+    const fn=()=>{const s=window.getSelection();if(s&&s.rangeCount&&ref.current&&ref.current.contains(s.anchorNode))saved.current=s.getRangeAt(0).cloneRange();};
+    document.addEventListener('selectionchange',fn);return()=>document.removeEventListener('selectionchange',fn);
+  },[]);
+  const sync=()=>{if(ref.current)onChange(coSanitizeHtml(ref.current.innerHTML,true));};
+  const restore=()=>{const el=ref.current;if(!el)return;el.focus();const s=window.getSelection();if(saved.current&&el.contains(saved.current.startContainer)){s.removeAllRanges();s.addRange(saved.current);}};
+  const exec=(c,arg)=>{restore();document.execCommand(c,false,arg==null?null:arg);sync();};
+  const color=(c,hex)=>{restore();document.execCommand('styleWithCSS',false,true);if(c==='hilite'){if(!document.execCommand('hiliteColor',false,hex))document.execCommand('backColor',false,hex);}else document.execCommand('foreColor',false,hex);document.execCommand('styleWithCSS',false,false);sync();setPop(null);};
+  // Chrome's insertHTML copies the surrounding computed style onto inserted spans (font-size, font-family…); chips and those spans don't need it.
+  const tidy=()=>{if(!ref.current)return;ref.current.querySelectorAll('span[style]').forEach(sp=>{if(sp.hasAttribute('data-merge')||/font-(family|size)/.test(sp.getAttribute('style')||''))sp.removeAttribute('style');});};
+  const insertHtml=(h)=>{restore();document.execCommand('insertHTML',false,h);if(ref.current){rtDecorate(ref.current,true);tidy();}sync();};
+  const insertChip=(key,fb)=>insertHtml('<span data-merge="'+key+'">{{'+key+(fb?'|'+fb:'')+'}}</span>&nbsp;');
+  const trackBlk=()=>{try{const v=String(document.queryCommandValue('formatBlock')||'').toLowerCase();setBlk(/^h[123]$/.test(v)?v:'p');}catch(e){}};
+  const caretRect=()=>{const s=window.getSelection();if(s&&s.rangeCount){const r=s.getRangeAt(0);let b=r.getBoundingClientRect();if(!b.height){const el=r.startContainer.nodeType===1?r.startContainer:r.startContainer.parentElement;if(el)b=el.getBoundingClientRect();}if(b&&b.height)return b;}return ref.current?ref.current.getBoundingClientRect():{left:20,top:20,bottom:20};};
+  const openPop=(kind,anchor,d)=>{setMenu(null);setPop(p=>p&&p.kind===kind&&anchor.el&&p.anchor.el===anchor.el?null:{kind,anchor,d:d||{}});};
+  const fromBtn=(e)=>({rect:e.currentTarget.getBoundingClientRect(),el:e.currentTarget});
+  const setD=(o)=>setPop(p=>p?{...p,d:{...p.d,...o}}:p);
+  const linkAt=()=>{const r=saved.current;if(!r||!ref.current)return null;const n=r.startContainer.nodeType===1?r.startContainer:r.startContainer.parentElement;const a=n&&n.closest&&n.closest('a');return a&&ref.current.contains(a)&&!a.hasAttribute('data-button')?a:null;};
+  const openLink=(anchor)=>{const a=linkAt();openPop('link',anchor,{url:a?a.getAttribute('href'):'',blank:a?a.getAttribute('target')==='_blank':true,a});};
+  const applyLink=()=>{const d=pop.d;const u=rtNormUrl(d.url);if(!u){setD({err:'Enter a full link, like https://example.com'});return;}setPop(null);
+    if(d.a&&ref.current.contains(d.a)){d.a.setAttribute('href',u);if(d.blank)d.a.setAttribute('target','_blank');else d.a.removeAttribute('target');sync();return;}
+    restore();const s=window.getSelection();
+    if(!s.rangeCount||s.isCollapsed)document.execCommand('insertHTML',false,'<a href="'+rtEscAttr(u)+'"'+(d.blank?' target="_blank"':'')+'>'+tplEscHtml(u)+'</a>&nbsp;');
+    else{document.execCommand('createLink',false,u);ref.current.querySelectorAll('a').forEach(a=>{if(a.getAttribute('href')===u&&!a.hasAttribute('data-button')){if(d.blank)a.setAttribute('target','_blank');else a.removeAttribute('target');}});}
+    sync();};
+  const removeLink=()=>{const a=pop.d.a;setPop(null);if(a&&ref.current.contains(a)){while(a.firstChild)a.parentNode.insertBefore(a.firstChild,a);a.remove();sync();}else exec('unlink');};
+  const applyButton=()=>{const d=pop.d;const label=String(d.label||'').trim();const u=rtNormUrl(d.url);if(!label||!u){setD({err:!label?'Add the button text.':'Enter a full link, like https://example.com'});return;}setPop(null);
+    insertHtml('<a href="'+rtEscAttr(u)+'" target="_blank" data-button="1" style="display:inline-block;padding:10px 18px;border-radius:8px;background-color:'+RT_BTN_BG+';color:#FFFFFF;text-decoration:none;font-weight:600">'+tplEscHtml(label.slice(0,40))+'</a>&nbsp;');};
+  const applyImage=()=>{const d=pop.d;const src=d.tab==='link'?rtNormUrl(d.url,true):d.sample!=null?rtSampleImg(RT_SAMPLE_IMAGES[d.sample]):'';if(!src){setD({err:d.tab==='link'?'Paste an https:// link to an image.':'Choose an image to upload.'});return;}setPop(null);
+    const w=RT_IMG_W[d.w||'medium'];insertHtml('<img src="'+rtEscAttr(src)+'" alt="'+rtEscAttr(String(d.alt||'').trim())+'"'+(w?' width="'+w+'" style="width:'+w+'px;max-width:100%;height:auto"':' style="width:100%;height:auto"')+'>');};
+  const chipSet=(el,tok)=>{if(!ref.current||!ref.current.contains(el))return;el.textContent=tok;rtChipUi(el);sync();};
+  const runSlash=(id)=>{
+    if(id==='h1'||id==='h2'||id==='h3')exec('formatBlock','<'+id+'>');
+    else if(id==='ul')exec('insertUnorderedList');else if(id==='ol')exec('insertOrderedList');
+    else if(id==='quote')exec('formatBlock','<blockquote>');else if(id==='hr')exec('insertHorizontalRule');
+    else{const anchor={rect:caretRect(),el:null};if(id==='button')openPop('button',anchor,{label:'',url:''});else if(id==='image')openPop('image',anchor,{tab:'upload',w:'medium'});else openPop('merge',anchor);}
+    trackBlk();
+  };
+  const q=menu?menu.q:'';
+  const menuItems=!menu?[]:menu.kind==='slash'?RT_SLASH.filter(x=>x.label.toLowerCase().replace(/\s/g,'').includes(q)||x.id.startsWith(q)):MERGE_TAGS.map(t=>({id:t.token.slice(2,-2),label:t.token,hint:t.desc})).filter(x=>x.id.includes(q)||x.hint.toLowerCase().includes(q));
+  const pickMenu=(it)=>{const m=menu;setMenu(null);if(!it||!m)return;
+    try{const s=window.getSelection();const cur=s.getRangeAt(0);const r=document.createRange();r.setStart(m.node,m.offset);r.setEnd(cur.endContainer,cur.endOffset);s.removeAllRanges();s.addRange(r);document.execCommand('delete',false,null);saved.current=s.getRangeAt(0).cloneRange();}catch(e){}
+    if(m.kind==='merge')insertChip(it.id);else runSlash(it.id);};
+  // "{{" opens the merge-field list; "/" at the start of a line opens the command menu. A typed {{known_field}} becomes a chip.
+  const detect=()=>{
+    const s=window.getSelection();if(!s||!s.rangeCount||!s.isCollapsed){setMenu(null);return;}
+    const r=s.getRangeAt(0);const node=r.startContainer;if(node.nodeType!==3||!ref.current.contains(node)){setMenu(null);return;}
+    const before=node.data.slice(0,r.startOffset);
+    // A complete known token before the caret (typed or pasted) becomes a chip; the caret stays after the text that followed it.
+    let lastEnd=-1;{const re=new RegExp(TPL_TAG_RE.source,'g');let mm;while((mm=re.exec(before)))if(TPL_KNOWN.has(mm[1].toLowerCase()))lastEnd=mm.index+mm[0].length;}
+    if(lastEnd>=0){const rest=r.startOffset-lastEnd;const chip=rtDecorate(ref.current,true);if(chip){tidy();const nx=chip.nextSibling;const rr=document.createRange();if(nx&&nx.nodeType===3&&rest<=nx.length)rr.setStart(nx,rest);else{const t=document.createTextNode(' ');chip.after(t);rr.setStart(t,1);}rr.collapse(true);s.removeAllRanges();s.addRange(rr);setMenu(null);return;}}
+    let m=before.match(/\{\{([a-zA-Z_]*)$/);
+    if(m){setMenu({kind:'merge',q:m[1].toLowerCase(),idx:0,node,offset:r.startOffset-m[0].length,rect:caretRect()});return;}
+    m=before.match(/^\/([a-zA-Z0-9]*)$/);const prev=node.previousSibling;
+    if(m&&(!prev||prev.nodeName==='BR')){setMenu({kind:'slash',q:m[1].toLowerCase(),idx:0,node,offset:r.startOffset-m[0].length,rect:caretRect()});return;}
+    setMenu(null);
+  };
+  const onInput=()=>{detect();sync();};
+  const onKeyDown=(e)=>{
+    if(menu&&menuItems.length){
+      if(e.key==='ArrowDown'||e.key==='ArrowUp'){e.preventDefault();const n=menuItems.length;setMenu(m=>({...m,idx:(m.idx+(e.key==='ArrowDown'?1:n-1))%n}));return;}
+      if(e.key==='Enter'||e.key==='Tab'){e.preventDefault();pickMenu(menuItems[menu.idx]||menuItems[0]);return;}
+    }
+    if(menu&&e.key==='Escape'){e.preventDefault();e.stopPropagation();setMenu(null);return;}
+    if(!(e.metaKey||e.ctrlKey)||e.altKey)return;const k=e.key.toLowerCase();
+    if(k==='k'){e.preventDefault();openLink({rect:caretRect(),el:null});}
+    else if(k==='b'||k==='i'||k==='u'){e.preventDefault();exec(k==='b'?'bold':k==='i'?'italic':'underline');}
+  };
+  const onClick=(e)=>{const chip=e.target&&e.target.closest&&e.target.closest('span[data-merge]');if(!chip)return;const m=(chip.textContent||'').match(RT_TOKEN_ONE);openPop('chip',{rect:chip.getBoundingClientRect(),el:chip},{el:chip,key:chip.getAttribute('data-merge'),fb:m&&m[2]?m[2]:'',filled:!m,value:chip.textContent});};
+  const btn="w-7 h-7 rounded-md flex items-center justify-center text-white/50 hover:text-white hover:bg-white/[0.08] transition-colors shrink-0";
+  const on="text-white bg-white/[0.08]";
+  const B=({t,onClick:oc,children,active})=>(<button type="button" onMouseDown={e=>e.preventDefault()} onClick={oc} className={[btn,active?on:''].join(' ')} title={t} aria-label={t}>{children}</button>);
+  const G=(g)=><Ico size={13} d={RT_G[g]}/>;
+  const Sep=()=><div className="w-px h-4 bg-white/[0.08] mx-0.5 shrink-0"/>;
+  const INP="w-full px-2.5 py-1.5 rounded-lg bg-white/[0.04] border border-white/[0.10] text-[12px] text-white placeholder:text-white/30 outline-none focus:border-brand-500/45";
+  const PL="block text-[10.5px] font-medium text-white/45 uppercase tracking-[0.12em] mb-1";
+  const PBTN="px-3 py-1.5 rounded-lg text-[11.5px] font-semibold text-white bg-brand-500 hover:bg-brand-400 transition-all";
+  const PBTN2="px-2.5 py-1.5 rounded-lg text-[11.5px] font-medium text-white/65 hover:text-white bg-white/[0.04] border border-white/[0.08] hover:bg-white/[0.07] transition-all";
+  const Err=()=>pop&&pop.d.err?<p className="text-[11px] text-red-400 mt-1.5">{pop.d.err}</p>:null;
+  const enter=(fn)=>(e)=>{if(e.key==='Enter'){e.preventDefault();fn();}};
+  let popBody=null;
+  if(pop){const d=pop.d;
+    if(pop.kind==='color'||pop.kind==='hilite'){const pal=pop.kind==='color'?RT_TEXT_COLORS:RT_HL_COLORS;popBody=(<div><p className={PL}>{pop.kind==='color'?'Text colour':'Highlight'}</p><div className="grid grid-cols-4 gap-1.5">{pal.map(([n,h])=>(<button key={h} type="button" onMouseDown={e=>e.preventDefault()} onClick={()=>color(pop.kind,h)} title={n} aria-label={n} className="h-7 rounded-md border border-white/[0.12] hover:scale-105 transition-transform" style={{background:h}}/>))}</div>{pop.kind==='hilite'&&<button type="button" onMouseDown={e=>e.preventDefault()} onClick={()=>color('hilite','transparent')} className="mt-2 w-full text-left px-2 py-1 rounded-md text-[11.5px] text-white/60 hover:text-white hover:bg-white/[0.05]">No highlight</button>}<p className="text-[10.5px] text-white/35 mt-2 leading-snug">Email-safe colours only, so every inbox shows them the same.</p></div>);}
+    else if(pop.kind==='link')popBody=(<div className="flex flex-col gap-2"><div><label className={PL} htmlFor="rt-link-url">Link</label><input id="rt-link-url" autoFocus value={d.url} onChange={e=>setD({url:e.target.value,err:null})} onKeyDown={enter(applyLink)} placeholder="https://example.com" className={INP}/><Err/></div><label className="inline-flex items-center gap-2 text-[11.5px] text-white/65 cursor-pointer"><input type="checkbox" checked={!!d.blank} onChange={e=>setD({blank:e.target.checked})} className="accent-current"/>Open in new tab</label><div className="flex items-center justify-end gap-2">{d.a&&<button type="button" onClick={removeLink} className={PBTN2}>Remove link</button>}<button type="button" onClick={applyLink} className={PBTN}>Apply</button></div></div>);
+    else if(pop.kind==='button')popBody=(<div className="flex flex-col gap-2"><div><label className={PL} htmlFor="rt-btn-label">Button text</label><input id="rt-btn-label" autoFocus maxLength={40} value={d.label||''} onChange={e=>setD({label:e.target.value,err:null})} onKeyDown={enter(applyButton)} placeholder="e.g. Book a call" className={INP}/></div><div><label className={PL} htmlFor="rt-btn-url">Link</label><input id="rt-btn-url" value={d.url||''} onChange={e=>setD({url:e.target.value,err:null})} onKeyDown={enter(applyButton)} placeholder="https://example.com/book" className={INP}/><Err/></div><div className="rounded-lg bg-white px-3 py-3 text-center"><span style={{display:'inline-block',padding:'8px 16px',borderRadius:8,background:RT_BTN_BG,color:'#fff',fontWeight:600,fontSize:12.5}}>{String(d.label||'').trim()||'Button text'}</span></div><div className="flex justify-end"><button type="button" onClick={applyButton} className={PBTN}>Insert button</button></div></div>);
+    else if(pop.kind==='image')popBody=(<div className="flex flex-col gap-2.5">
+      <div role="tablist" className="inline-flex self-start p-0.5 rounded-lg bg-white/[0.04] border border-white/[0.08]">{[['upload','Upload'],['link','Paste a link']].map(([k,l])=>(<button key={k} type="button" role="tab" aria-selected={(d.tab||'upload')===k} onClick={()=>setD({tab:k,err:null})} className={['px-2.5 py-1 rounded-md text-[11.5px] font-medium',(d.tab||'upload')===k?'bg-white/[0.10] text-white':'text-white/50 hover:text-white'].join(' ')}>{l}</button>))}</div>
+      {(d.tab||'upload')==='upload'?(<div><div className="grid grid-cols-3 gap-1.5">{RT_SAMPLE_IMAGES.map((s,i)=>(<button key={s.name} type="button" onClick={()=>setD({sample:i,err:null,alt:d.alt||s.name})} title={s.name} aria-label={'Upload '+s.name} className={['h-12 rounded-lg border-2 overflow-hidden',d.sample===i?'border-brand-400':'border-transparent hover:border-white/20'].join(' ')} style={{background:'linear-gradient(135deg,'+s.a+','+s.b+')'}}/>))}</div><p className="text-[10.5px] text-white/40 mt-1.5 leading-snug">Prototype: pick a sample to “upload”. JPG, PNG or GIF up to {RT_IMG_MAX_MB} MB. nrtur hosts the image and links to it.</p></div>)
+        :(<div><input autoFocus value={d.url||''} onChange={e=>setD({url:e.target.value,err:null})} onKeyDown={enter(applyImage)} placeholder="https://example.com/image.png" aria-label="Image link" className={INP}/></div>)}
+      <div><p className={PL}>Width</p><div className="inline-flex p-0.5 rounded-lg bg-white/[0.04] border border-white/[0.08]">{[['small','Small'],['medium','Medium'],['full','Full']].map(([k,l])=>(<button key={k} type="button" onClick={()=>setD({w:k})} aria-pressed={(d.w||'medium')===k} className={['px-2.5 py-1 rounded-md text-[11.5px] font-medium',(d.w||'medium')===k?'bg-white/[0.10] text-white':'text-white/50 hover:text-white'].join(' ')}>{l}</button>))}</div></div>
+      <div><label className={PL} htmlFor="rt-img-alt">Alt text</label><input id="rt-img-alt" value={d.alt||''} maxLength={200} onChange={e=>setD({alt:e.target.value})} onKeyDown={enter(applyImage)} placeholder="Describe the image for people who can’t see it" className={INP}/><Err/></div>
+      <div className="flex justify-end"><button type="button" onClick={applyImage} className={PBTN}>Insert image</button></div></div>);
+    else if(pop.kind==='merge')popBody=(<div><p className={PL}>Merge field</p><div className="max-h-[240px] overflow-y-auto scroll-area -mx-1">{MERGE_TAGS.map(t=>{const k=t.token.slice(2,-2);return(<button key={k} type="button" onMouseDown={e=>e.preventDefault()} onClick={()=>{setPop(null);insertChip(k);}} className="w-full text-left px-2 py-1.5 rounded-md hover:bg-white/[0.05] flex items-center gap-2"><span className="font-mono text-[11px] text-brand-200 shrink-0">{t.token}</span><span className="text-[11px] text-white/45 truncate">{t.desc}</span></button>);})}</div><p className="text-[10.5px] text-white/35 mt-1.5">Tip: type <span className="font-mono text-white/55">{'{{'}</span> in the text to pick one.</p></div>);
+    else if(pop.kind==='chip'){const lab=MERGE_TAGS.find(t=>t.token==='{{'+d.key+'}}');popBody=d.filled?(<div className="flex flex-col gap-2"><p className="text-[12px] text-white/80"><span className="font-mono text-brand-200">{'{{'+d.key+'}}'}</span></p><p className="text-[11.5px] text-white/55 leading-snug">Filled with “{d.value}” for this recipient. It’s sent as plain text.</p><div className="flex justify-end gap-2"><button type="button" onClick={()=>{setPop(null);chipSet(d.el,'{{'+d.key+'}}');}} className={PBTN2}>Show the field again</button><button type="button" onClick={()=>{setPop(null);if(ref.current.contains(d.el)){d.el.remove();sync();}}} className={PBTN2}>Remove</button></div></div>)
+      :(<div className="flex flex-col gap-2"><p className="text-[12px] text-white/85 font-medium">{lab?lab.desc:rtFieldLabel(d.key)} <span className="font-mono text-[10.5px] text-white/40 font-normal">{'{{'+d.key+'}}'}</span></p><div><label className={PL} htmlFor="rt-chip-fb">Fallback if it’s empty</label><input id="rt-chip-fb" autoFocus maxLength={50} value={d.fb||''} onChange={e=>setD({fb:e.target.value.replace(/[{}|]/g,'')})} onKeyDown={enter(()=>{setPop(null);chipSet(d.el,'{{'+d.key+(String(d.fb||'').trim()?'|'+String(d.fb).trim():'')+'}}');})} placeholder="e.g. there" className={INP}/></div><p className="text-[10.5px] text-white/35 leading-snug">Stored as <span className="font-mono">{'{{'+d.key+(String(d.fb||'').trim()?'|'+String(d.fb).trim():'')+'}}'}</span>.</p><div className="flex justify-end gap-2"><button type="button" onClick={()=>{setPop(null);if(ref.current.contains(d.el)){d.el.remove();sync();}}} className={PBTN2}>Remove field</button><button type="button" onClick={()=>{setPop(null);chipSet(d.el,'{{'+d.key+(String(d.fb||'').trim()?'|'+String(d.fb).trim():'')+'}}');}} className={PBTN}>Apply</button></div></div>);}
+  }
+  const vh=window.innerHeight;
+  const menuStyle=menu?(()=>{const r=menu.rect;const st={position:'fixed',left:Math.max(8,Math.min(r.left,window.innerWidth-268)),width:260,zIndex:400,background:'var(--pop2)',boxShadow:'0 16px 50px rgba(0,0,0,0.55)'};if(r.bottom+280<vh||r.top<280)st.top=r.bottom+4;else st.bottom=vh-r.top+4;return st;})():null;
+  return(<div data-testid="rt-full" className={bare?'':['rounded-xl bg-white/[0.04] border overflow-hidden',error?'border-red-500/50':'border-white/[0.10] focus-within:border-brand-500/40'].join(' ')}>
+    <div role="toolbar" aria-label="Formatting" className="flex flex-wrap items-center gap-0.5 px-1.5 py-1 border-b border-white/[0.07] bg-white/[0.02]">
+      <select value={blk} onChange={e=>{const v=e.target.value;setBlk(v);exec('formatBlock','<'+v+'>');}} title="Text style" aria-label="Text style" className="h-7 pl-1.5 pr-1 rounded-md bg-transparent text-[12px] text-white/70 hover:bg-white/[0.06] outline-none cursor-pointer shrink-0" style={{colorScheme:'dark'}}>
+        {[['p','Normal'],['h1','Heading 1'],['h2','Heading 2'],['h3','Heading 3']].map(([k,l])=>(<option key={k} value={k} style={{background:'var(--s850)'}}>{l}</option>))}
+      </select>
+      <Sep/>
+      <B t="Bold (⌘B)" onClick={()=>exec('bold')}><b className="text-[13px] leading-none">B</b></B>
+      <B t="Italic (⌘I)" onClick={()=>exec('italic')}><i className="text-[13px] leading-none font-serif">I</i></B>
+      <B t="Underline (⌘U)" onClick={()=>exec('underline')}><u className="text-[13px] leading-none">U</u></B>
+      <B t="Strikethrough" onClick={()=>exec('strikeThrough')}><s className="text-[13px] leading-none">S</s></B>
+      <button type="button" onMouseDown={e=>e.preventDefault()} onClick={e=>openPop('color',fromBtn(e))} className={[btn,pop&&pop.kind==='color'?on:''].join(' ')} title="Text colour" aria-label="Text colour"><span className="flex flex-col items-center leading-none"><span className="text-[12.5px] font-semibold">A</span><span className="w-3 h-[3px] rounded-full mt-[1px]" style={{background:'#DC2626'}}/></span></button>
+      <button type="button" onMouseDown={e=>e.preventDefault()} onClick={e=>openPop('hilite',fromBtn(e))} className={[btn,pop&&pop.kind==='hilite'?on:''].join(' ')} title="Highlight" aria-label="Highlight">{G('hl')}</button>
+      <Sep/>
+      <B t="Align left" onClick={()=>exec('justifyLeft')}>{G('alignL')}</B>
+      <B t="Align centre" onClick={()=>exec('justifyCenter')}>{G('alignC')}</B>
+      <B t="Align right" onClick={()=>exec('justifyRight')}>{G('alignR')}</B>
+      <Sep/>
+      <B t="Bullet list" onClick={()=>exec('insertUnorderedList')}><I.List size={13}/></B>
+      <B t="Numbered list" onClick={()=>exec('insertOrderedList')}>{G('ol')}</B>
+      <B t="Quote" onClick={()=>exec('formatBlock','<blockquote>')}>{G('quote')}</B>
+      <B t="Divider" onClick={()=>exec('insertHorizontalRule')}>{G('hr')}</B>
+      <Sep/>
+      <button type="button" onMouseDown={e=>e.preventDefault()} onClick={e=>openLink(fromBtn(e))} className={[btn,pop&&pop.kind==='link'?on:''].join(' ')} title="Link (⌘K)" aria-label="Link">{G('link')}</button>
+      <button type="button" onMouseDown={e=>e.preventDefault()} onClick={e=>openPop('button',fromBtn(e),{label:'',url:''})} className={[btn,pop&&pop.kind==='button'?on:''].join(' ')} title="Button" aria-label="Button">{G('button')}</button>
+      <button type="button" onMouseDown={e=>e.preventDefault()} onClick={e=>openPop('image',fromBtn(e),{tab:'upload',w:'medium'})} className={[btn,pop&&pop.kind==='image'?on:''].join(' ')} title="Image" aria-label="Image"><I.Image size={13}/></button>
+      <Sep/>
+      <button type="button" onMouseDown={e=>e.preventDefault()} onClick={e=>openPop('merge',fromBtn(e))} className={['h-7 px-1.5 rounded-md inline-flex items-center gap-1 text-[11.5px] font-medium transition-colors shrink-0',pop&&pop.kind==='merge'?'text-white bg-white/[0.08]':'text-white/55 hover:text-white hover:bg-white/[0.08]'].join(' ')} title="Merge field" aria-label="Merge field"><span className="font-mono text-[10.5px] text-brand-300">{'{}'}</span>Merge field</button>
+      <Sep/>
+      <B t="Clear formatting" onClick={()=>exec('removeFormat')}>{G('clear')}</B>
+      <B t="Undo (⌘Z)" onClick={()=>exec('undo')}>{G('undo')}</B>
+      <B t="Redo (⇧⌘Z)" onClick={()=>exec('redo')}>{G('redo')}</B>
+    </div>
+    <div ref={ref} contentEditable suppressContentEditableWarning dir="ltr" role="textbox" aria-multiline="true" aria-label={placeholder||'Message'} data-ph={(placeholder||'Write formatted text…')+'  Type / for blocks, {{ for merge fields'} onInput={onInput} onKeyDown={onKeyDown} onClick={onClick} onKeyUp={trackBlk} onMouseUp={trackBlk} onBlur={()=>setMenu(null)} className="rt-edit px-3 py-2.5 text-[13px] text-white/90 leading-relaxed outline-none min-h-[72px] overflow-y-auto" style={{minHeight:minH||72,maxHeight:bare?Math.max(minH||0,240):Math.max((minH||120)*2,360)}} dangerouslySetInnerHTML={{__html:init}}/>
+    {pop&&<RtPopover anchor={pop.anchor} onClose={()=>setPop(null)} width={pop.kind==='image'||pop.kind==='merge'?300:260} label={pop.kind}>{popBody}</RtPopover>}
+    {menu&&menuItems.length>0&&ReactDOM.createPortal(<div role="listbox" aria-label={menu.kind==='slash'?'Insert a block':'Insert a merge field'} data-testid={'rt-menu-'+menu.kind} className="rounded-xl border border-white/[0.10] py-1 max-h-[260px] overflow-y-auto scroll-area" style={menuStyle} onMouseDown={e=>e.preventDefault()}>
+      <p className="px-3 pt-1 pb-1.5 text-[10px] font-medium text-white/40 uppercase tracking-[0.12em]">{menu.kind==='slash'?'Blocks':'Merge fields'}</p>
+      {menuItems.map((it,i)=>(<button key={it.id} type="button" role="option" aria-selected={i===menu.idx} onMouseEnter={()=>setMenu(m=>m?{...m,idx:i}:m)} onClick={()=>pickMenu(it)} className={['w-full text-left px-3 py-1.5 flex items-center gap-2',i===menu.idx?'bg-white/[0.07]':''].join(' ')}><span className={['text-[12px] shrink-0',menu.kind==='merge'?'font-mono text-brand-200':'text-white/85'].join(' ')}>{it.label}</span><span className="text-[11px] text-white/40 truncate">{it.hint}</span></button>))}
+    </div>,document.body)}
+  </div>);
+}
+function RichTextBasic({value,onChange,error,placeholder,minH,bare}){
   const ref=React.useRef(null);
   const sync=()=>{if(ref.current)onChange(coSanitizeHtml(ref.current.innerHTML));};
   const cmd=(c)=>{document.execCommand(c,false,null);sync();if(ref.current)ref.current.focus();};
@@ -11401,7 +11707,7 @@ function EmailReplyComposer({target,onClose,onToast,onSend,onSaveDraft,canReplyA
       {_tplLeft.length>0&&<div className="mb-2"><TplFillPanel tags={_tplLeft} hasRecipient={!!to.trim()} onFill={_live.fillTag} onRemove={_live.removeTag}/></div>}
       {_tplLeft.length===0&&<div className="mb-1"><TplFilledFor match={_live.match} active={_live.active}/></div>}
       <div className="rounded-xl border border-white/[0.10] bg-white/[0.03] focus-within:border-brand-500/45 transition-all overflow-hidden">
-        <RichTextField key={edKey} bare value={val} onChange={setVal} placeholder={placeholder} minH={92}/>
+        <RichTextField key={edKey} full bare value={val} onChange={setVal} placeholder={placeholder} minH={92}/>
         {target.quoted&&(<div className="px-4 pb-2.5">
           <button onClick={()=>setShowQuote(v=>!v)} className="inline-flex items-center gap-1.5 text-[11px] text-white/40 hover:text-white/70 transition-colors"><I.More size={12}/>{showQuote?'Hide quoted text':'Show quoted text'}</button>
           {showQuote&&<div className="mt-2 pl-3 border-l-2 border-white/[0.12] text-[12px] text-white/45 whitespace-pre-wrap leading-relaxed max-h-28 overflow-y-auto scroll-area">{target.quoted}</div>}
@@ -12103,7 +12409,7 @@ function EmailComposeModal({close:_close,defaultTo='',recipientCtx=null,onSent,o
           <div className="relative flex items-center px-5 py-2.5"><span className="text-[12px] text-white/40 w-14 shrink-0">To</span><input value={to} onChange={e=>setTo(e.target.value)} placeholder="Name or email" aria-label="To" className="flex-1 bg-transparent outline-none text-[13px] text-white placeholder:text-white/25"/><ToSuggest crm={_crmTpl} value={to} onPick={(p)=>{setPicked({ctx:p.kind==='lead'?{leadId:p.id}:{contactId:p.id},email:p.email});setTo(p.email);}}/><button onClick={()=>setShowCc(v=>!v)} className="text-[11px] text-white/40 hover:text-brand-300 transition-colors shrink-0 ml-2">Cc/Bcc</button></div>
           {showCc&&(<><div className="flex items-center px-5 py-2.5"><span className="text-[12px] text-white/40 w-14 shrink-0">Cc</span><input value={cc} onChange={e=>setCc(e.target.value)} placeholder="cc@company.com" className="flex-1 bg-transparent outline-none text-[13px] text-white placeholder:text-white/25"/></div><div className="flex items-center px-5 py-2.5"><span className="text-[12px] text-white/40 w-14 shrink-0">Bcc</span><input value={bcc} onChange={e=>setBcc(e.target.value)} placeholder="bcc@company.com" className="flex-1 bg-transparent outline-none text-[13px] text-white placeholder:text-white/25"/></div></>)}
           <div className="flex items-center px-5 py-2.5"><span className="text-[12px] text-white/40 w-14 shrink-0">Subject</span><input value={subject} onChange={e=>setSubject(e.target.value)} placeholder="Subject line..." className="flex-1 bg-transparent outline-none text-[13px] text-white placeholder:text-white/25"/></div>
-          <div className="px-2"><RichTextField key={rtKey} bare value={body} onChange={setBody} placeholder="Write your message…" minH={180}/></div>
+          <div className="px-2"><RichTextField key={rtKey} full bare value={body} onChange={setBody} placeholder="Write your message…" minH={180}/></div>
           {(_live.active&&(_tplLeft.length>0||_live.match))&&<div className="px-5 py-2.5 flex flex-col gap-2">{_tplLeft.length>0?<TplFillPanel tags={_tplLeft} hasRecipient={!!to.trim()} onFill={_live.fillTag} onRemove={_live.removeTag}/>:<TplFilledFor match={_live.match} active={_live.active}/>}</div>}
           {!_live.active&&_tplLeft.length>0&&<div className="px-5 py-2.5"><TplFillPanel tags={_tplLeft} hasRecipient={!!to.trim()} onFill={_live.fillTag} onRemove={_live.removeTag}/></div>}
           {attachments.length>0&&(<div className="px-5 py-2.5 flex flex-wrap gap-2">{attachments.map((a,i)=>(<span key={i} className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] text-white/70 bg-white/[0.05] border border-white/[0.08]"><I.Paperclip size={11}/>{a}<button onClick={()=>setAttachments(arr=>arr.filter((_,j)=>j!==i))} className="text-white/35 hover:text-white"><I.X size={10}/></button></span>))}</div>)}
@@ -16802,7 +17108,9 @@ function useTplLive({crm,contacts,recipient,subject,body,setSubject,setBody,html
   const recKey=typeof recipient==='object'&&recipient?JSON.stringify(recipient):String(recipient||'');
   const vals=()=>tplRecipientValues(crm||{contacts},recipient);
   const write=(s,b)=>{if(setSubject&&s!==undefined)setSubject(s);setBody(b);last.current={subject:s,body:b};};
-  const apply=(t)=>{src.current={subject:t.subject,body:t.body};const v=vals().vals;write(setSubject?tplFill(t.subject,v):undefined,tplFill(t.body,v));};
+  // html: the composer uses RichTextField `full` (template editor upgrades, proposed), so the source's {{tokens}} are wrapped as
+  // merge-field chips first. The literal token stays inside each chip, so tplFill below is unchanged and a filled chip keeps its styling.
+  const apply=(t)=>{src.current={subject:t.subject,body:html?rtWrapTokens(t.body):t.body};const v=vals().vals;write(setSubject?tplFill(t.subject,v):undefined,tplFill(src.current.body,v));};
   React.useEffect(()=>{
     if(!src.current)return;
     const v=vals().vals;
@@ -16866,6 +17174,16 @@ function TemplatePickerButton({channel,onPick,hasContent,note,variant='toolbar',
     {confirmNode}
   </div>);
 }
+// SMS emoji (template editor upgrades, proposed). Any emoji switches the whole message to Unicode: 70 characters per SMS,
+// 67 per part when split. Without emoji, counting is unchanged (SmsSegments).
+const TPL_SMS_EMOJI=['😊','😀','😂','🙂','😉','😍','🙏','👍','👋','👏','🎉','🔥','✅','⭐','💡','📅','📞','📧','⏰','🚀','💬','❤️','🤝','👀'];
+let _tplEmojiRe=null;
+function tplHasEmoji(str){try{_tplEmojiRe=_tplEmojiRe||new RegExp('\\p{Extended_Pictographic}','u');return _tplEmojiRe.test(String(str||''));}catch(e){return /[\uD800-\uDBFF]/.test(String(str||''));}}
+// GSM-7 basic set + extension table. Any other character (emoji, curly quotes, accented letters outside GSM)
+// sends the whole SMS as Unicode: 70 characters per SMS, 67 per part (owner, 2026-10-22).
+const TPL_GSM7="@£$¥èéùìòÇ\nØø\rÅåΔ_ΦΓΛΩΠΨΣΘΞÆæßÉ !\"#¤%&'()*+,-./0123456789:;<=>?¡ABCDEFGHIJKLMNOPQRSTUVWXYZÄÖÑÜ§¿abcdefghijklmnopqrstuvwxyzäöñüà^{}\\[~]|€";
+function tplIsUnicode(str){const t=String(str||'');for(const ch of t){if(TPL_GSM7.indexOf(ch)<0)return true;}return false;}
+function tplSmsSegments(str){const len=String(str||'').length;if(!tplIsUnicode(str))return {...SmsSegments(len),uni:false};if(!len)return {segs:0,per:70,left:70,uni:true};const per=len<=70?70:67;const segs=Math.ceil(len/per);return {segs,per,left:segs*per-len,uni:true};}
 // Create / edit / view a template. readOnly = view only (not the creator and not an admin, or a read-only workspace).
 function TemplateEditModal({channel,initial,others,readOnly,onClose,onSave,onDuplicate}){
   const isSms=channel==='sms';
@@ -16875,6 +17193,13 @@ function TemplateEditModal({channel,initial,others,readOnly,onClose,onSave,onDup
   const [rtKey,setRtKey]=React.useState(0);
   const [tried,setTried]=React.useState(false);
   const subjRef=React.useRef(null);const smsRef=React.useRef(null);const rtWrap=React.useRef(null);
+  // Template editor upgrades (proposed): preview Desktop / Mobile / Plain text, test send, SMS emoji.
+  const [pvTab,setPvTab]=React.useState('email');   // 'email' | 'text'
+  const [pvSize,setPvSize]=React.useState('desktop'); // 'desktop' | 'mobile'
+  const [emo,setEmo]=React.useState(null);           // emoji popover anchor
+  const smsSel=React.useRef(null);
+  // The signed-in user (Alex Morgan) at the address the inbox treats as "me". Test emails always go to the current user, never to a contact.
+  const meAddr='alex@bloom.co';
   const dirty=!readOnly&&(name!==(initial?initial.name:'')||subject!==(initial?(initial.subject||''):'')||body!==(initial?initial.body:''));
   const {attemptClose,guardNode}=useCloseGuard(dirty,onClose);
   const trimmed=name.trim();
@@ -16882,7 +17207,9 @@ function TemplateEditModal({channel,initial,others,readOnly,onClose,onSave,onDup
   const dup=!!trimmed&&others.some(t=>t.name.trim().toLowerCase()===trimmed.toLowerCase());
   const unknown=tplUnknownTags(subject,text);
   const filled=isSms?tplPreview(body):'';
-  const seg=SmsSegments(filled.length);
+  const seg=tplSmsSegments(filled);
+  const big=!isSms&&String(body||'').length>RT_EMAIL_CLIP;
+  const plain=!isSms?rtHtmlToPlain(tplPreview(body)):'';
   const errs={
     name:!trimmed?'Give the template a name.':dup?(isSms?'An SMS':'An email')+' template with this name already exists.':null,
     subject:!isSms&&!subject.trim()?'Add a subject line.':null,
@@ -16891,6 +17218,9 @@ function TemplateEditModal({channel,initial,others,readOnly,onClose,onSave,onDup
   };
   const valid=!errs.name&&!errs.subject&&!errs.body&&!errs.tags;
   const save=()=>{setTried(true);if(!valid)return;onSave({name:trimmed,subject:isSms?undefined:subject.trim(),body});};
+  // Sends the current (unsaved) version to the signed-in user; merge fields use the sample contact.
+  const sendTest=()=>{if(!valid){setTried(true);return;}window.__nrturToast&&window.__nrturToast('Test email sent to '+meAddr,'success');};
+  const insEmoji=(ch)=>{const el=smsRef.current;const cur=(el&&document.activeElement===el)?{i:el.selectionStart,j:el.selectionEnd}:(smsSel.current||{i:body.length,j:body.length});const i=Math.min(cur.i,body.length),j=Math.min(cur.j,body.length);setBody(body.slice(0,i)+ch+body.slice(j));const pos=i+ch.length;smsSel.current={i:pos,j:pos};setEmo(null);requestAnimationFrame(()=>{try{if(el){el.focus();el.setSelectionRange(pos,pos);}}catch(e){}});};
   // Insert at the caret of whichever field has focus (chips keep focus via onMouseDown preventDefault); otherwise append to the body.
   const insert=(tok)=>{
     const a=document.activeElement;
@@ -16916,11 +17246,16 @@ function TemplateEditModal({channel,initial,others,readOnly,onClose,onSave,onDup
           {!isSms&&(<div><label className={L} htmlFor="tpl-subject">Subject</label><input id="tpl-subject" ref={subjRef} value={subject} maxLength={TPL_SUBJECT_MAX} onChange={e=>setSubject(e.target.value.slice(0,TPL_SUBJECT_MAX))} placeholder="e.g. Following up on {{company_name}}" className={INP(tried&&errs.subject)}/><Err m={errs.subject}/></div>)}
           <div><label className={L}>{isSms?'Message':'Email'}</label>
             {isSms
-              ?<textarea ref={smsRef} value={body} onChange={e=>setBody(e.target.value)} rows={6} placeholder="Hi {{first_name}}, …" className={INP(tried&&errs.body)+' resize-none leading-relaxed'}/>
-              :readOnly?<div className="rounded-xl bg-white/[0.04] border border-white/[0.10] px-3 py-2.5 text-[13px] text-white/80 leading-relaxed [&_p]:mb-2 [&_ul]:list-disc [&_ul]:pl-5" dangerouslySetInnerHTML={{__html:coSanitizeHtml(body)}}/>
-              :<div ref={rtWrap}><RichTextField key={rtKey} value={body} onChange={setBody} error={tried&&errs.body} placeholder="Hi {{first_name}}, …" minH={200}/></div>}
+              ?<textarea ref={smsRef} value={body} onChange={e=>{setBody(e.target.value);smsSel.current={i:e.target.selectionStart,j:e.target.selectionEnd};}} onSelect={e=>{smsSel.current={i:e.target.selectionStart,j:e.target.selectionEnd};}} rows={6} placeholder="Hi {{first_name}}, …" className={INP(tried&&errs.body)+' resize-none leading-relaxed'}/>
+              :readOnly?<div className="rt-view rounded-xl bg-white/[0.04] border border-white/[0.10] px-3 py-2.5 text-[13px] text-white/80 leading-relaxed [&_p]:mb-2" dangerouslySetInnerHTML={{__html:rtChipify(coSanitizeHtml(body,true))}}/>
+              :<div ref={rtWrap}><RichTextField key={rtKey} full value={body} onChange={setBody} error={tried&&errs.body} placeholder="Hi {{first_name}}, …" minH={200}/></div>}
             <Err m={errs.body}/>
-            {isSms&&(<p className={['text-[11px] tabular-nums mt-1.5',body.length>TPL_SMS_MAX?'text-red-400':seg.segs>1?'text-amber-300':'text-white/45'].join(' ')}>{filled.length} characters · {seg.segs||0} SMS with sample values</p>)}
+            {big&&(<div role="status" data-testid="tpl-size-warning" className="mt-2 flex items-start gap-2 px-3 py-2 rounded-lg bg-amber-500/[0.08] border border-amber-500/25 text-[11.5px] text-amber-200"><I.AlertTriangle size={12} className="shrink-0 mt-0.5"/><span>This email is large — Gmail may cut it off. Remove images or text. <span className="text-amber-200/60 tabular-nums">({Math.round(body.length/1024)} KB; Gmail clips at about 102 KB)</span></span></div>)}
+            {isSms&&(<div className="flex items-center gap-2 mt-1.5 flex-wrap">
+              {!readOnly&&<button type="button" onMouseDown={e=>e.preventDefault()} onClick={e=>{const el=e.currentTarget;const r=el.getBoundingClientRect();setEmo(o=>o?null:{rect:r,el});}} title="Add emoji" aria-label="Add emoji" aria-expanded={!!emo} className={['inline-flex items-center gap-1 h-7 px-2 rounded-md text-[11.5px] transition-colors',emo?'text-white bg-white/[0.08]':'text-white/55 hover:text-white hover:bg-white/[0.06]'].join(' ')}><I.Smile size={13}/>Emoji</button>}
+              <p data-testid="tpl-sms-count" className={['text-[11px] tabular-nums',body.length>TPL_SMS_MAX?'text-red-400':seg.segs>1?'text-amber-300':'text-white/45'].join(' ')}>{filled.length} characters · {seg.segs||0} SMS with sample values{seg.uni?' · Emoji or special characters (like ’ or “) use Unicode: 70 characters per SMS':''}</p>
+            </div>)}
+            {emo&&<RtPopover anchor={emo} onClose={()=>setEmo(null)} width={232} label="Emoji"><p className="block text-[10.5px] font-medium text-white/45 uppercase tracking-[0.12em] mb-1.5">Emoji</p><div className="grid grid-cols-6 gap-0.5">{TPL_SMS_EMOJI.map(ch=>(<button key={ch} type="button" onMouseDown={e=>e.preventDefault()} onClick={()=>insEmoji(ch)} aria-label={'Insert '+ch} className="h-8 rounded-md text-[17px] hover:bg-white/[0.08] transition-colors">{ch}</button>))}</div><p className="text-[10.5px] text-white/40 mt-2 leading-snug">Emoji switch the message to Unicode: 70 characters per SMS instead of 160.</p></RtPopover>}
           </div>
           {!readOnly&&(<div><p className={L}>Insert merge field</p><div className="flex flex-wrap gap-1.5">{MERGE_TAGS.map(v=>(<button key={v.token} type="button" onMouseDown={e=>e.preventDefault()} onClick={()=>insert(v.token)} title={v.desc} className="px-2 py-1 rounded-md text-[11px] font-mono text-brand-200 bg-brand-500/12 border border-brand-500/25 hover:bg-brand-500/25 hover:text-white transition-all">{v.token}</button>))}</div>
             <p className="text-[11px] text-white/40 mt-2 leading-relaxed">Add a fallback for when a value is missing: <span className="font-mono text-white/60">{'{{first_name|there}}'}</span>.</p>
@@ -16930,15 +17265,19 @@ function TemplateEditModal({channel,initial,others,readOnly,onClose,onSave,onDup
         </fieldset>
         <div className="flex-1 min-w-0 px-6 py-5 border-t md:border-t-0 md:border-l border-white/[0.07] md:overflow-y-auto scroll-area" style={{background:'var(--s900)'}}>
           <p className={L}>Preview <span className="normal-case tracking-normal text-white/35 font-normal">· sample contact Sarah Chen, Meridian Agency</span></p>
+          {!isSms&&(<div className="flex items-center gap-2 mb-3 flex-wrap">
+            {[[[['email','Email'],['text','Plain text']],pvTab,setPvTab,'Preview format'],...(pvTab==='email'?[[[['desktop','Desktop'],['mobile','Mobile']],pvSize,setPvSize,'Preview size']]:[])].map(([opts,v,set,lab])=>(<div key={lab} role="tablist" aria-label={lab} className="inline-flex p-0.5 rounded-lg bg-white/[0.04] border border-white/[0.08]">{opts.map(([k,l])=>(<button key={k} type="button" role="tab" aria-selected={v===k} onClick={()=>set(k)} className={['px-2.5 py-1 rounded-md text-[11.5px] font-medium transition-colors',v===k?'bg-white/[0.10] text-white':'text-white/50 hover:text-white'].join(' ')}>{l}</button>))}</div>))}
+          </div>)}
           {isSms
             ?(<div className="mx-auto max-w-[300px] rounded-[28px] border border-white/[0.10] p-4 pt-6" style={{background:'var(--s950)'}}><p className="text-center text-[10.5px] text-white/40 mb-3">Text message</p>{body.trim()?<div className="ml-auto max-w-[85%] rounded-2xl rounded-br-sm bg-brand-500 text-white text-[13px] leading-relaxed px-3.5 py-2.5 whitespace-pre-wrap break-words">{tplPreview(body)}</div>:<p className="text-center text-[12px] text-white/35 py-8">Your message appears here.</p>}</div>)
-            :(<div className="rounded-xl bg-white text-[#1f1f1f] overflow-hidden"><div className="px-4 py-3 border-b border-black/[0.08]"><p className="text-[11px] text-black/45">To Sarah Chen</p><p className="text-[14px] font-semibold mt-0.5 break-words">{subject.trim()?tplPreview(subject):<span className="text-black/30 font-normal">Subject</span>}</p></div><div className="px-4 py-3 text-[13px] leading-relaxed [&_p]:mb-2.5 [&_ul]:list-disc [&_ul]:pl-5 [&_ul]:mb-2.5 [&_a]:text-[#2f6fd0] [&_a]:underline">{text.trim()?<div dangerouslySetInnerHTML={{__html:coSanitizeHtml(tplPreview(body))}}/>:<p className="text-black/30">Your email appears here.</p>}</div></div>)}
+            :pvTab==='text'?(<div data-testid="tpl-preview-plain" className="rounded-xl border border-white/[0.10] bg-white/[0.03] p-4"><p className="text-[11px] text-white/40 mb-2.5 leading-snug">Sent with the formatted email, for apps that can’t show formatting. Made automatically from your email.</p>{plain?<pre className="whitespace-pre-wrap break-words font-mono text-[12px] text-white/80 leading-relaxed m-0">{plain}</pre>:<p className="text-[12px] text-white/35">Your email appears here.</p>}</div>)
+            :(<div data-testid="tpl-preview-frame" data-size={pvSize} className={pvSize==='mobile'?'mx-auto w-[375px] max-w-full rounded-[28px] border border-white/[0.10] p-2.5 pt-5':''} style={pvSize==='mobile'?{background:'var(--s950)'}:undefined}>{pvSize==='mobile'&&<div className="mx-auto mb-2.5 w-16 h-1 rounded-full bg-white/[0.15]"/>}<div className={['bg-white text-[#1f1f1f] overflow-hidden',pvSize==='mobile'?'rounded-[18px]':'rounded-xl'].join(' ')}><div className="px-4 py-3 border-b border-black/[0.08]"><p className="text-[11px] text-black/45">To Sarah Chen</p><p className="text-[14px] font-semibold mt-0.5 break-words">{subject.trim()?tplPreview(subject):<span className="text-black/30 font-normal">Subject</span>}</p></div><div className="rt-mail px-4 py-3 text-[13px] leading-relaxed break-words">{text.trim()?<div dangerouslySetInnerHTML={{__html:coSanitizeHtml(tplPreview(body),true)}}/>:<p className="text-black/30">Your email appears here.</p>}</div></div></div>)}
           <p className="text-[11px] text-white/40 mt-3 leading-relaxed">{isSms?'In the inbox, merge fields fill in for the person you’re texting. In sequences and automations, they fill in when each message sends.':'In the inbox, merge fields fill in for the person in To. In sequences and automations, they fill in when each email sends.'}</p>
         </div>
       </div>
       <div className="flex items-center gap-3 px-6 py-4 border-t border-white/[0.07] shrink-0" style={{background:'var(--s850)'}}>
         {readOnly?(<React.Fragment><div className="flex-1"/>{onDuplicate&&<button onClick={onDuplicate} className="px-4 py-2.5 rounded-xl text-[13px] font-medium text-white/75 bg-white/[0.04] border border-white/[0.08] hover:bg-white/[0.07] transition-all">Duplicate</button>}<button onClick={onClose} className="px-5 py-2.5 rounded-xl text-[13px] font-semibold text-white bg-brand-500 hover:bg-brand-400 transition-all">Close</button></React.Fragment>)
-        :(<React.Fragment><div className="flex-1"/><button onClick={attemptClose} className="px-4 py-2.5 rounded-xl text-[13px] font-medium text-white/65 bg-white/[0.04] border border-white/[0.08] hover:bg-white/[0.07] transition-all">Cancel</button><button onClick={save} className={['px-5 py-2.5 rounded-xl text-[13px] font-semibold transition-all',(valid||!tried)?'text-white bg-brand-500 hover:bg-brand-400 shadow-brand':'text-white/30 bg-white/[0.06] cursor-not-allowed'].join(' ')}>{initial?'Save template':'Create template'}</button></React.Fragment>)}
+        :(<React.Fragment>{!isSms&&<span title={!valid?'Fix the highlighted fields first':'Sends this version to '+meAddr+'. Merge fields use the sample contact.'} className="inline-flex"><button type="button" data-testid="tpl-test-send" disabled={!valid} onClick={sendTest} className="inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl text-[13px] font-medium text-white/75 bg-white/[0.04] border border-white/[0.08] hover:bg-white/[0.07] hover:text-white transition-all disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-white/[0.04]"><I.Send size={12}/>Send test email to me</button></span>}<div className="flex-1"/><button onClick={attemptClose} className="px-4 py-2.5 rounded-xl text-[13px] font-medium text-white/65 bg-white/[0.04] border border-white/[0.08] hover:bg-white/[0.07] transition-all">Cancel</button><button onClick={save} className={['px-5 py-2.5 rounded-xl text-[13px] font-semibold transition-all',(valid||!tried)?'text-white bg-brand-500 hover:bg-brand-400 shadow-brand':'text-white/30 bg-white/[0.06] cursor-not-allowed'].join(' ')}>{initial?'Save template':'Create template'}</button></React.Fragment>)}
       </div>
       {guardNode}
     </div>
