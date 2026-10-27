@@ -15239,14 +15239,28 @@ const FB_QUESTIONS=[
   {k:'q_budget',l:'What’s your budget?',def:'note',sample:'$400k–$500k'},
   {k:'q_move',l:'When do you want to move?',def:'note',sample:'Within 3 months'},
 ];
+// Facebook details that can also be mapped (owner, 2026-10-27). Off by default: they are already on the lead's timeline entry.
+// Ad and campaign names need the ads_read permission.
+const FB_META_SOURCES=[
+  {k:'m_page',l:'Page name',def:'skip',sample:'Bloom Realty',meta:true},
+  {k:'m_form',l:'Form name',def:'skip',sample:'Free valuation',meta:true},
+  {k:'m_ad',l:'Ad name',def:'skip',sample:'Spring valuation',meta:true,ads:true},
+  {k:'m_campaign',l:'Campaign name',def:'skip',sample:'Spring listings',meta:true,ads:true},
+];
+const FB_SOURCES=[...FB_QUESTIONS,...FB_META_SOURCES];
+// Lead fields that take ONE value. Every other field can combine several questions, joined by a separator.
+const FB_SINGLE_TARGETS=['email','phone','value'];
+const FB_SEPARATORS=[{k:' ',l:'Space'},{k:', ',l:'Comma'},{k:' · ',l:'Dot ( · )'},{k:'\n',l:'New line'}];
+// Lead custom fields. In the app this is the workspace's lead custom fields (Settings › Custom fields); the design seeds two.
+const _fbCustom={list:[{k:'cf_budget',l:'Budget range',type:'Text'},{k:'cf_timeline',l:'Move-in timeline',type:'Text'}]};
 // nrtur lead fields a question can go to. nrtur has one Name field (no first/last split). The two custom fields are made-up workspace fields.
 const FB_TARGETS=[
   {k:'name',l:'Name'},{k:'email',l:'Email'},{k:'phone',l:'Phone'},{k:'company',l:'Company name'},{k:'title',l:'Job title'},{k:'value',l:'Estimated value'},
-  {k:'cf_budget',l:'Budget range',custom:true},{k:'cf_timeline',l:'Move-in timeline',custom:true},
   {k:'note',l:'Add to the lead’s note'},{k:'skip',l:'Don’t import'},
 ];
+function fbTargets(){return [...FB_TARGETS.filter(t=>t.k!=='note'&&t.k!=='skip'),..._fbCustom.list.map(c=>({k:c.k,l:c.l,custom:true,type:c.type})),...FB_TARGETS.filter(t=>t.k==='note'||t.k==='skip')];}
 const FB_MULTI_TARGETS=['note','skip']; // every other field takes one question at most
-function fbDefaultMapping(){const m={};FB_QUESTIONS.forEach(q=>{m[q.k]=q.def;});return m;}
+function fbDefaultMapping(){const m={};FB_SOURCES.forEach(q=>{m[q.k]=q.def;});return m;}
 function fbForm(id,name,status,on,owner,last,leads30,past){return {id,name,status,on,owner,last,leads30,past,mapping:null,saveAd:true};}
 const FB_PAGES_SEED=[
   {id:'pg1',name:'Bloom Realty',initials:'BR',color:'#3475CE',category:'Real estate agent',forms:[
@@ -15323,25 +15337,34 @@ function FbPagePicker({pages,initial,mode,onCancel,onConfirm}){
 // Map a form's questions to lead fields (right drawer). Name or email is required; a submission without either is skipped.
 function FbMappingDrawer({page,form,onSave,onClose}){
   const dref=React.useRef(null);useFocusTrap(dref);
-  const init=React.useMemo(()=>({map:{...(form.mapping||fbDefaultMapping())},owner:form.owner,saveAd:form.saveAd!==false}),[form]);
+  const init=React.useMemo(()=>({map:{...fbDefaultMapping(),...(form.mapping||{})},owner:form.owner,saveAd:form.saveAd!==false,sep:{...(form.sep||{})}}),[form]);
   const [map,setMap]=React.useState(init.map);
+  const [sep,setSep]=React.useState(init.sep); // per combined field: the separator
+  const [cfVer,setCfVer]=React.useState(0);     // re-render after a custom field is created
+  const [newCf,setNewCf]=React.useState(null);  // {forKey, name, type}
+  const targets=fbTargets();
   const [owner,setOwner]=React.useState(init.owner);
   const [saveAd,setSaveAd]=React.useState(init.saveAd);
-  const dirty=JSON.stringify({map,owner,saveAd})!==JSON.stringify(init);
+  const dirty=JSON.stringify({map,owner,saveAd,sep})!==JSON.stringify(init);
   const {attemptClose,guardNode}=useCloseGuard(dirty,onClose);
   const counts={};Object.keys(map).forEach(k=>{const t=map[k];counts[t]=(counts[t]||0)+1;});
-  const dupOf=(t)=>FB_MULTI_TARGETS.indexOf(t)<0&&counts[t]>1;
+  const dupOf=(t)=>FB_SINGLE_TARGETS.indexOf(t)>=0&&counts[t]>1; // only single-value fields can't combine
   const anyDup=Object.keys(counts).some(dupOf);
   const hasId=!!(counts.name||counts.email);
-  const err=!hasId?'Map a question to Name or Email.':(anyDup?'Each lead field can take only one question.':null);
-  const tLabel=(k)=>{const t=FB_TARGETS.find(x=>x.k===k);return t?t.l:k;};
+  const err=!hasId?'Map a question to Name or Email.':(anyDup?'Email, Phone and Estimated value take one question each.':null);
+  const combined=Object.keys(counts).filter(t=>FB_MULTI_TARGETS.indexOf(t)<0&&FB_SINGLE_TARGETS.indexOf(t)<0&&counts[t]>1);
+  const tLabel=(k)=>{const t=targets.find(x=>x.k===k);return t?t.l:k;};
+  const sepOf=(t)=>(sep[t]!=null?sep[t]:(t==='name'?' ':', ')).replace('\\n','\n');
   // Preview: how the sample submission (Nina Park) becomes a lead with this mapping.
   const pv=[];const noteLines=[];
-  FB_QUESTIONS.forEach(q=>{const t=map[q.k];if(t==='skip')return;if(t==='note'||(t==='value'&&!/^\$?[\d,.]+$/.test(q.sample))){noteLines.push(q.l+': '+q.sample);return;}pv.push([tLabel(t),q.sample]);});
+  const joinedVals={};const order=[];
+  FB_SOURCES.forEach(q=>{const t=map[q.k];if(t==='skip')return;if(t==='note'||(t==='value'&&!/^\$?[\d,.]+$/.test(q.sample))){noteLines.push(q.l+': '+q.sample);return;}if(!joinedVals[t]){joinedVals[t]=[];order.push(t);}joinedVals[t].push(q.sample);});
+  order.forEach(t=>pv.push([tLabel(t),joinedVals[t].join(sepOf(t))]));
   pv.push(['Source','Facebook'],['Owner',fbMemberName(owner)]);
   const SEL='w-full pl-3 pr-8 py-2 rounded-lg bg-white/[0.04] border text-[12.5px] text-white/85 outline-none appearance-none cursor-pointer truncate';
   const LBL='text-[11px] font-medium text-white/45 uppercase tracking-[0.14em]';
-  const save=()=>{if(err)return;onSave({mapping:map,owner,saveAd});};
+  const save=()=>{if(err)return;onSave({mapping:map,owner,saveAd,sep});};
+  const createCf=()=>{const nm=(newCf.name||'').trim();if(!nm)return;const k='cf_'+Date.now().toString(36);_fbCustom.list=[..._fbCustom.list,{k,l:nm,type:newCf.type||'Text'}];setMap(m=>({...m,[newCf.forKey]:k}));setNewCf(null);setCfVer(v=>v+1);custToast&&custToast('Custom field “'+nm+'” created');};
   return(<React.Fragment>
     <div className="fixed inset-0 bg-black/40 z-[179]" onClick={attemptClose}/>
     <div ref={dref} role="dialog" aria-modal="true" aria-label={'Map ‘'+form.name+'’ to nrtur'} tabIndex={-1} data-fb-mapping
@@ -15359,17 +15382,48 @@ function FbMappingDrawer({page,form,onSave,onClose}){
               <div className="min-w-0 flex-1 basis-[180px]"><p className="text-[12.5px] text-white/85 truncate">{q.l}</p><p className="text-[11px] text-white/40 truncate">e.g. {q.sample}</p></div>
               <I.ArrowRight size={13} className="text-white/30 shrink-0 hidden sm:block"/>
               <div className="relative w-full sm:w-[210px] shrink-0">
-                <select aria-label={'nrtur field for '+q.l} value={map[q.k]} onChange={e=>{const v=e.target.value;setMap(m=>({...m,[q.k]:v}));}} className={SEL+' '+(bad?'border-red-500/40':'border-white/[0.10]')} style={{colorScheme:'dark',background:'var(--s850)'}}>
-                  <optgroup label="Lead fields">{FB_TARGETS.filter(t=>!t.custom&&FB_MULTI_TARGETS.indexOf(t.k)<0).map(t=>(<option key={t.k} value={t.k}>{t.l}</option>))}</optgroup>
-                  <optgroup label="Custom fields">{FB_TARGETS.filter(t=>t.custom).map(t=>(<option key={t.k} value={t.k}>{t.l}</option>))}</optgroup>
-                  <optgroup label="Other">{FB_TARGETS.filter(t=>FB_MULTI_TARGETS.indexOf(t.k)>=0).map(t=>(<option key={t.k} value={t.k}>{t.l}</option>))}</optgroup>
+                <select aria-label={'nrtur field for '+q.l} value={map[q.k]} onChange={e=>{const v=e.target.value;if(v==='__new'){setNewCf({forKey:q.k,name:'',type:'Text'});return;}setMap(m=>({...m,[q.k]:v}));}} className={SEL+' '+(bad?'border-red-500/40':'border-white/[0.10]')} style={{colorScheme:'dark',background:'var(--s850)'}}>
+                  <optgroup label="Lead fields">{targets.filter(t=>!t.custom&&FB_MULTI_TARGETS.indexOf(t.k)<0).map(t=>(<option key={t.k} value={t.k}>{t.l}</option>))}</optgroup>
+                  <optgroup label="Custom fields">{targets.filter(t=>t.custom).map(t=>(<option key={t.k} value={t.k}>{t.l}</option>))}<option value="__new">+ Create custom field…</option></optgroup>
+                  <optgroup label="Other">{targets.filter(t=>FB_MULTI_TARGETS.indexOf(t.k)>=0).map(t=>(<option key={t.k} value={t.k}>{t.l}</option>))}</optgroup>
                 </select>
                 <I.ChevronDown size={12} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-white/35 pointer-events-none"/>
               </div>
             </div>);})}
           </div>
+          <p className={LBL+' mb-1.5 mt-4'}>Facebook details</p>
+          <div className="rounded-xl border border-white/[0.06] bg-white/[0.02]">
+            {FB_META_SOURCES.map((q,i)=>{const bad=dupOf(map[q.k]);return(<div key={q.k} className={['flex items-center gap-x-3 gap-y-1.5 flex-wrap px-3 py-2.5',i?'border-t border-white/[0.04]':''].join(' ')} data-fb-meta={q.l}>
+              <div className="min-w-0 flex-1 basis-[180px]"><p className="text-[12.5px] text-white/85 truncate">{q.l}</p><p className="text-[11px] text-white/40 truncate">e.g. {q.sample}{q.ads?' · needs the ads_read permission':''}</p></div>
+              <I.ArrowRight size={13} className="text-white/30 shrink-0 hidden sm:block"/>
+              <div className="relative w-full sm:w-[210px] shrink-0">
+                <select aria-label={'nrtur field for '+q.l} value={map[q.k]} onChange={e=>{const v=e.target.value;if(v==='__new'){setNewCf({forKey:q.k,name:'',type:'Text'});return;}setMap(m=>({...m,[q.k]:v}));}} className={SEL+' '+(bad?'border-red-500/40':'border-white/[0.10]')} style={{colorScheme:'dark',background:'var(--s850)'}}>
+                  <optgroup label="Lead fields">{targets.filter(t=>!t.custom&&FB_MULTI_TARGETS.indexOf(t.k)<0).map(t=>(<option key={t.k} value={t.k}>{t.l}</option>))}</optgroup>
+                  <optgroup label="Custom fields">{targets.filter(t=>t.custom).map(t=>(<option key={t.k} value={t.k}>{t.l}</option>))}<option value="__new">+ Create custom field…</option></optgroup>
+                  <optgroup label="Other">{targets.filter(t=>FB_MULTI_TARGETS.indexOf(t.k)>=0).map(t=>(<option key={t.k} value={t.k}>{t.l}</option>))}</optgroup>
+                </select>
+                <I.ChevronDown size={12} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-white/35 pointer-events-none"/>
+              </div>
+            </div>);})}
+          </div>
+          {combined.length>0&&<div className="mt-3 rounded-xl border border-white/[0.06] bg-white/[0.02] px-3 py-2.5 flex flex-col gap-2" data-fb-combine>
+            <p className="text-[11.5px] text-white/60">These fields combine several answers, in the order shown above:</p>
+            {combined.map(t=>(<div key={t} className="flex items-center gap-x-3 gap-y-1.5 flex-wrap">
+              <span className="min-w-0 flex-1 basis-[180px] text-[12.5px] text-white/85">{tLabel(t)} <span className="text-white/40">= {FB_SOURCES.filter(q=>map[q.k]===t).map(q=>q.l).join(' + ')}</span></span>
+              <div className="relative w-full sm:w-[210px] shrink-0"><select aria-label={'Separator for '+tLabel(t)} value={sep[t]!=null?sep[t]:(t==='name'?' ':', ')} onChange={e=>{const v=e.target.value;setSep(x=>({...x,[t]:v}));}} className={SEL+' border-white/[0.10]'} style={{colorScheme:'dark',background:'var(--s850)'}}>{FB_SEPARATORS.map(o=>(<option key={o.l} value={o.k}>Joined with: {o.l}</option>))}</select><I.ChevronDown size={12} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-white/35 pointer-events-none"/></div>
+            </div>))}
+          </div>}
+          {newCf&&<div className="mt-3 rounded-xl border border-brand-500/25 bg-brand-500/[0.05] px-3 py-3 flex flex-col gap-2.5" data-fb-new-cf>
+            <p className="text-[12.5px] text-white/85 font-medium">New lead custom field for “{(FB_SOURCES.find(q=>q.k===newCf.forKey)||{}).l}”</p>
+            <div className="flex items-center gap-2 flex-wrap">
+              <input autoFocus value={newCf.name} maxLength={60} onChange={e=>setNewCf(n=>({...n,name:e.target.value}))} onKeyDown={e=>{if(e.key==='Enter')createCf();}} placeholder="Field name, e.g. Budget" aria-label="Custom field name" className="flex-1 min-w-[160px] px-3 py-2 rounded-lg bg-white/[0.04] border border-white/[0.10] text-[12.5px] text-white placeholder:text-white/30 outline-none focus:border-brand-500/40"/>
+              <div className="relative w-[130px] shrink-0"><select aria-label="Custom field type" value={newCf.type} onChange={e=>setNewCf(n=>({...n,type:e.target.value}))} className={SEL+' border-white/[0.10]'} style={{colorScheme:'dark',background:'var(--s850)'}}>{['Text','Long text','Number','Date'].map(t=>(<option key={t}>{t}</option>))}</select><I.ChevronDown size={12} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-white/35 pointer-events-none"/></div>
+            </div>
+            <p className="text-[11px] text-white/45">It’s added to Settings › Custom fields for leads, so it shows on every lead and can be filtered.</p>
+            <div className="flex gap-2"><button type="button" onClick={()=>setNewCf(null)} className="px-3 py-1.5 rounded-lg text-[12px] text-white/65 bg-white/[0.04] border border-white/[0.08]">Cancel</button><button type="button" disabled={!(newCf.name||'').trim()||_fbCustom.list.some(c=>c.l.toLowerCase()===(newCf.name||'').trim().toLowerCase())} onClick={createCf} className="px-3 py-1.5 rounded-lg text-[12px] font-semibold text-white bg-brand-500 hover:bg-brand-400 disabled:opacity-40 disabled:cursor-not-allowed">Create and map</button></div>
+          </div>}
           {err?<p role="alert" className="text-[11.5px] text-red-300 mt-1.5">{err}</p>:null}
-          <p className="text-[11px] text-white/40 mt-1.5">Name or email is required. A submission without either is skipped and shows in Recent Facebook leads. Estimated value takes a number; an answer that isn’t one goes to the note.</p>
+          <p className="text-[11px] text-white/40 mt-1.5">Name or email is required. A submission without either is skipped and shows in Recent Facebook leads. Several answers can go into one text field and are joined; Email, Phone and Estimated value take one each. Estimated value takes a number; an answer that isn’t one goes to the note.</p>
         </div>
         <div className="flex flex-col gap-3">
           <div className="flex items-center gap-x-3 gap-y-1.5 flex-wrap">

@@ -60,7 +60,18 @@ This follows the way the integration works in our other product (aninja), but fi
 - **Archived forms** keep their settings but get no new submissions from Facebook.
 
 **Mapping** (per form; the "Map ‘<form>’ to nrtur" drawer)
-- One row per form question. Each maps to: Name, Email, Phone, Company name, Job title, Estimated value, a lead custom field, **Add to the lead's note**, or **Don't import**.
+- **Two groups of rows.**
+  - **Form questions:** one row per question on the Facebook form.
+  - **Facebook details:** Page name, Form name, Ad name, Campaign name. These are off ("Don't import") by default, because they are already on the lead's timeline entry. Ad and campaign names need `ads_read`.
+- **Each row maps to:**
+  - a standard lead field: Name, Email, Phone, Company name, Job title or Estimated value;
+  - **any lead custom field** in the workspace (the same list as Settings › Custom fields for leads);
+  - **Add to the lead's note**;
+  - **Don't import**.
+- **Create a custom field from the mapping:** "+ Create custom field…" in the dropdown asks for a name (unique among lead custom fields) and a type (Text, Long text, Number, Date). It creates the field in Settings › Custom fields and maps the row to it in one step. Only owners and admins can do this, the same people who edit mappings.
+- **Combining answers:**
+  - Several rows can map to the **same text field** (Name, Company name, Job title, a text custom field, the note). Their answers are joined in the order shown, with a separator chosen per field: Space, Comma, Dot ( · ) or New line. Example: Company name = "Company name" + "City", joined with Comma.
+  - **Email, Phone and Estimated value take one row each.** Two rows on one of them is an error, and Save stays disabled.
 - **Defaults by question type:**
   - full name → Name;
   - first name + last name → Name, joined;
@@ -187,6 +198,13 @@ No price change. Facebook Lead Ads joins the Lead API under the existing `api_ac
 - Turning on the "New ad lead received" automation trigger (`lead.ad_received`). That gets its own proposal.
 - Google, LinkedIn or TikTok lead forms. They'll reuse the same pattern later.
 
+## Decisions (owner, 2026-10-27)
+- **Mapping matches aninja and goes further.** It covers:
+  - mapping to any lead custom field;
+  - creating a custom field from the mapping;
+  - combining several answers into one field with a chosen separator;
+  - mapping Facebook details (Page, form, ad and campaign names) into fields.
+
 ## Open questions
 1. **Plan:** gate with `api_access` (Trial, Pro, Business), or open it to Team as well?
 2. **Ad and campaign names:** ask for `ads_read` (extra App Review item) to show them, or skip it in v1?
@@ -197,7 +215,7 @@ No price change. Facebook Lead Ads joins the Lead API under the existing `api_ac
   - **Sign-in:** OAuth connect URL with a signed state, callback (long-lived token exchange, permission check, Page list paged), choose-pages (subscribe and unsubscribe), disconnect (unsubscribe, revoke, delete tokens).
   - **Webhook:** verify GET and signed POST; ack fast and enqueue.
   - **Worker job:** fetch the lead → mapping → create through the Lead API create path with `via=facebook_lead_ads`, plus duplicate handling (timeline entry on the existing lead or contact), retries and a final Failed state. Retry endpoint.
-  - **Forms:** list and refresh, on/off, mapping and owner.
+  - **Forms:** list and refresh, on/off, mapping (rows for questions and Facebook details, any lead custom field, combined fields with a separator) and owner.
   - **Import past leads** job (server-side cursors).
   - **Health:** daily health check, Needs reconnect state, and the new notification type.
   - **Meta callbacks:** deauthorize and data-deletion.
@@ -205,5 +223,5 @@ No price change. Facebook Lead Ads joins the Lead API under the existing `api_ac
   - Config, OpenAPI and tests.
 - **FE:** the Facebook Lead Ads card.
   - All the states (not connected, choose pages, connected, needs reconnect, gated, read-only, member).
-  - Pages with forms, the mapping drawer, the import dialog and Recent Facebook leads.
+  - Pages with forms, the mapping drawer (custom fields, "+ Create custom field" through the existing custom-fields API, combining with a separator, Facebook details rows), the import dialog and Recent Facebook leads.
   - Source "Facebook" in lead filters and badges.
