@@ -4,7 +4,7 @@ status: approved        # proposed | approved | in-progress | built | dropped
 owner: Qamar Ul Islam
 area: docs/areas/leads.md, docs/areas/workspace-settings.md (Integrations)
 screens: [settings-integrations, leads, lead-detail]
-tickets: []             # filled in after approval
+tickets: [SCRUM-1308 (BE 1/3 connect), SCRUM-1309 (BE 2/3 leads), SCRUM-1310 (BE 3/3 import + health), SCRUM-1311 (FE 1/2 card), SCRUM-1312 (FE 2/2 mapping, import, recent leads)]
 created: 2026-10-26
 ---
 
@@ -208,7 +208,9 @@ No price change. Facebook Lead Ads joins the Lead API under the existing `api_ac
 - **Plan:** the `api_access` gate as proposed (Pro and Business, plus Trial, which carries the Pro features). Not on Team or Solo.
 - **`ads_read` is requested in v1,** so ad and campaign names reach the lead. It goes into App Review with the other permissions. If Meta hasn't approved it yet, the names are left out and nothing fails.
 
-## Tickets (to create after approval)
+## Tickets (created 2026-10-27, Sprint 9)
+SCRUM-1308 → 1309 → 1310 (backend, Qamar); SCRUM-1311 → 1312 (frontend, Mujahid). Backend blocks the matching frontend ticket.
+
 - **BE:** Facebook connection and webhook.
   - **Tables:** connection, pages, forms (with mapping and owner), and processed submissions (unique per workspace + Facebook lead id, 12-month retention). Tokens are AES-GCM encrypted.
   - **Sign-in:** OAuth connect URL with a signed state, callback (long-lived token exchange, permission check, Page list paged), choose-pages (subscribe and unsubscribe), disconnect (unsubscribe, revoke, delete tokens).
