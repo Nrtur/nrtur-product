@@ -161,7 +161,7 @@ In the Meta developer dashboard for our app:
 | `pages_read_engagement` | Read Page details needed with the above |
 | `leads_retrieval` | Read the lead form submissions |
 | `business_management` | Pages owned through a Business Manager |
-| `ads_read` | Optional: ad and campaign names on the lead |
+| `ads_read` | Ad and campaign names on the lead (requested in v1; leads still arrive without it) |
 
 - **Environments:** one Meta app per environment (staging and production), following the environment split (SCRUM-1235–1238). Each has its own App ID, secret and webhook URL. The person connecting also needs **Leads Access** on the Page in Meta Business Suite.
 
@@ -205,9 +205,8 @@ No price change. Facebook Lead Ads joins the Lead API under the existing `api_ac
   - combining several answers into one field with a chosen separator;
   - mapping Facebook details (Page, form, ad and campaign names) into fields.
 
-## Open questions
-1. **Plan:** gate with `api_access` (Trial, Pro, Business), or open it to Team as well?
-2. **Ad and campaign names:** ask for `ads_read` (extra App Review item) to show them, or skip it in v1?
+- **Plan:** the `api_access` gate as proposed (Pro and Business, plus Trial, which carries the Pro features). Not on Team or Solo.
+- **`ads_read` is requested in v1,** so ad and campaign names reach the lead. It goes into App Review with the other permissions. If Meta hasn't approved it yet, the names are left out and nothing fails.
 
 ## Tickets (to create after approval)
 - **BE:** Facebook connection and webhook.
