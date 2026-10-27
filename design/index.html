@@ -7578,6 +7578,14 @@ function actLeadOwn(l){
     ...(st!=='New'?[mkAct('field',{ts:30,by:own,label:'STATUS CHANGE',title:'Status changed — New → '+st,body:'',payload:{field:'Status',from:'New',to:st}})]:[]),
     mkAct('field',{ts:61,by:'nrtur',label:'ASSIGNMENT',title:'Assigned to '+A,body:'',payload:{field:'Owner',from:'—',to:A}}),
     mkAct('created',{ts:62,by:'nrtur',label:'LEAD CREATED',title:'Created via Lead API',body:l.source?('Source: '+l.source+'.'):''}),
+  ]:l.createdVia==='facebook'?[
+    // Facebook Lead Ads (PROPOSED: proposals/2026-10-facebook-lead-ads.md): answers not mapped to a field become the first note; owner = the form's lead owner.
+    // A later submission that matches this lead (duplicate) adds a note instead of a new lead.
+    ...(l.fbResubmits||[]).map(r=>mkAct('note',{ts:r.ts,by:'nrtur',title:'Note added',body:'Submitted ‘'+r.form+'’ again on Facebook.'})),
+    ...(l.notes?[mkAct('note',{ts:120,by:'nrtur',title:'Note added',body:l.notes})]:[]),
+    ...(st!=='New'?[mkAct('field',{ts:30,by:own,label:'STATUS CHANGE',title:'Status changed — New → '+st,body:'',payload:{field:'Status',from:'New',to:st}})]:[]),
+    mkAct('field',{ts:121,by:'nrtur',label:'ASSIGNMENT',title:'Assigned to '+A,body:'',payload:{field:'Owner',from:'—',to:A}}),
+    mkAct('created',{ts:122,by:'nrtur',label:'LEAD CREATED',title:'Created from Facebook Lead Ads'+(l.fb?(' · '+l.fb.page+' › '+l.fb.form+(l.fb.ad?(' · Ad: '+l.fb.ad):'')):''),body:l.source?('Source: '+l.source+'.'):''}),
   ]:[
     mkAct('note',{ts:900,by:own,title:'Note added',body:'Intro call booked for next week. Wants to see pricing for the team before committing.'}),
     ...(st!=='New'?[mkAct('field',{ts:1500,by:own,label:'STATUS CHANGE',title:'Status changed — New → '+st,body:'',payload:{field:'Status',from:'New',to:st}})]:[]),
@@ -10981,11 +10989,12 @@ function AddCompanyPage({goTo}){
 const LEAD_STATUSES=['New','Working','Nurturing','Qualified','Unqualified'];
 const LEAD_STATUS_CHIP={New:'bg-blue-500/12 text-blue-300 ring-blue-500/25',Working:'bg-amber-500/12 text-amber-300 ring-amber-500/25',Nurturing:'bg-violet-500/12 text-violet-300 ring-violet-500/25','Qualified':'bg-emerald-500/12 text-emerald-300 ring-emerald-500/25','Unqualified':'bg-white/[0.06] text-white/50 ring-white/[0.10]'};
 const LEAD_STATUS_DOT={New:'#8FB4EA',Working:'#E9B968',Nurturing:'#B69EEA','Qualified':'#5FD09B','Unqualified':'#87837A'};
-const LEAD_SOURCES=['Web form','Referral','Cold outreach','Event','Ad','LinkedIn','Import','API']; // 'API': the Lead API's default source (proposals/2026-10-lead-api.md)
+const LEAD_SOURCES=['Web form','Referral','Cold outreach','Event','Ad','LinkedIn','Import','API','Facebook']; // 'API': the Lead API's default source (proposals/2026-10-lead-api.md). 'Facebook': fixed source of Facebook Lead Ads leads (PROPOSED: proposals/2026-10-facebook-lead-ads.md)
 function leadScoreBucket(score){const b=(typeof leadScoringRulesLive==='function'?leadScoringRulesLive().bands:null)||{warm_min:34,hot_min:67};if(score>=(b.hot_min!=null?b.hot_min:67))return{k:'hot',c:'#F0947F',l:'Hot'};if(score>=(b.warm_min!=null?b.warm_min:34))return{k:'warm',c:'#E9B968',l:'Warm'};return{k:'cold',c:'#8FB4EA',l:'Cold'};} // cutoffs come from the workspace rules (score_band), never hardcoded
 const LEADS_DATA=[
   {signals:{email_opened:1,link_clicked:0,page_visit:0,demo_request:0},industry:'Retail',employeesSize:120,id:120,name:'Greg Mason',avatar:'GM',color:'#9D6C20',email:'greg@northpeak.io',phone:'+1 555-770-3321',company:'Northpeak Co',title:'Operations Lead',source:'Cold outreach',status:'Unqualified',score:28,estValue:'$4k',owner:'AM',ownerColor:'#5E92D8',created:'4 weeks ago',days:26,loc:'Boise, ID',tags:['cold'],archived:false,converted:false,deleted:true,deletedAt:Date.now()-26*864e5,deletedBy:'Alex Morgan',estValueNum:4000},
   {signals:{email_opened:0,link_clicked:0,page_visit:0,demo_request:0},id:103,name:'Priya Desai',avatar:'PD',color:'#148478',email:'priya@tallgrass.studio',phone:'+1 555-318-6620',company:'Tallgrass Studio',title:'Studio Manager',source:'API',status:'New',score:0,estValue:'$6k',estValueNum:6000,owner:'AM',ownerColor:'#5E92D8',created:'1h ago',days:0,loc:'',tags:[],archived:false,converted:false,createdVia:'api',notes:'Sent from the pricing page contact form. Asked about onboarding a team of 12.'}, // Lead API seed: created by POST /api/public/v1/leads; owner = the key's generator
+  {signals:{email_opened:0,link_clicked:0,page_visit:0,demo_request:0},id:104,name:'Nina Park',avatar:'NP',color:'#BF4C85',email:'nina@example.com',phone:'+1 555-010-4477',company:'Example Homes',title:'Homeowner',source:'Facebook',status:'New',score:0,estValue:'-',estValueNum:null,owner:'SC',ownerColor:'#C2568C',created:'2h ago',days:0,loc:'',tags:[],archived:false,converted:false,createdVia:'facebook',fb:{page:'Bloom Realty',form:'Free valuation',ad:'Spring valuation'},fbResubmits:[{form:'Free valuation',ts:12}],notes:'What’s your budget?: $400k–$500k\nWhen do you want to move?: Within 3 months'}, // Facebook Lead Ads seed (PROPOSED): owner = the form's lead owner; unmapped answers become the first note
   {signals:{email_opened:4,link_clicked:2,page_visit:1,demo_request:0},id:1,name:'Olivia Bennett',timezone:'America/Denver',avatar:'OB',color:'#3475CE',email:'olivia@brightwave.io',phone:'+1 555-610-2210',company:'Brightwave Studio',title:'Marketing Director',source:'Web form',status:'Qualified',score:82,estValue:'$18k',owner:'AM',ownerColor:'#5E92D8',created:'2h ago',days:0,loc:'Denver, CO',tags:['inbound','qualified'],archived:false,converted:true,convertedAt:'2h ago',convertedToContactId:207,convertedToCompanyId:9,convertedToDealId:208,convContact:'Olivia Bennett',convCompany:'Brightwave Studio',convDeal:'Brightwave Studio · $18,000',estValueNum:18000,emails:['olivia.b@brightwave.io'],phones:[],createdBy:'AM',createdAt:'2h ago',companyDomain:'brightwave.io',industry:'Software',employeesSize:24},
   {signals:{email_opened:0,link_clicked:0,page_visit:0,demo_request:0},id:2,name:'Daniel Okonkwo',avatar:'DO',color:'#855ED7',email:'daniel@lumen.io',phone:'+1 555-441-9087',company:'Lumen Labs',title:'Head of Growth',source:'Referral',status:'Working',score:74,estValue:'$32k',owner:'JK',ownerColor:'#9B7BDE',created:'1d ago',days:1,loc:'Austin, TX',tags:['referral'],archived:false,converted:false,estValueNum:32000,emails:[],phones:['+1 555-441-0000'],createdBy:'JK',createdAt:'1d ago',companyDomain:'lumen.io',industry:'Software',employeesSize:60},
   {signals:{email_opened:3,link_clicked:1,page_visit:1,demo_request:0},id:3,name:'Sofia Marchetti',avatar:'SM',color:'#BF4C85',email:'sofia@craftly.co',phone:'+1 555-228-6610',company:'Craftly',title:'Founder',source:'Event',status:'Nurturing',score:58,estValue:'$9k',owner:'SC',ownerColor:'#C2568C',created:'2d ago',days:2,loc:'New York, NY',tags:['saastr'],archived:false,converted:true,convertedAt:'2d ago',convertedToContactId:205,convertedToCompanyId:12,convertedToDealId:206,convContact:'Sofia Marchetti',convCompany:'Craftly',convDeal:'Craftly · $9,000',estValueNum:9000,emails:['sofia@craftly.co'],phones:[],createdBy:'SC',createdAt:'2d ago',companyDomain:'craftly.co',industry:'Retail',employeesSize:8},
@@ -15214,6 +15223,479 @@ function LeadApiCard({goTo,stackToggle}){
     </React.Fragment>
   );
 }
+// ── Facebook Lead Ads (PROPOSED: proposals/2026-10-facebook-lead-ads.md) ── v1 is Lead Ads forms only (no Messenger, no Instagram DMs).
+// An owner/admin signs in with Facebook and chooses which Pages to connect. Every form on a connected Page starts OFF: a form sends leads only after someone turns on "Receiving leads".
+// Each form maps its questions to lead fields (unmapped answers go to the lead's note). Source is always "Facebook"; owner = the form's lead owner (default: the member who connected).
+// Plan: the same api_access gate as the Lead API (Trial, Pro, Business). Gated or read-only workspace: Disconnect still works, nothing else.
+// Members see the status, Pages and forms read-only, never the Recent Facebook leads log. Every Page, form and person here is made up.
+const FB_LEAD_ADS_TESTING_URL='https://developers.facebook.com/tools/lead-ads-testing';
+// Prototype: every form asks the same questions (a real form returns its own list from Facebook).
+const FB_QUESTIONS=[
+  {k:'full_name',l:'Full name',def:'name',sample:'Nina Park'},
+  {k:'email',l:'Email',def:'email',sample:'nina@example.com'},
+  {k:'phone_number',l:'Phone number',def:'phone',sample:'+1 555-010-4477'},
+  {k:'company_name',l:'Company name',def:'company',sample:'Example Homes'},
+  {k:'job_title',l:'Job title',def:'title',sample:'Homeowner'},
+  {k:'q_budget',l:'What’s your budget?',def:'note',sample:'$400k–$500k'},
+  {k:'q_move',l:'When do you want to move?',def:'note',sample:'Within 3 months'},
+];
+// Facebook details that can also be mapped (owner, 2026-10-27). Off by default: they are already on the lead's timeline entry.
+// Ad and campaign names need the ads_read permission.
+const FB_META_SOURCES=[
+  {k:'m_page',l:'Page name',def:'skip',sample:'Bloom Realty',meta:true},
+  {k:'m_form',l:'Form name',def:'skip',sample:'Free valuation',meta:true},
+  {k:'m_ad',l:'Ad name',def:'skip',sample:'Spring valuation',meta:true,ads:true},
+  {k:'m_campaign',l:'Campaign name',def:'skip',sample:'Spring listings',meta:true,ads:true},
+];
+const FB_SOURCES=[...FB_QUESTIONS,...FB_META_SOURCES];
+// Lead fields that take ONE value. Every other field can combine several questions, joined by a separator.
+const FB_SINGLE_TARGETS=['email','phone','value'];
+const FB_SEPARATORS=[{k:' ',l:'Space'},{k:', ',l:'Comma'},{k:' · ',l:'Dot ( · )'},{k:'\n',l:'New line'}];
+// Lead custom fields. In the app this is the workspace's lead custom fields (Settings › Custom fields); the design seeds two.
+const _fbCustom={list:[{k:'cf_budget',l:'Budget range',type:'Text'},{k:'cf_timeline',l:'Move-in timeline',type:'Text'}]};
+// nrtur lead fields a question can go to. nrtur has one Name field (no first/last split). The two custom fields are made-up workspace fields.
+const FB_TARGETS=[
+  {k:'name',l:'Name'},{k:'email',l:'Email'},{k:'phone',l:'Phone'},{k:'company',l:'Company name'},{k:'title',l:'Job title'},{k:'value',l:'Estimated value'},
+  {k:'note',l:'Add to the lead’s note'},{k:'skip',l:'Don’t import'},
+];
+function fbTargets(){return [...FB_TARGETS.filter(t=>t.k!=='note'&&t.k!=='skip'),..._fbCustom.list.map(c=>({k:c.k,l:c.l,custom:true,type:c.type})),...FB_TARGETS.filter(t=>t.k==='note'||t.k==='skip')];}
+const FB_MULTI_TARGETS=['note','skip']; // every other field takes one question at most
+function fbDefaultMapping(){const m={};FB_SOURCES.forEach(q=>{m[q.k]=q.def;});return m;}
+function fbForm(id,name,status,on,owner,last,leads30,past){return {id,name,status,on,owner,last,leads30,past,mapping:null,saveAd:true};}
+const FB_PAGES_SEED=[
+  {id:'pg1',name:'Bloom Realty',initials:'BR',color:'#3475CE',category:'Real estate agent',forms:[
+    fbForm('fm1','Free valuation','Active',true,'SC','12 min ago',18,{total:37,inNrtur:5}),
+    fbForm('fm2','Open house RSVP','Active',true,'AM','3h ago',9,{total:21,inNrtur:9}),
+    fbForm('fm3','Spring promo','Archived',false,'AM',null,0,{total:4,inNrtur:0}),
+  ]},
+  {id:'pg2',name:'Bloom Realty — Austin',initials:'BA',color:'#855ED7',category:'Real estate agency',forms:[
+    fbForm('fm4','Austin buyer guide','Active',true,'JK','Yesterday',6,{total:14,inNrtur:6}),
+    fbForm('fm5','New listings alert','Active',false,'AM',null,0,{total:0,inNrtur:0}),
+  ]},
+  {id:'pg3',name:'Bloom Events',initials:'BE',color:'#25855E',category:'Event planner',forms:[
+    fbForm('fm6','Summer mixer RSVP','Active',false,'AM',null,0,{total:0,inNrtur:0}),
+    fbForm('fm7','Venue tour','Active',false,'AM',null,0,{total:0,inNrtur:0}),
+  ]},
+];
+const FB_CONNECTED_SEED=['pg1','pg2'];
+function fbSeedPages(){return FB_PAGES_SEED.map(p=>({...p,forms:p.forms.map(f=>({...f,past:{...f.past}}))}));}
+// Recent Facebook leads: one row per submission nrtur received (last 30 days on screen). "Created" and "Duplicate" link to the seeded Facebook lead (Nina Park, id 104).
+const FB_RESULTS={
+  created:{l:'Created',cls:'text-emerald-300 bg-emerald-500/10 ring-emerald-500/25'},
+  duplicate:{l:'Duplicate',cls:'text-amber-200 bg-amber-500/10 ring-amber-500/25'},
+  skipped:{l:'Skipped',cls:'text-white/65 bg-white/[0.05] ring-white/[0.10]'},
+  failed:{l:'Failed',cls:'text-red-300 bg-red-500/10 ring-red-500/25'},
+};
+const FB_LOG_SEED=[
+  ['12 min ago','fm1','duplicate'],['2h ago','fm1','created'],['3h ago','fm2','created'],['4h ago','fm2','failed'],
+  ['6h ago','fm1','created'],['Yesterday 17:40','fm4','created'],['Yesterday 12:15','fm1','skipped'],['Yesterday 09:02','fm2','created'],
+  ['Oct 24, 18:30','fm1','created'],['Oct 23, 15:05','fm2','created'],['Oct 22, 10:48','fm1','failed'],['Oct 20, 16:20','fm4','created'],
+  ['Oct 18, 09:35','fm1','created'],['Oct 14, 13:50','fm2','skipped'],['Oct 9, 11:05','fm4','created'],
+].map((r,i)=>({id:'fl'+i,at:r[0],formId:r[1],result:r[2],leadId:(r[2]==='created'||r[2]==='duplicate')?104:null}));
+// Prototype store (survives navigation).
+let _fbStore={connected:true,by:'Alex Morgan',on:'Oct 26, 2026',pages:fbSeedPages(),selected:FB_CONNECTED_SEED.slice(),log:FB_LOG_SEED};
+function fbMemberName(code){const m=TEAM_MEMBERS.find(t=>t.avatar===code);return m?m.name:'—';}
+function fbPageAvatar(p,size){return(<span className="rounded-lg flex items-center justify-center font-semibold text-white shrink-0" style={{background:p.color,width:size||28,height:size||28,fontSize:10.5}} aria-hidden="true">{p.initials}</span>);}
+// Neutral icon tile: the letter "f", never Facebook's logo artwork.
+function FbTile({size}){const s=size||40;return(<div className="rounded-xl bg-white/[0.05] ring-1 ring-white/[0.10] text-white/80 flex items-center justify-center shrink-0 font-bold" style={{width:s,height:s,fontSize:s*0.45,fontFamily:'Georgia,serif'}} aria-hidden="true">f</div>);}
+// "Choose Pages to connect": the return from Facebook's sign-in. Only the Pages chosen here get subscribed.
+function FbPagePicker({pages,initial,mode,onCancel,onConfirm}){
+  const dref=React.useRef(null);useFocusTrap(dref);
+  React.useEffect(()=>{const fn=(e)=>{if(e.key==='Escape')onCancel();};document.addEventListener('keydown',fn);return()=>document.removeEventListener('keydown',fn);},[onCancel]);
+  const [sel,setSel]=React.useState(initial||[]);
+  const [q,setQ]=React.useState('');
+  const t=q.trim().toLowerCase();
+  const rows=pages.filter(p=>!t||p.name.toLowerCase().indexOf(t)>=0);
+  const flip=(id)=>setSel(s=>s.indexOf(id)>=0?s.filter(x=>x!==id):[...s,id]);
+  const n=sel.length;
+  const label=mode==='manage'?(n?('Save · '+n+' page'+(n===1?'':'s')):'Choose at least one page'):(n?('Connect '+n+' page'+(n===1?'':'s')):'Connect pages');
+  return(
+    <div className="fixed inset-0 z-[200] flex items-center justify-center p-4" style={{background:'rgba(0,0,0,0.72)',backdropFilter:'blur(8px)'}}>
+      <div ref={dref} role="dialog" aria-modal="true" aria-label="Choose Pages to connect" tabIndex={-1} data-fb-page-picker className="flex flex-col" style={{width:460,maxWidth:'100%',maxHeight:'calc(100vh - 32px)',background:'var(--pop)',border:'1px solid rgba(255,255,255,0.08)',borderRadius:16,backdropFilter:'blur(24px)',boxShadow:'0 0 0 1px rgba(255,255,255,0.04),0 32px 80px rgba(0,0,0,0.65)',padding:24}}>
+        <div className="flex items-start gap-4 mb-4 shrink-0">
+          <FbTile/>
+          <div className="min-w-0"><p className="text-white text-[15px] font-semibold leading-snug">Choose Pages to connect</p><p className="text-white/55 text-[13px] mt-2 leading-relaxed">Facebook returned {pages.length} Page{pages.length===1?'':'s'} you manage. Pick the ones whose lead forms should send leads to nrtur.</p></div>
+        </div>
+        {pages.length>5&&<div className="relative mb-3 shrink-0"><I.Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-white/35 pointer-events-none"/><input value={q} onChange={e=>setQ(e.target.value)} placeholder="Search Pages" aria-label="Search Pages" className="w-full pl-8 pr-3 py-2 rounded-xl bg-white/[0.04] border border-white/[0.10] text-[13px] text-white placeholder:text-white/25 outline-none focus:border-brand-500/40" style={{colorScheme:'dark'}}/></div>}
+        <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden scroll-area rounded-xl bg-white/[0.03] border border-white/[0.06] mb-3">
+          {rows.length?rows.map((p,i)=>{const on=sel.indexOf(p.id)>=0;return(
+            <label key={p.id} className={['flex items-center gap-3 px-3 py-2.5 cursor-pointer hover:bg-white/[0.03] transition-colors',i<rows.length-1?'border-b border-white/[0.04]':''].join(' ')} data-fb-pick={p.name}>
+              <input type="checkbox" checked={on} onChange={()=>flip(p.id)} className="accent-brand-500 rounded shrink-0"/>
+              {fbPageAvatar(p)}
+              <span className="min-w-0 flex-1"><span className="block text-[12.5px] text-white/85 font-medium truncate">{p.name}</span><span className="block text-[11.5px] text-white/45 truncate">{p.category} · {p.forms.length} lead form{p.forms.length===1?'':'s'}</span></span>
+            </label>);}):<p className="text-[12px] text-white/45 px-3 py-3">No Pages match “{q.trim()}”.</p>}
+        </div>
+        <p className="text-[11.5px] text-white/45 mb-5 shrink-0">Only Pages you choose receive leads. You can change this later.</p>
+        <div className="flex gap-3 shrink-0">
+          <button onClick={onCancel} className="flex-1 py-2.5 rounded-xl text-[13px] font-medium text-white/65 bg-white/[0.04] border border-white/[0.08] hover:bg-white/[0.07] transition-all">Cancel</button>
+          <button onClick={()=>onConfirm(sel)} disabled={!n} className="flex-1 py-2.5 rounded-xl text-[13px] font-semibold text-white bg-brand-500 hover:bg-brand-400 border-none transition-all disabled:opacity-40 disabled:cursor-not-allowed">{label}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+// Map a form's questions to lead fields (right drawer). Name or email is required; a submission without either is skipped.
+function FbMappingDrawer({page,form,onSave,onClose}){
+  const dref=React.useRef(null);useFocusTrap(dref);
+  const init=React.useMemo(()=>({map:{...fbDefaultMapping(),...(form.mapping||{})},owner:form.owner,saveAd:form.saveAd!==false,sep:{...(form.sep||{})}}),[form]);
+  const [map,setMap]=React.useState(init.map);
+  const [sep,setSep]=React.useState(init.sep); // per combined field: the separator
+  const [cfVer,setCfVer]=React.useState(0);     // re-render after a custom field is created
+  const [newCf,setNewCf]=React.useState(null);  // {forKey, name, type}
+  const targets=fbTargets();
+  const [owner,setOwner]=React.useState(init.owner);
+  const [saveAd,setSaveAd]=React.useState(init.saveAd);
+  const dirty=JSON.stringify({map,owner,saveAd,sep})!==JSON.stringify(init);
+  const {attemptClose,guardNode}=useCloseGuard(dirty,onClose);
+  const counts={};Object.keys(map).forEach(k=>{const t=map[k];counts[t]=(counts[t]||0)+1;});
+  const dupOf=(t)=>FB_SINGLE_TARGETS.indexOf(t)>=0&&counts[t]>1; // only single-value fields can't combine
+  const anyDup=Object.keys(counts).some(dupOf);
+  const hasId=!!(counts.name||counts.email);
+  const err=!hasId?'Map a question to Name or Email.':(anyDup?'Email, Phone and Estimated value take one question each.':null);
+  const combined=Object.keys(counts).filter(t=>FB_MULTI_TARGETS.indexOf(t)<0&&FB_SINGLE_TARGETS.indexOf(t)<0&&counts[t]>1);
+  const tLabel=(k)=>{const t=targets.find(x=>x.k===k);return t?t.l:k;};
+  const sepOf=(t)=>(sep[t]!=null?sep[t]:(t==='name'?' ':', ')).replace('\\n','\n');
+  // Preview: how the sample submission (Nina Park) becomes a lead with this mapping.
+  const pv=[];const noteLines=[];
+  const joinedVals={};const order=[];
+  FB_SOURCES.forEach(q=>{const t=map[q.k];if(t==='skip')return;if(t==='note'||(t==='value'&&!/^\$?[\d,.]+$/.test(q.sample))){noteLines.push(q.l+': '+q.sample);return;}if(!joinedVals[t]){joinedVals[t]=[];order.push(t);}joinedVals[t].push(q.sample);});
+  order.forEach(t=>pv.push([tLabel(t),joinedVals[t].join(sepOf(t))]));
+  pv.push(['Source','Facebook'],['Owner',fbMemberName(owner)]);
+  const SEL='w-full pl-3 pr-8 py-2 rounded-lg bg-white/[0.04] border text-[12.5px] text-white/85 outline-none appearance-none cursor-pointer truncate';
+  const LBL='text-[11px] font-medium text-white/45 uppercase tracking-[0.14em]';
+  const save=()=>{if(err)return;onSave({mapping:map,owner,saveAd,sep});};
+  const createCf=()=>{const nm=(newCf.name||'').trim();if(!nm)return;const k='cf_'+Date.now().toString(36);_fbCustom.list=[..._fbCustom.list,{k,l:nm,type:newCf.type||'Text'}];setMap(m=>({...m,[newCf.forKey]:k}));setNewCf(null);setCfVer(v=>v+1);custToast&&custToast('Custom field “'+nm+'” created');};
+  return(<React.Fragment>
+    <div className="fixed inset-0 bg-black/40 z-[179]" onClick={attemptClose}/>
+    <div ref={dref} role="dialog" aria-modal="true" aria-label={'Map ‘'+form.name+'’ to nrtur'} tabIndex={-1} data-fb-mapping
+      className="fixed z-[180] flex flex-col border-white/[0.08] left-0 right-0 bottom-0 max-h-[90vh] rounded-t-2xl border-t sm:left-auto sm:right-0 sm:top-0 sm:bottom-0 sm:w-[560px] sm:max-w-full sm:max-h-none sm:rounded-none sm:border-t-0 sm:border-l"
+      style={{background:'var(--panel98)',backdropFilter:'blur(16px)',boxShadow:'-8px 0 40px rgba(0,0,0,0.5)',animation:'arIn .22s ease'}}>
+      <div className="shrink-0 flex items-center justify-between gap-3 px-5 py-4 border-b border-white/[0.06]">
+        <div className="flex items-center gap-2.5 min-w-0"><FbTile size={32}/><div className="min-w-0"><p className="text-[14px] font-semibold text-white truncate">Map ‘{form.name}’ to nrtur</p><p className="text-[11.5px] text-white/45 truncate">{page.name} › {form.name}</p></div></div>
+        <button onClick={attemptClose} title="Close" aria-label="Close" className="text-white/40 hover:text-white transition-colors shrink-0"><I.X size={16}/></button>
+      </div>
+      <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden scroll-area px-5 py-5 flex flex-col gap-5 [&>*]:shrink-0">
+        <div>
+          <p className={LBL+' mb-1.5'}>Form questions</p>
+          <div className="rounded-xl border border-white/[0.06] bg-white/[0.02]">
+            {FB_QUESTIONS.map((q,i)=>{const bad=dupOf(map[q.k]);return(<div key={q.k} className={['flex items-center gap-x-3 gap-y-1.5 flex-wrap px-3 py-2.5',i?'border-t border-white/[0.04]':''].join(' ')} data-fb-question={q.l}>
+              <div className="min-w-0 flex-1 basis-[180px]"><p className="text-[12.5px] text-white/85 truncate">{q.l}</p><p className="text-[11px] text-white/40 truncate">e.g. {q.sample}</p></div>
+              <I.ArrowRight size={13} className="text-white/30 shrink-0 hidden sm:block"/>
+              <div className="relative w-full sm:w-[210px] shrink-0">
+                <select aria-label={'nrtur field for '+q.l} value={map[q.k]} onChange={e=>{const v=e.target.value;if(v==='__new'){setNewCf({forKey:q.k,name:'',type:'Text'});return;}setMap(m=>({...m,[q.k]:v}));}} className={SEL+' '+(bad?'border-red-500/40':'border-white/[0.10]')} style={{colorScheme:'dark',background:'var(--s850)'}}>
+                  <optgroup label="Lead fields">{targets.filter(t=>!t.custom&&FB_MULTI_TARGETS.indexOf(t.k)<0).map(t=>(<option key={t.k} value={t.k}>{t.l}</option>))}</optgroup>
+                  <optgroup label="Custom fields">{targets.filter(t=>t.custom).map(t=>(<option key={t.k} value={t.k}>{t.l}</option>))}<option value="__new">+ Create custom field…</option></optgroup>
+                  <optgroup label="Other">{targets.filter(t=>FB_MULTI_TARGETS.indexOf(t.k)>=0).map(t=>(<option key={t.k} value={t.k}>{t.l}</option>))}</optgroup>
+                </select>
+                <I.ChevronDown size={12} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-white/35 pointer-events-none"/>
+              </div>
+            </div>);})}
+          </div>
+          <p className={LBL+' mb-1.5 mt-4'}>Facebook details</p>
+          <div className="rounded-xl border border-white/[0.06] bg-white/[0.02]">
+            {FB_META_SOURCES.map((q,i)=>{const bad=dupOf(map[q.k]);return(<div key={q.k} className={['flex items-center gap-x-3 gap-y-1.5 flex-wrap px-3 py-2.5',i?'border-t border-white/[0.04]':''].join(' ')} data-fb-meta={q.l}>
+              <div className="min-w-0 flex-1 basis-[180px]"><p className="text-[12.5px] text-white/85 truncate">{q.l}</p><p className="text-[11px] text-white/40 truncate">e.g. {q.sample}{q.ads?' · needs the ads_read permission':''}</p></div>
+              <I.ArrowRight size={13} className="text-white/30 shrink-0 hidden sm:block"/>
+              <div className="relative w-full sm:w-[210px] shrink-0">
+                <select aria-label={'nrtur field for '+q.l} value={map[q.k]} onChange={e=>{const v=e.target.value;if(v==='__new'){setNewCf({forKey:q.k,name:'',type:'Text'});return;}setMap(m=>({...m,[q.k]:v}));}} className={SEL+' '+(bad?'border-red-500/40':'border-white/[0.10]')} style={{colorScheme:'dark',background:'var(--s850)'}}>
+                  <optgroup label="Lead fields">{targets.filter(t=>!t.custom&&FB_MULTI_TARGETS.indexOf(t.k)<0).map(t=>(<option key={t.k} value={t.k}>{t.l}</option>))}</optgroup>
+                  <optgroup label="Custom fields">{targets.filter(t=>t.custom).map(t=>(<option key={t.k} value={t.k}>{t.l}</option>))}<option value="__new">+ Create custom field…</option></optgroup>
+                  <optgroup label="Other">{targets.filter(t=>FB_MULTI_TARGETS.indexOf(t.k)>=0).map(t=>(<option key={t.k} value={t.k}>{t.l}</option>))}</optgroup>
+                </select>
+                <I.ChevronDown size={12} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-white/35 pointer-events-none"/>
+              </div>
+            </div>);})}
+          </div>
+          {combined.length>0&&<div className="mt-3 rounded-xl border border-white/[0.06] bg-white/[0.02] px-3 py-2.5 flex flex-col gap-2" data-fb-combine>
+            <p className="text-[11.5px] text-white/60">These fields combine several answers, in the order shown above:</p>
+            {combined.map(t=>(<div key={t} className="flex items-center gap-x-3 gap-y-1.5 flex-wrap">
+              <span className="min-w-0 flex-1 basis-[180px] text-[12.5px] text-white/85">{tLabel(t)} <span className="text-white/40">= {FB_SOURCES.filter(q=>map[q.k]===t).map(q=>q.l).join(' + ')}</span></span>
+              <div className="relative w-full sm:w-[210px] shrink-0"><select aria-label={'Separator for '+tLabel(t)} value={sep[t]!=null?sep[t]:(t==='name'?' ':', ')} onChange={e=>{const v=e.target.value;setSep(x=>({...x,[t]:v}));}} className={SEL+' border-white/[0.10]'} style={{colorScheme:'dark',background:'var(--s850)'}}>{FB_SEPARATORS.map(o=>(<option key={o.l} value={o.k}>Joined with: {o.l}</option>))}</select><I.ChevronDown size={12} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-white/35 pointer-events-none"/></div>
+            </div>))}
+          </div>}
+          {newCf&&<div className="mt-3 rounded-xl border border-brand-500/25 bg-brand-500/[0.05] px-3 py-3 flex flex-col gap-2.5" data-fb-new-cf>
+            <p className="text-[12.5px] text-white/85 font-medium">New lead custom field for “{(FB_SOURCES.find(q=>q.k===newCf.forKey)||{}).l}”</p>
+            <div className="flex items-center gap-2 flex-wrap">
+              <input autoFocus value={newCf.name} maxLength={60} onChange={e=>setNewCf(n=>({...n,name:e.target.value}))} onKeyDown={e=>{if(e.key==='Enter')createCf();}} placeholder="Field name, e.g. Budget" aria-label="Custom field name" className="flex-1 min-w-[160px] px-3 py-2 rounded-lg bg-white/[0.04] border border-white/[0.10] text-[12.5px] text-white placeholder:text-white/30 outline-none focus:border-brand-500/40"/>
+              <div className="relative w-[130px] shrink-0"><select aria-label="Custom field type" value={newCf.type} onChange={e=>setNewCf(n=>({...n,type:e.target.value}))} className={SEL+' border-white/[0.10]'} style={{colorScheme:'dark',background:'var(--s850)'}}>{['Text','Long text','Number','Date'].map(t=>(<option key={t}>{t}</option>))}</select><I.ChevronDown size={12} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-white/35 pointer-events-none"/></div>
+            </div>
+            <p className="text-[11px] text-white/45">It’s added to Settings › Custom fields for leads, so it shows on every lead and can be filtered.</p>
+            <div className="flex gap-2"><button type="button" onClick={()=>setNewCf(null)} className="px-3 py-1.5 rounded-lg text-[12px] text-white/65 bg-white/[0.04] border border-white/[0.08]">Cancel</button><button type="button" disabled={!(newCf.name||'').trim()||_fbCustom.list.some(c=>c.l.toLowerCase()===(newCf.name||'').trim().toLowerCase())} onClick={createCf} className="px-3 py-1.5 rounded-lg text-[12px] font-semibold text-white bg-brand-500 hover:bg-brand-400 disabled:opacity-40 disabled:cursor-not-allowed">Create and map</button></div>
+          </div>}
+          {err?<p role="alert" className="text-[11.5px] text-red-300 mt-1.5">{err}</p>:null}
+          <p className="text-[11px] text-white/40 mt-1.5">Name or email is required. A submission without either is skipped and shows in Recent Facebook leads. Several answers can go into one text field and are joined; Email, Phone and Estimated value take one each. Estimated value takes a number; an answer that isn’t one goes to the note.</p>
+        </div>
+        <div className="flex flex-col gap-3">
+          <div className="flex items-center gap-x-3 gap-y-1.5 flex-wrap">
+            <label htmlFor="fb-lead-owner" className="min-w-0 flex-1 basis-[180px]"><span className="block text-[12.5px] text-white/85 font-medium">Lead owner</span><span className="block text-[11.5px] text-white/50 mt-0.5">Every lead from this form goes to this member.</span></label>
+            <div className="relative w-full sm:w-[210px] shrink-0">
+              <select id="fb-lead-owner" value={owner} onChange={e=>setOwner(e.target.value)} className={SEL+' border-white/[0.10]'} style={{colorScheme:'dark',background:'var(--s850)'}}>{TEAM_MEMBERS.map(m=>(<option key={m.avatar} value={m.avatar}>{m.name}</option>))}</select>
+              <I.ChevronDown size={12} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-white/35 pointer-events-none"/>
+            </div>
+          </div>
+          <div className="flex items-center gap-x-3 gap-y-1.5 flex-wrap">
+            <div className="min-w-0 flex-1 basis-[180px]"><p className="text-[12.5px] text-white/85 font-medium">Source</p><p className="text-[11.5px] text-white/50 mt-0.5">Always Facebook for these leads.</p></div>
+            <span className="w-full sm:w-[210px] shrink-0 px-3 py-2 rounded-lg bg-white/[0.02] border border-white/[0.06] text-[12.5px] text-white/60 inline-flex items-center gap-2"><I.Lock size={11} className="text-white/35 shrink-0"/>Facebook</span>
+          </div>
+          <div className="flex items-center gap-3 px-3 py-2.5 rounded-lg bg-white/[0.03] border border-white/[0.06]">
+            <div className="min-w-0 flex-1"><p className="text-[12.5px] text-white/85 font-medium">Also save ad, campaign and form names on the lead</p><p className="text-[11.5px] text-white/50 mt-0.5">Shown in the lead’s “Created from Facebook Lead Ads” entry.</p></div>
+            <Toggle on={saveAd} onChange={setSaveAd}/>
+          </div>
+        </div>
+        <div>
+          <p className={LBL+' mb-1.5'}>Preview</p>
+          <div className="rounded-xl border border-white/[0.06] bg-black/20 px-3.5 py-3 flex flex-col gap-1.5" data-fb-preview>
+            <p className="text-[11px] text-white/40 mb-1">A sample submission becomes this lead:</p>
+            {pv.map(([k,v],i)=>(<div key={i} className="flex items-baseline gap-3 min-w-0"><span className="w-[120px] shrink-0 text-[11.5px] text-white/45">{k}</span><span className="min-w-0 flex-1 text-[12px] text-white/85 break-words">{v}</span></div>))}
+            {noteLines.length>0&&<div className="flex items-baseline gap-3 min-w-0"><span className="w-[120px] shrink-0 text-[11.5px] text-white/45">Note</span><span className="min-w-0 flex-1 text-[12px] text-white/75 whitespace-pre-line break-words">{noteLines.join('\n')}</span></div>}
+            <div className="flex items-baseline gap-3 min-w-0 pt-1.5 mt-1 border-t border-white/[0.05]"><span className="w-[120px] shrink-0 text-[11.5px] text-white/45">Timeline</span><span className="min-w-0 flex-1 text-[12px] text-white/75 break-words">Created from Facebook Lead Ads{saveAd?(' · '+page.name+' › '+form.name+' · Ad: Spring valuation · Campaign: Spring listings'):''}</span></div>
+          </div>
+        </div>
+      </div>
+      <div className="shrink-0 flex gap-3 px-5 py-4 border-t border-white/[0.06]">
+        <button onClick={attemptClose} className="flex-1 py-2.5 rounded-xl text-[13px] font-medium text-white/65 bg-white/[0.04] border border-white/[0.08] hover:bg-white/[0.07] transition-all">Cancel</button>
+        <button onClick={save} disabled={!!err||!dirty} className="flex-1 py-2.5 rounded-xl text-[13px] font-semibold text-white bg-brand-500 hover:bg-brand-400 border-none transition-all disabled:opacity-40 disabled:cursor-not-allowed">Save mapping</button>
+      </div>
+      {guardNode}
+    </div>
+  </React.Fragment>);
+}
+// Import past leads: Facebook keeps a form's leads for 90 days. Imported leads follow the same mapping, owner and duplicate rules as new ones.
+function FbImportDialog({form,onDone,onCancel}){
+  const dref=React.useRef(null);useFocusTrap(dref);
+  const [phase,setPhase]=React.useState('ready'); // ready | running
+  const [done,setDone]=React.useState(0);
+  const total=form.past.total,have=form.past.inNrtur,n=Math.max(0,total-have);
+  React.useEffect(()=>{const fn=(e)=>{if(e.key==='Escape'&&phase!=='running')onCancel();};document.addEventListener('keydown',fn);return()=>document.removeEventListener('keydown',fn);},[onCancel,phase]);
+  React.useEffect(()=>{if(phase!=='running')return;const id=setInterval(()=>setDone(d=>Math.min(n,d+2)),70);return()=>clearInterval(id);},[phase,n]);
+  React.useEffect(()=>{if(phase==='running'&&done>=n){const t=setTimeout(()=>onDone(n),250);return()=>clearTimeout(t);}},[phase,done,n]);
+  const pct=n?Math.round(done/n*100):0;
+  return(
+    <div className="fixed inset-0 z-[200] flex items-center justify-center p-4" style={{background:'rgba(0,0,0,0.72)',backdropFilter:'blur(8px)'}}>
+      <div ref={dref} role="dialog" aria-modal="true" aria-label="Import past leads" tabIndex={-1} data-fb-import style={{width:440,maxWidth:'100%',background:'var(--pop)',border:'1px solid rgba(255,255,255,0.08)',borderRadius:16,backdropFilter:'blur(24px)',boxShadow:'0 0 0 1px rgba(255,255,255,0.04),0 32px 80px rgba(0,0,0,0.65)',padding:24}}>
+        <div className="flex items-start gap-4 mb-5">
+          <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ring-1 bg-brand-500/10 ring-brand-500/25 text-brand-300"><I.Download size={17}/></div>
+          <div className="min-w-0"><p className="text-white text-[15px] font-semibold leading-snug">Import past leads from ‘{form.name}’</p><p className="text-white/55 text-[13px] mt-2 leading-relaxed">Facebook keeps form leads for 90 days. Imported leads use this form’s mapping and go to {fbMemberName(form.owner)}.</p></div>
+        </div>
+        <div className="px-3.5 py-3 rounded-xl bg-white/[0.03] border border-white/[0.06] mb-3">
+          {total?<p className="text-[12.5px] text-white/80 tabular-nums">{total} lead{total===1?'':'s'} from the last 90 days · {have} already in nrtur</p>:<p className="text-[12.5px] text-white/60">No leads from the last 90 days.</p>}
+          {phase==='running'&&<div className="mt-2.5"><div className="h-1.5 rounded-full bg-white/[0.06] overflow-hidden" role="progressbar" aria-valuemin={0} aria-valuemax={n} aria-valuenow={done}><div className="h-full rounded-full bg-brand-500 transition-all" style={{width:pct+'%'}}/></div><p className="text-[11px] text-white/45 mt-1.5 tabular-nums">Importing {done} of {n}…</p></div>}
+        </div>
+        <p className="text-[11.5px] text-white/45 mb-5">{total&&!n?'Every lead from the last 90 days is already in nrtur.':'Duplicates follow the same rules as new leads: a match on email or phone adds a note to the existing lead instead of a new one.'}</p>
+        <div className="flex gap-3">
+          <button onClick={onCancel} disabled={phase==='running'} className="flex-1 py-2.5 rounded-xl text-[13px] font-medium text-white/65 bg-white/[0.04] border border-white/[0.08] hover:bg-white/[0.07] transition-all disabled:opacity-40 disabled:cursor-not-allowed">Cancel</button>
+          <button onClick={()=>setPhase('running')} disabled={!n||phase==='running'} className="flex-1 py-2.5 rounded-xl text-[13px] font-semibold text-white bg-brand-500 hover:bg-brand-400 border-none transition-all disabled:opacity-40 disabled:cursor-not-allowed">{phase==='running'?'Importing…':(n?('Import '+n+' lead'+(n===1?'':'s')):'Nothing to import')}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+// One lead form: name + Facebook status · lead owner · last lead · leads (30d) · Receiving leads switch · ⋯ (owner/admin).
+function FbFormRow({f,paused,isAdmin,canAct,last,onToggle,onMap,onImport,onStop}){
+  const menuRef=React.useRef(null);
+  const [menuOpen,setMenuOpen]=React.useState(false);
+  const [testOpen,setTestOpen]=React.useState(false);
+  const ITEM='w-full flex items-center gap-2.5 px-3 py-2 text-[13px] transition-colors disabled:opacity-40 disabled:cursor-not-allowed';
+  const archived=f.status==='Archived';
+  const isPaused=paused&&f.on;
+  return(<div className={['flex items-center gap-x-4 gap-y-1.5 flex-wrap px-3 py-2.5 sm:pl-12',last?'':'border-b border-white/[0.04]'].join(' ')} data-fb-form-row={f.name}>
+    <div className="min-w-0 flex-1 basis-[200px]">
+      <div className="flex items-center gap-2 min-w-0"><p className="text-[12.5px] text-white/85 font-medium truncate">{f.name}</p><span className={['shrink-0 inline-flex items-center px-1.5 py-0.5 rounded-md text-[10.5px] font-medium ring-1',archived?'text-white/50 bg-white/[0.04] ring-white/[0.08]':'text-emerald-300 bg-emerald-500/10 ring-emerald-500/25'].join(' ')} title="Status on Facebook">{f.status}</span></div>
+      <p className="text-[11.5px] text-white/50 truncate">Leads go to: {fbMemberName(f.owner)}</p>
+    </div>
+    <p className={['text-[11.5px] sm:w-[170px]',isPaused?'text-amber-200':'text-white/50'].join(' ')}>{isPaused?'Paused — reconnect needed':(f.last?('Last lead '+f.last):'No leads yet')}</p>
+    <p className="text-[11.5px] text-white/60 tabular-nums sm:w-[86px] sm:text-right">{f.leads30} lead{f.leads30===1?'':'s'} (30d)</p>
+    <div className="flex items-center gap-2 ml-auto shrink-0">
+      {isAdmin?<label className="inline-flex items-center gap-2 text-[11.5px] text-white/60" title={archived?'Archived on Facebook. Archived forms get no new leads.':undefined}><span>Receiving leads</span><Toggle on={f.on&&!archived} onChange={onToggle} disabled={!canAct||archived||paused}/></label>
+      :<span className={['text-[11.5px] font-medium',f.on?'text-emerald-300':'text-white/45'].join(' ')}>{f.on?'Receiving leads':'Not receiving'}</span>}
+      {isAdmin&&<button ref={menuRef} onClick={()=>setMenuOpen(o=>!o)} title="Form actions" aria-label={'Actions for '+f.name} aria-haspopup="menu" aria-expanded={menuOpen} className="w-7 h-7 rounded-lg flex items-center justify-center text-white/35 hover:text-white hover:bg-white/[0.06] transition-all shrink-0"><I.More size={14}/></button>}
+    </div>
+    {isAdmin&&menuOpen&&<AnchoredMenu anchorRef={menuRef} open onClose={()=>setMenuOpen(false)} align="right" width={196} className="py-1 rounded-xl border border-white/[0.10]" style={{background:'var(--pop2)',backdropFilter:'blur(16px)',boxShadow:'0 16px 50px rgba(0,0,0,0.6)'}}>
+      <button disabled={!canAct} onClick={()=>{setMenuOpen(false);onMap();}} className={ITEM+' text-white/80 hover:bg-white/[0.05] hover:text-white'}><I.SliderH size={13}/>Edit mapping</button>
+      <button disabled={!canAct||paused} onClick={()=>{setMenuOpen(false);onImport();}} className={ITEM+' text-white/80 hover:bg-white/[0.05] hover:text-white'}><I.Download size={13}/>Import past leads</button>
+      <button disabled={!canAct} onClick={()=>{setMenuOpen(false);setTestOpen(true);}} className={ITEM+' text-white/80 hover:bg-white/[0.05] hover:text-white'}><I.Send size={13}/>Send a test lead</button>
+      <button disabled={!canAct||!f.on} onClick={()=>{setMenuOpen(false);onStop();}} className={ITEM+' text-red-300 hover:bg-red-500/10'}><I.Pause size={13}/>Stop receiving</button>
+    </AnchoredMenu>}
+    {testOpen&&<AnchoredMenu anchorRef={menuRef} open onClose={()=>setTestOpen(false)} align="right" width={300} className="p-3.5 rounded-xl border border-white/[0.10]" style={{background:'var(--pop2)',backdropFilter:'blur(16px)',boxShadow:'0 16px 50px rgba(0,0,0,0.6)'}}>
+      <div role="dialog" aria-label="Send a test lead" data-fb-test-lead>
+        <p className="text-[12.5px] font-semibold text-white flex items-center gap-2"><I.Info size={13} className="text-brand-300 shrink-0"/>Send a test lead</p>
+        <p className="text-[12px] text-white/60 leading-relaxed mt-1.5">Use Facebook’s Lead Ads Testing Tool to submit a test lead to ‘{f.name}’. It arrives like a real lead and shows in Recent Facebook leads.</p>
+        {!f.on&&<p className="text-[11.5px] text-amber-200 mt-1.5">Turn on Receiving leads first, or the test lead is ignored.</p>}
+        <a href={FB_LEAD_ADS_TESTING_URL} target="_blank" rel="noopener noreferrer" className="mt-2.5 inline-flex items-center gap-1.5 text-[12px] font-medium text-brand-300 hover:text-brand-200">Facebook’s Lead Ads Testing Tool<I.ExternalLink size={11}/></a>
+      </div>
+    </AnchoredMenu>}
+  </div>);
+}
+// Recent Facebook leads (owner/admin only): last 30 days, filters by Page/form and result.
+function FbRecentLeads({pages,log,canAct,onRetry,goTo}){
+  const [formF,setFormF]=React.useState('all');
+  const [resF,setResF]=React.useState('all');
+  const formOf=(id)=>{for(const p of pages){const f=p.forms.find(x=>x.id===id);if(f)return{p,f};}return null;};
+  const rows=log.filter(r=>(formF==='all'||r.formId===formF||(formF.indexOf('page:')===0&&(formOf(r.formId)||{p:{}}).p.id===formF.slice(5)))&&(resF==='all'||r.result===resF));
+  const SEL='pl-3 pr-8 py-1.5 rounded-lg bg-white/[0.04] border border-white/[0.10] text-[12px] text-white/80 outline-none appearance-none cursor-pointer max-w-[180px] truncate';
+  const DETAIL={duplicate:'Matched an existing lead by email',skipped:'No name or email',failed:'Couldn’t fetch the lead from Facebook'};
+  const LINK='inline-flex items-center gap-1 text-[11.5px] font-medium text-brand-300 hover:text-brand-200 shrink-0';
+  return(<div data-fb-recent-leads>
+    <div className="flex items-center justify-between gap-3 flex-wrap mb-1.5">
+      <p className="text-[11px] font-medium text-white/45 uppercase tracking-[0.14em]">Recent Facebook leads</p>
+      <div className="flex items-center gap-2 flex-wrap">
+        <div className="relative"><select aria-label="Filter by Page or form" value={formF} onChange={e=>setFormF(e.target.value)} className={SEL} style={{colorScheme:'dark',background:'var(--s850)'}}><option value="all">All Pages and forms</option>{pages.map(p=>(<optgroup key={p.id} label={p.name}><option value={'page:'+p.id}>All of {p.name}</option>{p.forms.map(f=>(<option key={f.id} value={f.id}>{f.name}</option>))}</optgroup>))}</select><I.ChevronDown size={12} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-white/35 pointer-events-none"/></div>
+        <div className="relative"><select aria-label="Filter by result" value={resF} onChange={e=>setResF(e.target.value)} className={SEL} style={{colorScheme:'dark',background:'var(--s850)'}}><option value="all">All results</option>{Object.keys(FB_RESULTS).map(k=>(<option key={k} value={k}>{FB_RESULTS[k].l}</option>))}</select><I.ChevronDown size={12} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-white/35 pointer-events-none"/></div>
+      </div>
+    </div>
+    <p className="text-[11px] text-white/40 mb-2">Showing the last 30 days.</p>
+    {!log.length?<p className="text-[12px] text-white/45 px-3 py-3 rounded-lg bg-white/[0.03] border border-white/[0.06]">No Facebook leads yet. New submissions to forms that are receiving leads appear here.</p>
+    :!rows.length?<p className="text-[12px] text-white/45 px-3 py-3 rounded-lg bg-white/[0.03] border border-white/[0.06]">No Facebook leads match these filters.</p>
+    :<div tabIndex={0} aria-label="Recent Facebook leads" className="scroll-area flex flex-col overflow-y-auto overflow-x-hidden rounded-lg border border-white/[0.06] bg-white/[0.02] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40" style={{maxHeight:320}}>
+      {rows.map((r,i,a)=>{const m=FB_RESULTS[r.result];const pf=formOf(r.formId);return(<div key={r.id} className={['flex items-center gap-x-3 gap-y-1 px-3 py-2 flex-wrap',i<a.length-1?'border-b border-white/[0.04]':''].join(' ')} data-fb-log-row={r.result}>
+        <span className="w-[108px] shrink-0 text-[11px] text-white/40 tabular-nums">{r.at}</span>
+        <span className="flex-1 min-w-[120px] text-[12px] text-white/75 truncate">{pf?(pf.p.name+' › '+pf.f.name):'Removed form'}</span>
+        <span className={'inline-flex items-center px-1.5 py-0.5 rounded-md text-[10.5px] font-medium ring-1 shrink-0 '+m.cls}>{m.l}</span>
+        <span className="basis-full sm:basis-auto sm:w-[310px] min-w-0 flex items-center gap-2 flex-wrap sm:justify-end">
+          {r.result==='created'?<button onClick={()=>goTo&&goTo('lead-detail',r.leadId)} className={LINK}>View lead<I.ArrowUpRight size={11}/></button>
+          :r.result==='duplicate'?<React.Fragment><span className="text-[11.5px] text-white/50">{DETAIL.duplicate}</span><button onClick={()=>goTo&&goTo('lead-detail',r.leadId)} className={LINK}>View lead<I.ArrowUpRight size={11}/></button></React.Fragment>
+          :r.result==='failed'?<React.Fragment><span className="text-[11.5px] text-white/50">{DETAIL.failed}</span><button onClick={()=>onRetry(r)} disabled={!canAct||r.retrying} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-medium text-white/75 bg-white/[0.05] border border-white/[0.10] hover:bg-white/[0.08] disabled:opacity-40 disabled:cursor-not-allowed shrink-0"><I.History size={11}/>{r.retrying?'Retrying…':'Retry'}</button></React.Fragment>
+          :<span className="text-[11.5px] text-white/50">{DETAIL.skipped}</span>}
+        </span>
+      </div>);})}
+    </div>}
+  </div>);
+}
+function FacebookLeadAdsCard({goTo,stackLevel}){
+  const _bc=React.useContext(BillingContext);
+  const {confirmNode,openConfirm}=useConfirm();
+  const [demo,setDemo]=React.useState(_fbStore.connected?'connected':'notconnected'); // notconnected | choose | connected | reconnect | solo | readonly | member
+  const [conn,setConnS]=React.useState({connected:_fbStore.connected,by:_fbStore.by,on:_fbStore.on});
+  const [pages,setPagesS]=React.useState(_fbStore.pages);
+  const [selected,setSelectedS]=React.useState(_fbStore.selected);
+  const [log,setLogS]=React.useState(_fbStore.log);
+  const [picker,setPicker]=React.useState(null); // 'connect' | 'manage'
+  const [mapFor,setMapFor]=React.useState(null); // {pageId,formId}
+  const [importFor,setImportFor]=React.useState(null);
+  const [openPages,setOpenPages]=React.useState(['pg1']);
+  const [redirecting,setRedirecting]=React.useState(false);
+  const setConn=(c)=>{_fbStore.connected=c.connected;_fbStore.by=c.by;_fbStore.on=c.on;setConnS(c);};
+  const setPages=(u)=>{const next=typeof u==='function'?u(_fbStore.pages):u;_fbStore.pages=next;setPagesS(next);};
+  const setSelected=(v)=>{_fbStore.selected=v;setSelectedS(v);};
+  const setLog=(u)=>{const next=typeof u==='function'?u(_fbStore.log):u;_fbStore.log=next;setLogS(next);};
+  const resetSeed=()=>{setConn({connected:true,by:'Alex Morgan',on:'Oct 26, 2026'});setPages(fbSeedPages());setSelected(FB_CONNECTED_SEED.slice());setLog(FB_LOG_SEED);setOpenPages(['pg1']);};
+  const pickDemo=(k)=>{
+    setPicker(null);setMapFor(null);setImportFor(null);
+    if(k==='notconnected'||k==='choose'){setConn({connected:false,by:null,on:null});if(k==='choose')setPicker('connect');}
+    else if(!conn.connected)resetSeed();
+    setDemo(k);
+  };
+  const tier=demo==='solo'?'solo':(_bc.billingState==='trial'?'trial':((_bc.sub||BILLING_SUB_SEED).tier));
+  const readOnly=demo==='readonly'||capWorkspaceReadOnly(_bc);
+  const gateReason=!readOnly&&(tier==='solo'||tier==='team')?('Facebook Lead Ads isn’t included in the '+(tier==='solo'?'Solo':'Team')+' plan. It’s available on the Pro plan.'):null;
+  const isAdmin=settingsIsAdmin()&&demo!=='member'; // config:manage — owner/admin
+  const canAct=isAdmin&&!readOnly;
+  const needsReconnect=conn.connected&&demo==='reconnect';
+  const connectedPages=pages.filter(p=>selected.indexOf(p.id)>=0);
+  const updForm=(pageId,formId,patch)=>setPages(ps=>ps.map(p=>p.id!==pageId?p:{...p,forms:p.forms.map(f=>f.id!==formId?f:{...f,...patch})}));
+  // Connect: sign in with Facebook (simulated), then choose Pages on return.
+  const connect=()=>{setRedirecting(true);custToast('Redirecting to Facebook…');setTimeout(()=>{setRedirecting(false);setPicker('connect');setDemo('choose');},1000);};
+  const reconnect=()=>{setRedirecting(true);custToast('Redirecting to Facebook…');setTimeout(()=>{setRedirecting(false);setDemo('connected');custToast('Facebook reconnected. Leads are arriving again.');},1000);};
+  const confirmPicker=(ids)=>{
+    if(picker==='connect'){
+      // A fresh connection: every form starts off until someone turns it on.
+      setPages(fbSeedPages().map(p=>({...p,forms:p.forms.map(f=>({...f,on:false,last:null,leads30:0,owner:CURRENT_USER.avatar}))})));
+      setSelected(ids);setLog([]);setOpenPages(ids.slice(0,1));
+      setConn({connected:true,by:CURRENT_USER.name,on:leadApiToday()});setDemo('connected');
+      custToast('Connected '+ids.length+' page'+(ids.length===1?'':'s')+'. Turn on the forms you want leads from.');
+    }else{
+      // Pages added later also start with every form off; removed Pages stop sending leads.
+      const added=ids.filter(id=>selected.indexOf(id)<0);
+      if(added.length)setPages(ps=>ps.map(p=>added.indexOf(p.id)<0?p:{...p,forms:p.forms.map(f=>({...f,on:false}))}));
+      setSelected(ids);custToast('Pages updated');
+    }
+    setPicker(null);
+  };
+  const cancelPicker=()=>{if(picker==='connect'&&!conn.connected)setDemo('notconnected');setPicker(null);};
+  const disconnect=()=>openConfirm({title:'Stop receiving Facebook leads?',body:'nrtur stops listening to these Pages and removes its access. Leads already created stay.',confirmLabel:'Disconnect',danger:true,onConfirm:()=>{setConn({connected:false,by:null,on:null});if(demo==='connected'||demo==='reconnect'||demo==='choose')setDemo('notconnected');custToast('Facebook Lead Ads disconnected');}});
+  const toggleForm=(p,f,on)=>{updForm(p.id,f.id,{on});custToast(on?('‘'+f.name+'’ is receiving leads'):('‘'+f.name+'’ stopped receiving leads'));};
+  const stopForm=(p,f)=>{updForm(p.id,f.id,{on:false});window.__nrturToast&&window.__nrturToast('‘'+f.name+'’ stopped receiving leads','success',{label:'Undo',onClick:()=>updForm(p.id,f.id,{on:true})});};
+  const retry=(r)=>{setLog(rs=>rs.map(x=>x.id===r.id?{...x,retrying:true}:x));setTimeout(()=>{setLog(rs=>rs.map(x=>x.id===r.id?{...x,retrying:false,result:'created',leadId:104}:x));custToast('Lead created');},900);};
+  const mapPage=mapFor&&pages.find(p=>p.id===mapFor.pageId);const mapForm=mapPage&&mapPage.forms.find(f=>f.id===mapFor.formId);
+  const impPage=importFor&&pages.find(p=>p.id===importFor.pageId);const impForm=impPage&&impPage.forms.find(f=>f.id===importFor.formId);
+  const LBL='text-[11px] font-medium text-white/45 uppercase tracking-[0.14em]';
+  const BTN='inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] font-medium transition-all disabled:opacity-40 disabled:cursor-not-allowed';
+  const disconnectBtn=(<button onClick={disconnect} className={BTN+' text-red-300 bg-red-500/10 border border-red-500/20 hover:bg-red-500/15'}><I.Trash size={12}/>Disconnect</button>);
+  const memberNote=(<div role="note" className="rounded-xl border border-white/[0.08] bg-white/[0.03] px-3.5 py-2.5 flex items-center gap-2.5 text-[12px] text-white/70"><I.Lock size={13} className="text-white/45 shrink-0"/>Ask an owner or admin to manage Facebook Lead Ads.</div>);
+  const chip=!gateReason&&conn.connected?(needsReconnect
+    ?<span className="shrink-0 inline-flex items-center gap-1.5 px-2 py-1 rounded-lg text-[11px] font-medium text-red-300 bg-red-500/10 ring-1 ring-red-500/25"><span className="w-1.5 h-1.5 rounded-full bg-red-400"/>Needs attention</span>
+    :<span className="shrink-0 inline-flex items-center gap-1.5 px-2 py-1 rounded-lg text-[11px] font-medium text-emerald-300 bg-emerald-500/10 ring-1 ring-emerald-500/25"><span className="w-1.5 h-1.5 rounded-full bg-emerald-400"/>Connected</span>):null;
+  const toggleEl=(<PreviewStateToggle label="Facebook" options={[{k:'notconnected',l:'Not connected'},{k:'choose',l:'Choose pages'},{k:'connected',l:'Connected'},{k:'reconnect',l:'Needs reconnect'},{k:'solo',l:'Solo (gated)'},{k:'readonly',l:'Read-only'},{k:'member',l:'Member view'}]} value={demo} onChange={pickDemo}/>);
+  const off=52*(stackLevel||1);
+  return(
+    <React.Fragment>
+      <div className="rounded-2xl border border-white/[0.06] bg-white/[0.03] p-5" data-fb-lead-ads-card>
+        <div className="flex items-start gap-3 mb-4">
+          <FbTile/>
+          <div className="min-w-0 flex-1"><p className="text-[14px] font-semibold text-white">Facebook Lead Ads</p><p className="text-[12px] text-white/50 mt-0.5">Send leads from your Facebook and Instagram lead ad forms straight into nrtur.</p></div>
+          {chip}
+        </div>
+        {gateReason?<div className="flex flex-col gap-3"><CapGateBox reason={gateReason} remedy="See plans" goTo={goTo}/>
+          {/* Disconnect works on every plan, like Lead API Revoke. Every other action stays gated. */}
+          {isAdmin&&conn.connected&&<div className="flex items-center gap-3 flex-wrap px-3 py-2.5 rounded-xl bg-white/[0.03] border border-white/[0.06]">
+            <p className="min-w-0 flex-1 basis-[220px] text-[12px] text-white/60">Facebook is still connected to {connectedPages.length} Page{connectedPages.length===1?'':'s'}, but no leads arrive on this plan. Disconnect to remove nrtur’s access.</p>
+            {disconnectBtn}
+          </div>}
+        </div>
+        :!conn.connected?<div className="flex flex-col gap-4">
+          {readOnly&&<CapGateBox reason={CAP_READ_ONLY_REASON} remedy="See plans" goTo={goTo}/>}
+          <ul className="flex flex-col gap-2">
+            {['New form submissions arrive in nrtur as leads within seconds.','You choose which Pages and forms send leads.','Form answers map to lead fields. Anything else goes to the lead’s note.'].map(t=>(<li key={t} className="flex items-start gap-2.5 text-[12.5px] text-white/70"><I.Check size={13} className="text-brand-300 shrink-0 mt-0.5" stroke={2.4}/><span className="min-w-0">{t}</span></li>))}
+          </ul>
+          {isAdmin?<div>
+            <button onClick={connect} disabled={!canAct||redirecting} className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-[12.5px] font-semibold text-white bg-brand-500 hover:bg-brand-400 shadow-brand transition-all disabled:opacity-40 disabled:cursor-not-allowed"><I.Plug size={13}/>{redirecting?'Redirecting…':'Connect Facebook'}</button>
+            <p className="text-[11px] text-white/40 mt-2">You’ll sign in with Facebook and choose which Pages to connect. You need admin access and leads access on those Pages.</p>
+          </div>:memberNote}
+        </div>
+        :<div className="flex flex-col gap-4">
+          {readOnly&&<CapGateBox reason={CAP_READ_ONLY_REASON} remedy="See plans" goTo={goTo}/>}
+          {!isAdmin&&memberNote}
+          {needsReconnect&&<div role="alert" className="flex items-start gap-3 flex-wrap px-3.5 py-2.5 rounded-xl bg-amber-500/[0.08] border border-amber-500/25 text-[12px] text-amber-200" data-fb-reconnect>
+            <I.AlertTriangle size={13} className="shrink-0 mt-0.5"/>
+            <span className="min-w-0 flex-1 basis-[220px] leading-relaxed">Facebook access has stopped working, so new leads aren’t arriving. This happens when the connecting person’s password changes, they lose access to a Page, or permissions are removed.</span>
+            {isAdmin&&<button onClick={reconnect} disabled={!canAct||redirecting} className="shrink-0 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11.5px] font-medium text-white bg-brand-500 hover:bg-brand-400 disabled:opacity-40 disabled:cursor-not-allowed"><I.History size={11}/>{redirecting?'Redirecting…':'Reconnect'}</button>}
+          </div>}
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            <p className="text-[12px] text-white/55">Connected by {conn.by} · {conn.on}</p>
+            {isAdmin&&<div className="flex items-center gap-2 flex-wrap">
+              <button onClick={()=>setPicker('manage')} disabled={!canAct||needsReconnect} className={BTN+' text-white/75 hover:text-white bg-white/[0.04] border border-white/[0.08] hover:bg-white/[0.07]'}><I.Edit size={12}/>Manage pages</button>
+              {disconnectBtn}
+            </div>}
+          </div>
+          {/* Pages and their lead forms */}
+          <div>
+            <p className={LBL+' mb-1.5'}>Pages <span className="normal-case tracking-normal text-white/35 font-normal">· {connectedPages.length} connected</span></p>
+            <div className="flex flex-col gap-2">
+              {connectedPages.map(p=>{const open=openPages.indexOf(p.id)>=0;const recv=p.forms.filter(f=>f.on&&f.status!=='Archived').length;return(<div key={p.id} className="rounded-xl bg-white/[0.03] border border-white/[0.06] overflow-hidden" data-fb-page={p.name}>
+                <button onClick={()=>setOpenPages(o=>open?o.filter(x=>x!==p.id):[...o,p.id])} aria-expanded={open} className="w-full flex items-center gap-3 px-3 py-2.5 text-left hover:bg-white/[0.03] transition-colors">
+                  <I.ChevronRight size={13} className={'text-white/40 shrink-0 transition-transform '+(open?'rotate-90':'')}/>
+                  {fbPageAvatar(p)}
+                  <span className="min-w-0 flex-1"><span className="block text-[12.5px] text-white/85 font-medium truncate">{p.name}</span><span className="block text-[11.5px] text-white/45 truncate">{p.category}</span></span>
+                  <span className="text-[11.5px] text-white/50 shrink-0 tabular-nums">{recv} of {p.forms.length} receiving</span>
+                </button>
+                {open&&<div className="border-t border-white/[0.05]">{p.forms.map((f,i)=>(<FbFormRow key={f.id} f={f} paused={needsReconnect} isAdmin={isAdmin} canAct={canAct} last={i===p.forms.length-1}
+                  onToggle={(on)=>toggleForm(p,f,on)} onMap={()=>setMapFor({pageId:p.id,formId:f.id})} onImport={()=>setImportFor({pageId:p.id,formId:f.id})} onStop={()=>stopForm(p,f)}/>))}</div>}
+              </div>);})}
+            </div>
+            {isAdmin&&<p className="text-[11px] text-white/40 mt-1.5">New forms found on a Page start off. Turn on Receiving leads for each form you want leads from.</p>}
+          </div>
+          {/* Recent Facebook leads: owner/admin only */}
+          {isAdmin&&<FbRecentLeads pages={connectedPages} log={log} canAct={canAct} onRetry={retry} goTo={goTo}/>}
+        </div>}
+      </div>
+      {picker&&<FbPagePicker pages={pages} mode={picker} initial={picker==='manage'?selected:[]} onCancel={cancelPicker} onConfirm={confirmPicker}/>}
+      {mapForm&&<FbMappingDrawer page={mapPage} form={mapForm} onClose={()=>setMapFor(null)} onSave={(patch)=>{updForm(mapPage.id,mapForm.id,patch);setMapFor(null);custToast('Mapping saved');}}/>}
+      {impForm&&<FbImportDialog form={impForm} onCancel={()=>setImportFor(null)} onDone={(n)=>{updForm(impPage.id,impForm.id,{past:{...impForm.past,inNrtur:impForm.past.total}});setImportFor(null);custToast('Imported '+n+' lead'+(n===1?'':'s')+' from ‘'+impForm.name+'’');}}/>}
+      {confirmNode}
+      <div className="fixed left-0 right-0 h-0 z-[80]" style={{bottom:off,transform:'translateZ(0)'}}>{toggleEl}</div>
+    </React.Fragment>
+  );
+}
 function SettingsIntegrationsPage({goTo}){
   const ma=React.useContext(MailAccountsContext);
   const [mailboxModal,setMailboxModal]=React.useState(false);
@@ -15239,6 +15721,7 @@ function SettingsIntegrationsPage({goTo}){
         {canManage&&<button onClick={()=>setMailboxModal(true)} className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-[12px] font-semibold text-brand-300 bg-brand-500/10 border border-brand-500/25 hover:bg-brand-500/15 transition-all"><I.Plus size={12} stroke={2.4}/>{has?'Add another account':'Connect account'}</button>}
       </div>
       <LeadApiCard goTo={goTo} stackToggle={has}/>
+      <FacebookLeadAdsCard goTo={goTo} stackLevel={has?2:1}/>
       {mailboxModal&&<MailboxConnectModal close={()=>setMailboxModal(false)} onConnected={(acct)=>ma.connect(acct)}/>}
       {confirmNode}
       {has&&<PreviewStateToggle label="Mailbox" options={[{k:'synced',l:'Synced'},{k:'syncing',l:'Syncing'},{k:'reconnect',l:'Reconnect needed'},{k:'error',l:'Sync error'},{k:'disconnected',l:'Disconnected'}]} value={firstState} onChange={setFirstState}/>}
