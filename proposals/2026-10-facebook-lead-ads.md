@@ -1,6 +1,6 @@
 ---
 title: Facebook Lead Ads integration (Facebook and Instagram lead forms → nrtur leads)
-status: proposed        # proposed | approved | in-progress | built | dropped
+status: approved        # proposed | approved | in-progress | built | dropped
 owner: Qamar Ul Islam
 area: docs/areas/leads.md, docs/areas/workspace-settings.md (Integrations)
 screens: [settings-integrations, leads, lead-detail]
