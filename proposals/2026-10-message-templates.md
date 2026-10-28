@@ -4,7 +4,7 @@ status: approved        # proposed | approved | in-progress | built | dropped
 owner: Qamar Ul Islam
 area: docs/areas/inbox.md, docs/areas/sequences.md, docs/areas/automations.md
 screens: [engage (Templates tab; aliases email-templates, sms-templates), inbox, email-sequence-builder, sms-sequence-builder, automation-builder]
-tickets: [SCRUM-1281 (BE templates API), SCRUM-1282 (FE Templates tab), SCRUM-1283 (FE Templates picker)]
+tickets: [SCRUM-1281 (BE templates API), SCRUM-1282 (FE Templates tab), SCRUM-1283 (FE Templates picker), SCRUM-1314 (FE rich editor in sequence and automation email steps)]
 created: 2026-10-13
 ---
 
@@ -62,8 +62,8 @@ Inserting a template **copies** its text in. The person can still change it befo
   - **While any merge field is left in the text, Send is disabled.** A notice lists the fields, e.g. "Fill in or remove this merge field before sending: {{deal_name}}". This also applies to a merge field the rep typed by hand. Today the inbox would send `{{first_name}}` literally, because it never fills merge fields.
   - If To is empty when the template is inserted, the fields stay in the text until the rep replaces them.
 - **Sequence and automation steps:** the merge fields are **kept** and filled in when each message sends, exactly as today.
-  - A **sequence email step** edits plain text, so the template's formatting becomes plain text there. Line breaks stay, and list items keep a "•".
-  - An **automation Send email step** keeps the HTML, because that step's body is HTML today.
+  - **Sequence email steps and the automation Send email step** use the same rich editor as the template editor, so a template keeps its formatting there (SCRUM-1314, replaces decision 4).
+  - A sequence email step saved earlier as plain text opens with its line breaks turned into paragraphs.
 - Nothing links a message or step back to its template. A template can be edited or deleted at any time, and nothing else changes.
 
 **Managing templates**
@@ -97,14 +97,16 @@ Available on **every plan, including the trial**. Templates cost nothing to stor
 - Starter templates in a new workspace (it starts empty).
 - Templates in the deal **stage email** composer. That screen is still being built; it can add the same "Templates" button later.
 - Filling merge fields on the server for inbox sends. The inbox fills them in the browser when a template is inserted, as described above.
-- Rich-text editing for sequence email steps.
 
 ## Decisions (owner, 2026-10-13)
 Approved in PR #5 with the open questions accepted as proposed:
 1. **Permissions:** everyone can create and duplicate; editing or deleting needs the creator, an owner or an admin.
 2. **Limit:** 500 templates per channel per workspace (a safety limit, not a plan limit).
 3. **Inbox merge fields:** filled in the browser when a template is inserted; Send is blocked while any known merge field is left. No server-side filling for inbox sends in v1.
-4. **Sequence email steps** stay plain text in v1; a template's formatting is flattened there.
+4. ~~**Sequence email steps** stay plain text in v1; a template's formatting is flattened there.~~ Replaced on 2026-10-28, see below.
+
+## Decisions (owner, 2026-10-28)
+1. **Sequence and automation email steps use the rich editor.** On staging, a template inserted into a sequence step lost its formatting, and in an automation Send email step it showed as raw HTML. Both steps now use the editor from `proposals/2026-10-template-editor-upgrades.md` (formatting, merge-field chips, button, image upload), and a template keeps its look. Frontend only: these emails were already sent as HTML. SMS steps stay plain text. Ticket SCRUM-1314.
 
 ## Tickets (to create after approval)
 - **BE:** message templates.

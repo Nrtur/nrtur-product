@@ -109,11 +109,11 @@ None. All plans get the full editor. Nothing in `pricing/` changes.
 - HTML import or a code view.
 - Attachments in templates.
 - AI writing.
-- Sequence email steps stay plain text (templates proposal, decision 4).
 
 ## Decisions
 1. **Owner, 2026-10-20:** images are included in v1.
 2. **Owner, 2026-10-20:** the inbox composers (New email, reply and forward) use the same editor as the template editor.
+3. **Owner, 2026-10-28:** sequence email steps and the automation Send email step use it too (templates proposal, decision of 2026-10-28; SCRUM-1314).
 
 ## Decisions (owner, 2026-10-22)
 1. **Any non-GSM character switches the SMS counter to Unicode,** not only emoji: curly quotes (’ “ ”), many accented letters, and so on. This matches what the SMS provider bills: 70 characters per SMS, 67 per part when split. The hint says "Emoji or special characters (like ’ or “) use Unicode: 70 characters per SMS".
