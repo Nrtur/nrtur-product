@@ -11649,9 +11649,11 @@ function EmailListItem({email,selected,onClick}){
 }
 function EmailListPane({emails,selectedId,setSelectedId,onToast,folder='inbox',q=''}){
   const [chip,setChip]=React.useState('All');
+  usePrivacy();const _ma=React.useContext(MailAccountsContext);const _mbxOpts=(_ma.accounts||[]).map(a=>a.addr); // PROPOSED: only mailboxes this person can read
+  const [mbx,setMbx]=React.useState('all');const _mbx=mbx!=='all'&&!_mbxOpts.includes(mbx)?'all':mbx;
   const chips=['All','Unread','With deals','Needs reply'];
   const _q=String(q||'').trim().toLowerCase();
-  const inFolder=emails.filter(e=>emailInFolder(e,folder)&&(!_q||[e.from,e.subject,e.preview,e.contact&&e.contact.name,e.linkedDeal&&e.linkedDeal.name].some(x=>String(x||'').toLowerCase().includes(_q))));
+  const inFolder=emails.filter(e=>emailInFolder(e,folder)&&(_mbx==='all'||threadMbx(e)===_mbx)&&(!_q||[e.from,e.subject,e.preview,e.contact&&e.contact.name,e.linkedDeal&&e.linkedDeal.name].some(x=>String(x||'').toLowerCase().includes(_q))));
   const list=inFolder.filter(e=>{if(chip==='Unread')return e.unread;if(chip==='With deals')return !!e.linkedDeal;if(chip==='Needs reply')return e.unread&&!e.automation;return true;});
   const folderLabel=(MAIL_FOLDERS.find(f=>f.key===folder)||{label:'Inbox'}).label;
   const unreadN=inFolder.filter(e=>e.unread).length;
@@ -11659,7 +11661,7 @@ function EmailListPane({emails,selectedId,setSelectedId,onToast,folder='inbox',q
     <section className="w-[380px] shrink-0 border-r border-white/[0.05] flex flex-col crm-pane-list" style={{background:'var(--s900)'}}>
       <div className="px-4 py-3 border-b border-white/[0.05] flex items-center justify-between" style={{background:'var(--s900)'}}>
         <div className="flex items-center gap-2"><p className="text-[13px] font-medium text-white">{folderLabel}</p>{unreadN>0&&<><span className="text-[11px] text-white/40">·</span><span className="text-[11px] text-white/40 tabular-nums">{unreadN} unread</span></>}</div>
-        
+        {_mbxOpts.length>1&&<div className="relative"><select aria-label="Mailbox" value={_mbx} onChange={e=>setMbx(e.target.value)} className="appearance-none pl-2.5 pr-7 py-1 rounded-lg text-[11px] font-medium text-white/70 bg-white/[0.04] border border-white/[0.08] hover:border-white/[0.16] max-w-[170px] truncate" style={{colorScheme:'dark'}}><option value="all">All mailboxes</option>{_mbxOpts.map(a=>(<option key={a} value={a}>{a}{mbxMeta(a).vis==='shared'?' · Shared':' · Private'}</option>))}</select><I.ChevronDown size={11} className="absolute right-2 top-1/2 -translate-y-1/2 text-white/35 pointer-events-none"/></div>}
       </div>
       <div className="px-3 py-2 border-b border-white/[0.04] flex items-center gap-1.5 overflow-x-auto scroll-area" style={{background:'var(--s900)'}}>
         {chips.map(c=>(<button key={c} onClick={()=>setChip(c)} className={['shrink-0 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-medium transition-all',chip===c?'bg-brand-500/15 text-brand-200 ring-1 ring-brand-500/25':'text-white/50 hover:text-white/85 hover:bg-white/[0.04]'].join(' ')}>{c}</button>))}
@@ -12413,9 +12415,10 @@ function InboxPage({goTo,nav}){
   const ma=React.useContext(MailAccountsContext);
   const mailShort=(()=>{const a=ma.accounts;if(a.length===0)return'No mailbox';const provs=new Set(a.map(x=>x.provider).filter(Boolean));return a.length===1?((PROVIDERS[a[0].provider]||{}).short||'Email'):(provs.size===1?((PROVIDERS[a[0].provider]||{}).short||'Email'):'Mail');})();
   const mailSynced=ma.accounts.length>0;
-  const connectMailbox=(prov)=>{ma.connect({addr:'alex@bloom.co',initials:'AM',color:'#ea4335',provider:'gmail'});};
+  const [connectOpen,setConnectOpen]=React.useState(false);
+  const connectMailbox=(prov)=>setConnectOpen(true); // PROPOSED: same connect panel as Settings, so it asks Private / Shared
   const disconnectAll=()=>{ma.accounts.forEach(a=>ma.disconnect(a.addr));};
-  const inboxConnect=(<ConnectEmptyState Icon={I.Inbox} accent="#2FA877" eyebrow="Inbox" title="Sync your inbox" desc="Connect Gmail to send, receive, and track email right inside nrtur — every message auto-logs to the right contact and deal, and your replies sync back instantly." providers={[{name:'Connect Gmail',c:'#ea4335',Icon:I.Mail,onClick:()=>connectMailbox('gmail')}]} benefits={[{Icon:I.History,l:'Live two-way sync'},{Icon:I.UserPlus,l:'Auto-log to contacts'},{Icon:I.Layers,l:'Templates & sequences'}]} footnote={<>Manage connected mailboxes in <button onClick={()=>goTo&&goTo('settings-integrations')} className="font-medium text-white/75 underline decoration-white/25 underline-offset-2 hover:text-white">Settings → Integrations</button>.</>}/>);
+  const inboxConnect=(<><ConnectEmptyState Icon={I.Inbox} accent="#2FA877" eyebrow="Inbox" title="Sync your inbox" desc="Connect Gmail to send, receive, and track email right inside nrtur — every message auto-logs to the right contact and deal, and your replies sync back instantly." providers={[{name:'Connect Gmail',c:'#ea4335',Icon:I.Mail,onClick:()=>connectMailbox('gmail')}]} benefits={[{Icon:I.History,l:'Live two-way sync'},{Icon:I.UserPlus,l:'Auto-log to contacts'},{Icon:I.Layers,l:'Templates & sequences'}]} footnote={<>Manage connected mailboxes in <button onClick={()=>goTo&&goTo('settings-integrations')} className="font-medium text-white/75 underline decoration-white/25 underline-offset-2 hover:text-white">Settings → Integrations</button>.</>}/>{connectOpen&&<MailboxConnectModal close={()=>setConnectOpen(false)} onConnected={(acct)=>{ma.connect(acct);setConnectOpen(false);showToast&&showToast('Mailbox connected · '+acct.addr);}}/>}</>);
   const _allUnread=emails.filter(e=>emailInFolder(e,'inbox')&&e.unread).length+smsConvos.filter(c=>c.unread).length;
   const TABS=[{k:'all',l:'All',Icon:I.Inbox,badge:_allUnread},{k:'email',l:'Email',Icon:I.Mail},{k:'sms',l:'SMS',Icon:I.MessageSquare},{k:'calls',l:'Calls',Icon:I.Phone}];
   const [allQ,setAllQ]=React.useState(''); // the header search box — drives the email list and the All feed

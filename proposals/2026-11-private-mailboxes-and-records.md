@@ -28,6 +28,7 @@ Two parts, built in two phases. Each phase ships on its own.
 **Screens** (design.nrtur.io). A **Privacy** preview toggle on each screen switches between the states below.
 - `settings-integrations` and `inbox`: the Private / Shared choice when connecting a mailbox, a badge on every mailbox, and mailbox settings.
 - `inbox`: the **Private** switch in the thread reader, and a lock on private threads.
+- `inbox`: the **Mailbox** filter above the email list, and **Connect Gmail** on the empty Inbox opening the same Private / Shared choice.
 - `leads`, `contacts`, `pipeline` and their detail and add pages: the **Visibility** field, a lock icon on private records, and a "Private" list filter.
 - `company-detail`: the "N private records hidden" line.
 - `add-lead` / `add-contact`: the message for a private duplicate.
@@ -37,7 +38,7 @@ Two parts, built in two phases. Each phase ships on its own.
 ### Phase 1: Private mailboxes
 
 **Choosing**
-- When connecting a mailbox, the person picks:
+- When connecting a mailbox, the person picks the options below. This choice appears wherever you can connect a mailbox: Settings › Integrations, the Inbox's **Connect account** link, and the **Connect Gmail** button on the empty Inbox.
   - **Private: only me.** For your own work email. **This is the default.**
   - **Shared: the whole team.** For a team address like `sales@` or `support@`. **Only an owner or admin** can choose Shared; a member's mailbox is always private.
 - Every mailbox shows a badge: 🔒 **Private** or 👥 **Shared**, in the Inbox folder rail and in Settings › Integrations.
@@ -50,6 +51,11 @@ Two parts, built in two phases. Each phase ships on its own.
 
 **Who can see a shared mailbox**
 - Every member, as today: read, reply, forward, label, archive.
+
+**Mailbox filter in the Inbox**
+- The Inbox stays unified: by default it shows every mailbox the person can read (their own private ones plus the shared ones).
+- A **Mailbox** dropdown above the email list narrows it to one mailbox: "All mailboxes", then each mailbox with its Private / Shared label. It lists only the mailboxes the person can read, and it shows only when they can read two or more.
+- The API gets an optional `account_id` filter on the thread list, the All feed and the folder counts. Asking for a mailbox the person can't read returns nothing, the same as the 404 rule above.
 
 **Customer emails on record timelines**
 - An email in a **private** mailbox that **matches a contact or lead** still shows on that record's timeline, to anyone who can see the record. The team keeps the customer history; the rest of the mailbox stays private.
@@ -145,6 +151,7 @@ Two parts, built in two phases. Each phase ships on its own.
 - **Creating a lead from an email** in the Inbox, and auto-creating leads from unknown senders. That gets its own proposal.
 - **Sharing a private record with one named person.**
 - An owner or admin reading a private mailbox, for any reason.
+- **A "by user" filter and assigning threads** in the Inbox. nrtur has neither today: threads have no assignee ("Assigned to me" exists only in Notifications). With private mailboxes, a person's own mail is already their private mailbox, so the Mailbox filter covers "show me one person's mail". Assigning shared-mailbox threads to a teammate (as in a shared `sales@` inbox) is a separate feature and would get its own proposal.
 - The mobile app (it uses the same API, so it gets the filtering automatically, but its screens are not designed here).
 
 ## Phases and tickets (to create after approval)
@@ -153,11 +160,13 @@ Two parts, built in two phases. Each phase ships on its own.
 - **BE:**
   - `visibility` on mailboxes, set at connect;
   - filtering in every inbox read: accounts, feed, threads, messages, attachments, counts, search, From;
+  - the optional `account_id` filter on the thread list, feed and counts;
   - timeline filtering, the per-thread Private switch and the mailbox's timeline default;
   - the change rules;
   - disconnecting private mailboxes on member removal.
 - **FE:**
-  - the Private / Shared choice on connect;
+  - the Private / Shared choice on connect, including from the empty Inbox;
+  - the Mailbox filter above the email list;
   - badges;
   - mailbox settings (visibility, timeline default);
   - the thread Private switch;
