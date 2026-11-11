@@ -23,7 +23,7 @@ Screens are selected by a page id in `function App()` (`page==='…'`). Refer to
 | Engage | `engage` `automation-builder` `sms-sequence-builder` `email-sequence-builder` |
 | Settings | `profile` `settings-notifications` `settings-general` `settings-team` `settings-compliance` `settings-tasks` `settings-properties` `settings-tags` `settings-statuses` `settings-duplicates` `settings-integrations` `settings-phone-numbers` `settings-billing` |
 
-In the browser console, `window.__nrturGoTo('<page id>')` jumps to a page. `window.__nrturBillingState(...)` switches the billing page between its states (trial, active, read-only and so on). `window.__nrturTemplates('empty')` empties the template library (`'seed'` restores it).
+In the browser console, `window.__nrturGoTo('<page id>')` jumps to a page. `window.__nrturBillingState(...)` switches the billing page between its states (trial, active, read-only and so on). `window.__nrturTemplates('empty')` empties the template library (`'seed'` restores it). `window.__nrturPrivacy('admin' | 'member-own' | 'member-other' | 'plan-without')` switches the private mailboxes and records preview (proposed).
 
 ## Screens from proposals (not built yet)
 
@@ -40,5 +40,6 @@ The design also shows features that are **proposed** (open PR) or **approved but
 | Template editor upgrades | approved (not built) | `engage` (Templates › email template editor: formatting toolbar, chips, "/" menu, preview toggle, test send), `inbox` (composers use the same editor), SMS template editor (emoji) | [proposals/2026-10-template-editor-upgrades.md](../proposals/2026-10-template-editor-upgrades.md) |
 | Lead API v2: named keys, docs, request log | approved (not built) | `settings-integrations` (key list, New key / Rename / Regenerate / Revoke, View API docs drawer, Recent requests) | [proposals/2026-10-lead-api-v2.md](../proposals/2026-10-lead-api-v2.md) |
 | Facebook Lead Ads | approved (not built) | `settings-integrations` (Facebook Lead Ads card: connect, choose pages, forms with mapping, import past leads, Recent Facebook leads, reconnect states), `leads` / `lead-detail` (Source "Facebook", "Created from Facebook Lead Ads") | [proposals/2026-10-facebook-lead-ads.md](../proposals/2026-10-facebook-lead-ads.md) |
+| Private mailboxes and private records | approved (not built) | `settings-integrations` and `inbox` (Private / Shared mailbox choice, badges, mailbox settings, thread Private switch), `add-lead` / `add-contact` / `add-deal` and the detail pages (Visibility field, lock icon), `leads` / `contacts` / `pipeline` (lock icon, Private filter), `company-detail` (hidden private records line). The **Privacy** preview toggle switches the viewer and plan states | [proposals/2026-11-private-mailboxes-and-records.md](../proposals/2026-11-private-mailboxes-and-records.md) |
 
 When a feature ships, its row is removed here as part of the close-out.
