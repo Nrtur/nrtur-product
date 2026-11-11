@@ -3062,13 +3062,16 @@ function RecordSheet({type='contact',variant='page',onToast,onCreate,onCreateRow
 // ── ContactCreator ── renders ONE mode (single form or multiple sheet); no in-page toggle ──
 function ContactCreator({variant='page',initialMode='single',goTo,onSingle,onBulk,onToast}){
   const mode=initialMode==='multiple'?'multiple':'single';
-  const [f,setF]=React.useState({first:'',last:'',email:'',phone:'',company:'',title:'',status:'Lead',owner:'AM',source:'',tags:''});
-  const set=(k,v)=>setF(s=>({...s,[k]:v}));
+  const [f,setF]=React.useState({first:'',last:'',email:'',phone:'',company:'',title:'',status:'Lead',owner:'AM',source:'',tags:'',visibility:'shared'});
+  const [privErr,setPrivErr]=React.useState(''); // PROPOSED: private duplicate message
+  const set=(k,v)=>{if(privErr)setPrivErr('');setF(s=>({...s,[k]:v}));};
   const valid=f.first.trim()&&f.last.trim()&&/\S+@\S+\.\S+/.test(f.email); // first name, last name and email are required
-  const submitSingle=()=>{if(!valid)return;onSingle&&onSingle(f);};
+  const submitSingle=()=>{if(!valid)return;const _pm=privDupMessage('contact',f.email);if(_pm){setPrivErr(_pm);return;}onSingle&&onSingle(privHasFeature()?f:{...f,visibility:'shared'});};
   if(mode==='multiple')return(<RecordSheet variant={variant} onToast={onToast} onCreate={onBulk}/>);
   return(<div>
     <ContactFields f={f} set={set}/>
+    <PrivVisibilityField className="mt-4" value={f.visibility} onChange={v=>set('visibility',v)}/>
+    {privErr&&<div className="mt-4 flex items-start gap-2 rounded-xl bg-red-500/[0.08] border border-red-500/25 px-3.5 py-2.5"><I.AlertTriangle size={14} className="text-red-300 shrink-0 mt-0.5"/><p className="text-[12.5px] text-red-200/90 leading-relaxed">{privErr}</p></div>}
     <div className="flex items-center justify-end gap-3 mt-5">
       <button onClick={()=>goTo&&goTo('contacts')} className="px-4 py-2.5 rounded-xl text-[13px] font-medium text-white/65 bg-white/[0.04] border border-white/[0.08] hover:bg-white/[0.07] transition-all">Cancel</button>
       <button onClick={submitSingle} disabled={!valid} className={['inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-[13px] font-semibold transition-all',valid?'text-white bg-brand-500 hover:bg-brand-400 shadow-brand':'text-white/30 bg-white/[0.06] cursor-not-allowed'].join(' ')}><I.UserPlus size={14}/>Create contact</button>
@@ -3872,7 +3875,9 @@ function AddRecordDrawer({object,close,onToast,goTo,initialMode,prefill}){
     if(_arBlocked)return; // app: the form's Create reads the same records gate (useCapGate) — blocked on read_only, trial at the cap, or over it
     setSubmitted(true);
     if(!allValid){const firstErr=fields.find(f=>errorFor(f));if(firstErr&&secondary.includes(firstErr))setShowMore(true);return;}
+    if(object==='lead'||object==='contact'){const _emF=fields.find(f=>f.type==='Email');const _pm=privDupMessage(object,_emF?vals[_emF.id]:'');if(_pm){setRecError(_pm);return;}} // PROPOSED: a private record the viewer can't see — no link, no details
     const rec=arBuildRecord(object,vals,fields);
+    if(['lead','contact','deal'].includes(object)&&privHasFeature())rec.visibility=vals._vis||'shared';
     if(object==='deal'){if(_dPipe)rec.pipeline=_dPipe.name;const _pr=parseFloat(vals.d_prob);if(!isNaN(_pr))rec.probability=Math.max(0,Math.min(100,_pr));}
     if(object==='lead'){try{rec.score=recomputeScore('lead',rec);}catch(e){}} // P3: scorecard computes the lead score (was random)
     // Link new records by id (prefer the prefilled id, else resolve the picked name) — completes Wave 3 id-linking for live-created records.
@@ -3907,6 +3912,7 @@ function AddRecordDrawer({object,close,onToast,goTo,initialMode,prefill}){
           <div className="grid grid-cols-2 gap-4">
             {primary.map(f=>(<ARField key={f.id} f={augReq(f)} value={vals[f.id]} onChange={v=>onFieldChange(f,v)} error={submitted?errorFor(f):''} nudge={nudgeFor(f)} crm={crm} onCreateCompany={addCompanyRec} onCreateContact={addContactRec}/>))}
           </div>
+          {['lead','contact','deal'].includes(object)&&<PrivVisibilityField className="mt-4" value={vals._vis||'shared'} onChange={v=>setVals(s=>({...s,_vis:v}))}/>}
           {secondary.length>0&&<div className="mt-4">
             <button onClick={()=>setShowMore(o=>!o)} className="inline-flex items-center gap-1.5 text-[12.5px] font-medium text-brand-300 hover:text-brand-200 transition-colors"><I.ChevronDown size={14} style={{transform:showMore?'rotate(180deg)':'none',transition:'transform .15s'}}/>{showMore?'Hide':'Show more fields'}<span className="text-white/50 font-normal">({secondary.length})</span></button>
             {showMore&&<div className="grid grid-cols-2 gap-4 mt-3 pt-4 border-t border-white/[0.06]">{secondary.map(f=>(<ARField key={f.id} f={augReq(f)} value={vals[f.id]} onChange={v=>onFieldChange(f,v)} error={submitted?errorFor(f):''} nudge={nudgeFor(f)} crm={crm} onCreateCompany={addCompanyRec} onCreateContact={addContactRec}/>))}</div>}
@@ -5909,7 +5915,7 @@ function ObjectToolsMenu({object,goTo,onDuplicates}){
   </div>);
 }
 const CONTACT_COLS=[
-  {key:'name',label:'Name',w:'1.7fr',def:true,cell:(c,x)=>(<button onClick={()=>x.goTo('contact-detail',c.id)} className="flex items-center gap-3 min-w-0 text-left w-full"><div className="w-9 h-9 rounded-full flex items-center justify-center text-[11px] font-semibold text-white shrink-0" style={{background:c.color}}>{c.avatar}</div><div className="min-w-0"><div className="flex items-center gap-1.5"><p className="text-[13px] font-medium text-white leading-tight truncate">{c.name}</p>{c.dnc&&<span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-medium bg-white/[0.06] text-white/45 ring-1 ring-white/[0.10] shrink-0" title="Do not contact"><I.Ban size={8}/>DNC</span>}</div><p className="text-[11px] text-white/45 truncate mt-0.5">{c.email}</p></div></button>)},
+  {key:'name',label:'Name',w:'1.7fr',def:true,cell:(c,x)=>(<button onClick={()=>x.goTo('contact-detail',c.id)} className="flex items-center gap-3 min-w-0 text-left w-full"><div className="w-9 h-9 rounded-full flex items-center justify-center text-[11px] font-semibold text-white shrink-0" style={{background:c.color}}>{c.avatar}</div><div className="min-w-0"><div className="flex items-center gap-1.5"><p className="text-[13px] font-medium text-white leading-tight truncate">{c.name}</p>{privIsPrivate('contact',c)&&<PrivLock size={10}/>}{c.dnc&&<span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-medium bg-white/[0.06] text-white/45 ring-1 ring-white/[0.10] shrink-0" title="Do not contact"><I.Ban size={8}/>DNC</span>}</div><p className="text-[11px] text-white/45 truncate mt-0.5">{c.email}</p></div></button>)},
   {key:'co',label:'Company',w:'1.3fr',def:true,cell:(c)=>(<p className="text-[13px] text-white/75 truncate">{c.co}</p>)},
   {key:'cstatus',label:'Status',w:'118px',def:true,cell:(c,x)=>(<ContactStatusDropdown value={c.cstatus} onChange={s=>x.onStatus(c.id,s)} disabled={x.readOnly}/>)},
   {key:'lastAct',label:'Last activity',w:'150px',def:true,cell:(c)=>{const h=contactHealth(c.days);return(<div className="flex items-center gap-2" title={h.l}><span className="w-2 h-2 rounded-full shrink-0" style={{background:h.c,boxShadow:'0 0 8px '+h.c+'99'}}/><span className="text-[12px] text-white/55 truncate">{c.lastAct}</span></div>);}},
@@ -6980,7 +6986,9 @@ function ContactsPage({goTo,nav}){
   const [search,setSearch]=React.useState('');
   const [importModal,setImportModal]=React.useState(false);
   const [selected,setSelected]=React.useState([]);
-  const {contacts:rows,setContacts:setRows}=React.useContext(CrmDataContext);
+  const {contacts:_rowsAll,setContacts:setRows}=React.useContext(CrmDataContext);
+  usePrivacy();const [privVisF,setPrivVisF]=React.useState('all'); // PROPOSED private records: others' private contacts are absent; Visibility filter
+  const rows=privFilter('contact',_rowsAll,privVisF);
   const [views,setViews]=React.useState(ctSeedViews);
   const [activeKey,setActiveKey]=React.useState('all');
   const DEFCOLS=omDefaultCols(CONTACT_COLS,'Contacts',_propsCtx);
@@ -7068,6 +7076,7 @@ function ContactsPage({goTo,nav}){
             <div className="shrink-0 border-b border-white/[0.05] px-7 py-2.5 flex items-center gap-3 flex-wrap" style={{background:'var(--s900)'}}>
               <div className="flex items-center gap-2 bg-white/[0.04] border border-white/[0.08] rounded-xl px-3 py-1.5 focus-within:border-brand-500/40 transition-all"><I.Search size={12} className="text-white/40"/><input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search contacts..." className="bg-transparent outline-none text-[12px] text-white placeholder:text-white/30 w-44"/></div>
               <div className="ml-auto flex items-center gap-2">
+                <PrivVisFilter value={privVisF} onChange={setPrivVisF}/>
                 <OmFiltersButton object='contact' fields={fields.filter(f=>['cstatus','owner','tags','createdAt'].indexOf(f.key)>=0||String(f.key).indexOf('np_')===0)} model={workFilter} onChange={setWorkFilter} andOnly/>
                 <ColumnsControl allCols={allContactCols} object='contact' shown={cols} onChange={setCols} noCreate/>
                 <ObjectToolsMenu object='contact' goTo={goTo} onDuplicates={()=>selectView('duplicates')}/>
@@ -8087,6 +8096,7 @@ function ContactDetailPage({goTo,nav}){
   const {contacts,updateContact}=crm;
   const {props:_propsCtx}=React.useContext(PropertiesContext);
   const c=contacts.find(x=>x.id===nav)||contacts[0];
+  usePrivRecordGate('contact',c,goTo,'contacts'); // PROPOSED: someone who can't see a private contact gets the 404
   // Wave 3: real deals for this contact — id-first (primary / additional / same-company) with name fallback. Non-memoized, matches CompanyDetailPage convention.
   const myDeals=allDeals().filter(d=>{if(d.primaryContactId!=null&&d.primaryContactId===c.id)return true;if(Array.isArray(d.additionalContactIds)&&d.additionalContactIds.includes(c.id))return true;if(c.companyId!=null&&d.companyId!=null&&d.companyId===c.companyId)return true;if(d.primaryContact&&c.name&&d.primaryContact===c.name)return true;if(d.company&&c.co&&d.company===c.co)return true;return false;});
   // R4 comm routing: exactly ONE open id-linked deal → auto-associate the comm; several → person-only
@@ -8146,7 +8156,7 @@ function ContactDetailPage({goTo,nav}){
   const _fldLabel=(k)=>{const f=[...cPrimary,...cSecondary].find(x=>x.key===k);return f?f.label:k;};
   const _fldFmt=(k,val)=>{if(val==null||val==='')return'empty';if(Array.isArray(val))return val.length?val.join(', '):'empty';if(typeof val==='object')return'updated';if(k==='owner'){const u=userByCode(val);return u?u.name:String(val);}return String(val);};
   const _logField=(k,oldV,newV)=>{if(String(oldV==null?'':oldV)===String(newV==null?'':newV))return;setExtra(x=>[mkAct('field',{ts:0,by:CURRENT_USER.avatar,title:_fldLabel(k)+' updated',body:_fldFmt(k,oldV)+'  →  '+_fldFmt(k,newV)}),...x]);};
-  const onFieldChange=(k,v)=>{const _old=crec[k];if(k==='first'||k==='last'){const nf=k==='first'?v:crec.first;const nl=k==='last'?v:crec.last;updateContact(c.id,{[k]:v,name:(nf+' '+nl).trim()});}else if(k==='co'){const _co=(crm.companies||[]).find(x=>x.name===v&&!x.deleted);updateContact(c.id,{co:v,companyId:_co?_co.id:null});}else if(k==='owner'){updateContact(c.id,{owner:v,ownerColor:arOwnerColor(v)});}else{updateContact(c.id,{[k]:v});}_logField(k,_old,v);if(k==='cstatus'&&String(_old==null?'':_old)!==String(v==null?'':v)&&window.__nrturToast){window.__nrturToast('Status set to '+v,'success',{label:'Undo',onClick:()=>{updateContact(c.id,{cstatus:_old});_logField('cstatus',v,_old);window.__nrturToast('Status reverted to '+(_old||'—'),'success');}});}};
+  const onFieldChange=(k,v)=>{const _old=crec[k];if(k==='first'||k==='last'){const nf=k==='first'?v:crec.first;const nl=k==='last'?v:crec.last;updateContact(c.id,{[k]:v,name:(nf+' '+nl).trim()});}else if(k==='co'){const _co=(crm.companies||[]).find(x=>x.name===v&&!x.deleted);updateContact(c.id,{co:v,companyId:_co?_co.id:null});}else if(k==='owner'){privOwnerGuard('contact',c,v,()=>updateContact(c.id,{owner:v,ownerColor:arOwnerColor(v)}),openConfirm);}else{updateContact(c.id,{[k]:v});}_logField(k,_old,v);if(k==='cstatus'&&String(_old==null?'':_old)!==String(v==null?'':v)&&window.__nrturToast){window.__nrturToast('Status set to '+v,'success',{label:'Undo',onClick:()=>{updateContact(c.id,{cstatus:_old});_logField('cstatus',v,_old);window.__nrturToast('Status reverted to '+(_old||'—'),'success');}});}};
   const cPrimary=[{key:'first',label:'First name',type:'text',required:true},{key:'last',label:'Last name',type:'text',required:true},{key:'email',label:'Primary email',type:'email',linkKind:'email'},{key:'phone',label:'Phone',type:'phone',linkKind:'phone'},{key:'title',label:'Job title',type:'text',autocomplete:true,options:COMMON_JOB_TITLES},{key:'co',label:'Company',type:'companylookup',go:(g)=>{const co=(c.companyId!=null?crm.companies.find(x=>x.id===c.companyId):null)||crm.companies.find(x=>x.name===c.co);g('company-detail',co&&co.id);}},{key:'owner',label:'Owner',type:'owner'},{key:'cstatus',label:'Status',type:'pill',options:CONTACT_STATUSES},{key:'tags',label:'Tags',type:'tags'}];
   // Additional emails/phones, mailing address and LinkedIn have no backend column yet — shown read-only.
   const cSecondary=[{key:'source',label:'Source',type:'select',options:CONTACT_SOURCES},{key:'emails',label:'Additional emails',type:'list',kind:'email',readOnly:true},{key:'phones',label:'Additional phones',type:'list',kind:'phone',readOnly:true},{key:'address',label:'Mailing address',type:'address',readOnly:true},{key:'linkedin',label:'LinkedIn URL',type:'url',linkKind:'url',readOnly:true},{key:'lastActivity',label:'Last activity',type:'datetime'}];
@@ -8186,7 +8196,7 @@ function ContactDetailPage({goTo,nav}){
               <div className="relative p-6 pb-5" style={{background:'radial-gradient(circle at top,rgba(94,146,216,0.10),transparent 70%)'}}>
                 <div className="flex items-center gap-4 mb-4">
                   <div className="relative"><div className="w-16 h-16 rounded-full flex items-center justify-center text-white text-[20px] font-semibold ring-2 ring-white/[0.06]" style={{background:c.color}}>{c.avatar}</div></div>
-                  <div><div className="flex items-center gap-2 flex-wrap"><h2 className="text-white text-[20px] font-semibold">{c.name}</h2></div>
+                  <div><div className="flex items-center gap-2 flex-wrap"><h2 className="text-white text-[20px] font-semibold">{c.name}</h2>{privIsPrivate('contact',c)&&<PrivLock size={15}/>}</div>
                   <p className="text-[13px] text-white/55 mt-1">{[c.title,c.co].filter(Boolean).join(' · ')||'Independent'}</p><div className="flex items-center gap-1.5 flex-wrap mt-2">{effCanObject('Contacts','edit')?<ContactStatusDropdown value={c.cstatus} onChange={s=>onFieldChange('cstatus',s)}/>:(c.cstatus?(()=>{const _sc=pillC(c.cstatus);return(<span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-medium" style={{background:_sc+'1f',color:_sc,boxShadow:'inset 0 0 0 1px '+_sc+'40'}}><span className="w-1.5 h-1.5 rounded-full" style={{background:_sc}}/>{c.cstatus}</span>);})():null)}{suppressed.email&&<span className="inline-flex items-center px-2 py-0.5 rounded-full bg-amber-500/12 text-amber-300 ring-1 ring-amber-500/25 text-[11px] font-medium">Do not email</span>}{suppressed.sms&&<span className="inline-flex items-center px-2 py-0.5 rounded-full bg-amber-500/12 text-amber-300 ring-1 ring-amber-500/25 text-[11px] font-medium">Do not SMS</span>}{suppressed.calls&&<span className="inline-flex items-center px-2 py-0.5 rounded-full bg-amber-500/12 text-amber-300 ring-1 ring-amber-500/25 text-[11px] font-medium">Do not call</span>}</div></div>
                 </div>
                 {effCanObject('Contacts','edit')&&<div className="grid grid-cols-4 gap-2">
@@ -8199,6 +8209,7 @@ function ContactDetailPage({goTo,nav}){
               </div>
               </div>
               <RecordProperties record={crec} primary={_ctLay.primary} secondary={_ctLay.secondary} onChange={onFieldChange} goTo={goTo} readOnly={!effCanObject('Contacts','edit')}/>
+              <RecordVisibilityCard kind="contact" rec={c} goTo={goTo} onSet={v=>updateContact(c.id,{visibility:v})}/>
               {_convLead&&<ConvertedFromLeadCard lead={_convLead} goTo={goTo}/>}
               <div className="rounded-2xl bg-white/[0.03] border border-white/[0.06] px-5 py-4">
                 <div className={['flex items-center justify-between',dealsOpen?'mb-3':''].join(' ')}><button onClick={()=>setDealsOpen(o=>!o)} className="flex items-center gap-1.5 text-left flex-1 min-w-0"><I.ChevronDown size={12} className="text-white/35 shrink-0" style={{transform:dealsOpen?'none':'rotate(-90deg)',transition:'transform .15s'}}/><p className="text-[10px] font-medium text-white/40 uppercase tracking-[0.14em]">Deals · {myDeals.length}</p></button>{effCanObject('Deals','create')&&<button onClick={()=>window.__nrturQuickAdd?window.__nrturQuickAdd('deal','single',{contact:c.name,contactId:c.id,company:c.co,companyId:c.companyId}):goTo('add-deal')} className="text-[11px] text-white/45 hover:text-brand-300 flex items-center gap-1"><I.Plus size={10} stroke={2.4}/>New deal</button>}</div>
@@ -8248,7 +8259,7 @@ function ContactDetailPage({goTo,nav}){
         </div>
         <AppFooter/>{confirmNode}
       </div>
-      {editOpen&&<RecordEditDrawer object="contact" title={'Edit '+c.name} Icon={I.UserPlus} groups={editGroups} record={crec} onSave={onEditSave} onClose={()=>setEditOpen(false)}/>}
+      {editOpen&&<RecordEditDrawer object="contact" title={'Edit '+c.name} Icon={I.UserPlus} groups={editGroups} record={crec} onSave={(p)=>privOwnerGuard('contact',c,p&&p.owner,()=>onEditSave(p),openConfirm)} onClose={()=>setEditOpen(false)}/>}
       {callModal&&<LogCallModal close={()=>setCallModal(false)} contactName={c.name} contactId={c.id} onSave={onLogCall}/>}
       {dialOpen&&<SoftphoneDock name={c.name} phone={c.phone} onClose={()=>setDialOpen(false)} onEnded={(r)=>onLogCall({direction:'out',outcome:r.outcome||'',duration:r.duration,notes:r.notes||''})}/>}
       {emailOpen&&<EmailComposeModal defaultTo={c.email||''} recipientCtx={{contactId:c.id}} close={()=>setEmailOpen(false)} onSent={()=>{window.__nrturToast&&window.__nrturToast('Email sent','success');}}/>}
@@ -8267,7 +8278,7 @@ function AddContactPage({goTo,nav}){
   // Build a real contact record from the form (mirrors the quick-add shape) and persist it — the single-add used to
   // just goTo('contact-detail') and create nothing.
   const createReal=(form)=>{const id=Date.now()+Math.floor(Math.random()*1000);const name=(((form.first||'')+' '+(form.last||'')).trim())||form.first||'New contact';crm.setContacts(a=>[{id,name,first:form.first||name,last:form.last||'',co:form.company||'',company:form.company||'',email:form.email||'',phone:form.phone||'',title:form.title||'',avatar:arInitials(name),color:arPick(),status:'Active',cstatus:form.status||'Lead',owner:form.owner||'AM',ownerColor:((TEAM_MEMBERS.find(m=>m.avatar===(form.owner||'AM'))||{}).color)||'#5E92D8',source:form.source||'',lastAct:'Just now',deal:'—',days:0,tags:String(form.tags||'').split(',').map(x=>x.trim()).filter(Boolean),archived:false},...a]);return id;};
-  const onSingle=(form)=>{const id=createReal(form);showToast('Contact created');setTimeout(()=>goTo('contact-detail',id),450);};
+  const onSingle=(form)=>{const id=createReal(form);if(form.visibility==='private')crm.setContacts(a=>a.map(x=>x.id===id?{...x,visibility:'private'}:x));showToast('Contact created');setTimeout(()=>goTo('contact-detail',id),450);};
   const onBulk=(n)=>{showToast(n+(n===1?' contact':' contacts')+' added');setTimeout(()=>goTo('contacts'),700);};
   const title=initialMode==='multiple'?'Add multiple contacts':'Add a contact';
   const subtitle=initialMode==='multiple'?'Type or paste a whole list — add many people in one save, or jump back to bulk import from Contacts.':'Add one person to your CRM. Same form as Quick add.';
@@ -10078,7 +10089,9 @@ function StageAutomationModal({stage,goTo,onClose}){
 }
 function PipelinePage({goTo,nav}){
   const loading=useSkeleton(1000);
-  const {deals:_deals,setDeals,pipelines,setPipelines,setAutomations}=React.useContext(CrmDataContext); // P1-1: pipelines shared + persistent; R9-7: cascade stage rename to automation triggers
+  const {deals:_dealsAll,setDeals,pipelines,setPipelines,setAutomations}=React.useContext(CrmDataContext);
+  usePrivacy();const [privVisF,setPrivVisF]=React.useState('all'); // PROPOSED private records: others' private deals are absent (board, totals); Visibility filter
+  const _deals=privFilter('deal',_dealsAll); // P1-1: pipelines shared + persistent; R9-7: cascade stage rename to automation triggers
   const {props:_propsCtx}=React.useContext(PropertiesContext);
   const [activeId,setActiveId]=React.useState(()=>onbExtraPipeline()?3:1); // moved up: the per-pipeline key for filters + saved views
   const dealFields=React.useMemo(()=>omFieldSchema('deal',_propsCtx,_deals),[_propsCtx,_deals]);
@@ -10158,7 +10171,7 @@ function PipelinePage({goTo,nav}){
   const _defPipe=(_defP||{}).name; // deals with no pipeline belong to the default pipeline
   const _realPipeNames=pipelines.filter(p=>(p.stages||[]).some(s=>s.real)).map(p=>p.name); // pipelines whose board can hold real deals
   const dealInActivePipe=(d)=>{const dp=d.pipeline||_defPipe;return dp===active.name||(!_realPipeNames.includes(dp)&&active.id===_defP.id);}; // a deal sits in exactly one pipeline; legacy/renamed pipeline values fall back to the default board so deals are never invisible
-  const dealsFor=(stage)=>{let arr=stage.real?_deals.filter(d=>d.stageKey===stage.key&&!d.deleted&&!d.archived&&dealInActivePipe(d)):(stage.demo||[]);arr=omApplyFilter(arr,workFilter,dealFields);const _dq=dealSearch.trim().toLowerCase();if(_dq)arr=arr.filter(d=>String((searchCompany?d.company:(d.name||d.company))||'').toLowerCase().includes(_dq));arr=omSortRows(arr,workSort,'deal',dealFields);return arr;};
+  const dealsFor=(stage)=>{let arr=stage.real?_deals.filter(d=>d.stageKey===stage.key&&!d.deleted&&!d.archived&&dealInActivePipe(d)&&(privVisF==='all'||recVis('deal',d)===privVisF)):(stage.demo||[]);arr=omApplyFilter(arr,workFilter,dealFields);const _dq=dealSearch.trim().toLowerCase();if(_dq)arr=arr.filter(d=>String((searchCompany?d.company:(d.name||d.company))||'').toLowerCase().includes(_dq));arr=omSortRows(arr,workSort,'deal',dealFields);return arr;};
   React.useEffect(()=>{if(!pipeMenu)return;const fn=e=>{if(!e.target.closest('[data-pipe-menu]'))setPipeMenu(false);};document.addEventListener('mousedown',fn);return()=>document.removeEventListener('mousedown',fn);},[pipeMenu]);
   const _bcPipe=React.useContext(BillingContext);const _crmPipe=React.useContext(CrmDataContext)||{};useRecordsCapDemo();
   const [pipeCapDemo,setPipeCapDemo]=React.useState('plan'); // prototype demo: preview the pipelines cap on Solo (1) / Team (3)
@@ -10244,7 +10257,7 @@ function PipelinePage({goTo,nav}){
           rightSlot={<>
             <div className="inline-flex items-center gap-0.5 p-0.5 rounded-xl bg-white/[0.04] border border-white/[0.08]">{[['board','Board',I.LayoutDash],['list','List',I.List],['forecast','Forecast',I.Target]].map(([k,l,Ic])=>(<button key={k} onClick={()=>setBoardView(k)} title={l+' view'} aria-pressed={boardView===k} className={['inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[12.5px] font-medium transition-all',boardView===k?'bg-brand-500/20 text-brand-200 ring-1 ring-brand-500/25':'text-white/55 hover:text-white hover:bg-white/[0.05]'].join(' ')}><Ic size={13}/><span className="hidden sm:inline">{l}</span></button>))}</div>
             
-            <div className="flex items-center gap-2.5"><div className="hidden md:flex items-center gap-2 bg-white/[0.04] border border-white/[0.08] rounded-xl px-3 py-1.5 focus-within:border-brand-500/40 transition-all"><I.Search size={12} className="text-white/40"/><input value={dealSearch} onChange={e=>setDealSearch(e.target.value)} placeholder="Search deals..." className="bg-transparent outline-none text-[12px] text-white placeholder:text-white/30 w-36"/>{dealSearch&&<button onClick={()=>setDealSearch('')} className="text-white/35 hover:text-white/70 transition-colors" title="Clear search"><I.X size={12}/></button>}</div><OmViewMenu views={dealViews} activeKey={activeViewKey} onSelect={selectDealView} onSaveView={()=>{setEditView(null);setSaveOpen(true);}} dirty={dealDirty} onSaveChanges={saveDealChanges} countFor={countForDeal}/><OmFiltersButton object='deal' andOnly fields={dealFieldsP} model={workFilter} onChange={setWorkFilter}/>
+            <div className="flex items-center gap-2.5"><div className="hidden md:flex items-center gap-2 bg-white/[0.04] border border-white/[0.08] rounded-xl px-3 py-1.5 focus-within:border-brand-500/40 transition-all"><I.Search size={12} className="text-white/40"/><input value={dealSearch} onChange={e=>setDealSearch(e.target.value)} placeholder="Search deals..." className="bg-transparent outline-none text-[12px] text-white placeholder:text-white/30 w-36"/>{dealSearch&&<button onClick={()=>setDealSearch('')} className="text-white/35 hover:text-white/70 transition-colors" title="Clear search"><I.X size={12}/></button>}</div><OmViewMenu views={dealViews} activeKey={activeViewKey} onSelect={selectDealView} onSaveView={()=>{setEditView(null);setSaveOpen(true);}} dirty={dealDirty} onSaveChanges={saveDealChanges} countFor={countForDeal}/><PrivVisFilter value={privVisF} onChange={setPrivVisF}/><OmFiltersButton object='deal' andOnly fields={dealFieldsP} model={workFilter} onChange={setWorkFilter}/>
               <div className="relative">
                 <button ref={viewOptsRef} onClick={()=>setViewOptsOpen(o=>!o)} title="View options" aria-haspopup="menu" aria-expanded={viewOptsOpen} className={['inline-flex items-center justify-center w-9 h-9 rounded-xl border transition-all',viewOptsOpen?'bg-brand-500/20 text-brand-200 border-brand-500/30':'text-white/55 hover:text-white bg-white/[0.04] border-white/[0.08] hover:border-white/[0.18]'].join(' ')}><I.More size={16}/></button>
                 <AnchoredMenu anchorRef={viewOptsRef} open={viewOptsOpen} onClose={()=>setViewOptsOpen(false)} align="right" width={236} className="p-2 rounded-xl border border-white/[0.10]" style={{background:'var(--pop2)',backdropFilter:'blur(16px)',boxShadow:'0 16px 50px rgba(0,0,0,0.6)'}}>
@@ -10295,7 +10308,7 @@ function PipelinePage({goTo,nav}){
           colProps={(col)=>editStages?{onDragOver:(e=>{e.preventDefault();if(dragOver!==col.si)setDragOver(col.si);}),onDrop:(e=>{e.preventDefault();onDropStage(col.si);}),onDragEnd:(()=>{dragRef.current=null;setDragOver(null);})}:{}}
           trailing={editStages&&_isAdmin?<button onClick={addStageInline} className="w-[150px] shrink-0 self-start mt-0 rounded-2xl border border-dashed border-white/[0.10] hover:border-brand-500/40 hover:bg-white/[0.02] text-white/50 hover:text-white/70 transition-all flex flex-col items-center justify-center gap-2 py-8"><I.Plus size={18} stroke={2.2}/><span className="text-[12px] font-medium">Add stage</span></button>:null}
           renderCard={(d,col,dp,dragging)=>{const stage=col.stage;const _cd=omDate(d.closeDate);const _overdue=dealIsOpen(d)&&_cd&&_cd<new Date(new Date().toDateString());const _others=(stage.real&&!editStages)?active.stages.filter(s=>s.real&&s.id!==stage.id):[];return(<div className="relative group"><button {...dp} onClick={()=>stage.real&&!editStages&&goTo('deal-detail',d.id)} className={['deal-card w-full rounded-xl p-3.5 text-left group cursor-grab border transition-colors bg-white/[0.035] border-white/[0.06] hover:bg-white/[0.05] hover:border-white/[0.12]',dragging?'opacity-50 scale-[0.97]':''].join(' ')}>
-                    <div className="flex items-start justify-between gap-2 mb-2"><div className="min-w-0 flex-1 flex flex-col gap-0.5"><p className="text-[13px] font-medium text-white leading-tight truncate">{d.name||d.company}</p>{d.name&&d.company&&<p className="text-[11px] text-white/40 leading-tight truncate">{d.company}</p>}</div><span className="text-[14px] font-semibold text-white tabular-nums shrink-0">{d.value}</span></div>
+                    <div className="flex items-start justify-between gap-2 mb-2"><div className="min-w-0 flex-1 flex flex-col gap-0.5"><div className="flex items-center gap-1.5 min-w-0"><p className="text-[13px] font-medium text-white leading-tight truncate">{d.name||d.company}</p>{stage.real&&privIsPrivate('deal',d)&&<PrivLock size={10}/>}</div>{d.name&&d.company&&<p className="text-[11px] text-white/40 leading-tight truncate">{d.company}</p>}</div><span className="text-[14px] font-semibold text-white tabular-nums shrink-0">{d.value}</span></div>
                     <div className="flex items-center gap-2 mb-2.5">{_overdue?<span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-medium text-red-300 bg-red-500/12 ring-1 ring-red-500/25" title={'Expected close date '+fmtShortDate(d.closeDate)+' has passed'}><I.AlertTriangle size={9}/>Overdue</span>:<div className="flex items-center gap-1.5 text-[10px] text-white/50"><span className="w-1.5 h-1.5 rounded-full" style={{background:d.score==='hot'?'#F0947F':d.score==='warm'?'#E9B968':d.score==='won'?'#5FD09B':'#87837A'}}/>{d.age}</div>}</div>
                     <div className="flex items-center justify-between pt-2.5 border-t border-white/[0.04]"><div className="flex items-center gap-1.5"><div className="w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-semibold text-white" style={{background:d.ownerColor}}>{d.owner}</div><span className="text-[10px] text-white/50">{d.owner}</span></div><I.ArrowRight size={10} className="text-white/20 opacity-0 group-hover:opacity-100 transition-opacity"/></div>
                   </button>
@@ -10399,6 +10412,7 @@ function DealDetailPage({goTo,nav}){
   const _dealMissing=nav!=null&&!_deals.some(x=>x.id===nav);
   const d=_deals.find(x=>x.id===nav)||_deals.find(x=>x.stageKey!=='won')||_deals[0];
   React.useEffect(()=>{if(_dealMissing){window.__nrturToast&&window.__nrturToast('That deal isn’t available — it may have been deleted','warning');goTo('pipeline');}},[_dealMissing,nav]);
+  usePrivRecordGate('deal',d,goTo,'pipeline'); // PROPOSED: someone who can't see a private deal gets the 404
   const ownerM=TEAM_MEMBERS.find(m=>m.avatar===d.owner)||{name:'—',avatar:d.owner,color:d.ownerColor};
   const [stage,setStage]=React.useState(d.stageName);
   const [emailOpen,setEmailOpen]=React.useState(false); // email the primary contact; deal fields fill too
@@ -10443,7 +10457,7 @@ function DealDetailPage({goTo,nav}){
       window.__nrturToast&&window.__nrturToast('Moved to '+v+' · '+_ns.name,'success');return;}
     if(k==='primaryContact'){const _ct=(crm.contacts||[]).find(c=>c.name===v&&!c.deleted);const _p={primaryContact:v,primaryContactId:_ct?_ct.id:null};if(_ct){const _co=(_ct.companyId!=null?(crm.companies||[]).find(c=>c.id===_ct.companyId):null)||(_ct.co?(crm.companies||[]).find(c=>c.name===_ct.co):null);if(_co&&!(d.company&&String(d.company).trim())){_p.company=_co.name;_p.companyId=_co.id;}}updateDeal(d.id,_p);return;}
     if(k==='company'){const _co=(crm.companies||[]).find(c=>c.name===v&&!c.deleted);updateDeal(d.id,{company:v,companyId:_co?_co.id:null});return;}
-    if(k==='owner'){updateDeal(d.id,{owner:v,ownerColor:arOwnerColor(v)});return;}
+    if(k==='owner'){privOwnerGuard('deal',d,v,()=>updateDeal(d.id,{owner:v,ownerColor:arOwnerColor(v)}),openConfirm);return;}
     updateDeal(d.id,{[k]:v});
     if((k==='amount'||k==='value')&&parseMoney(String(v))!==parseMoney(String(d[k]))){const _amt=k==='amount'?v:parseMoney(String(v));setTimeout(()=>runDealValueAutomations({...d,amount:_amt,value:k==='value'?v:d.value}),0);} // non-stage automation: 'Deal value changed'
   };
@@ -10486,7 +10500,7 @@ function DealDetailPage({goTo,nav}){
                 <div className="mb-3">
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
-                      <h2 className="text-white text-[24px] font-bold leading-tight">{d.name||d.company}</h2>
+                      <h2 className="text-white text-[24px] font-bold leading-tight flex items-center gap-2">{d.name||d.company}{privIsPrivate('deal',d)&&<PrivLock size={16}/>}</h2>
                       {d.name&&d.company&&<p className="text-[12.5px] font-medium text-white/45 mt-1 truncate">{d.company}</p>}
                     </div>
                     {_primProb!=null&&(()=>{const _pc=_primProb>=70?'#5FD09B':_primProb>=40?'#E9B968':'#87837A';return(
@@ -10513,6 +10527,7 @@ function DealDetailPage({goTo,nav}){
 
               </div>
               <RecordProperties record={drec} primary={_dlLay.primary} secondary={_dlLay.secondary} onChange={onDealField} goTo={goTo}/>
+              <RecordVisibilityCard kind="deal" rec={d} goTo={goTo} onSet={v=>updateDeal(d.id,{visibility:v})}/>
             </div>
             <div className="flex flex-col gap-5 min-w-0">
               <RecordTasks recId={d.id} match={(t)=>t.dealId!=null?t.dealId===d.id:((t.deal&&d.company&&t.deal.indexOf(d.company)>=0)||t.company===d.company)} prefill={{company:d.company,dealId:d.id}} canEdit={true} goTo={goTo} onLog={(title,body)=>setExtra(x=>[mkAct('task',{ts:0,by:d.owner||'AM',title,body}),...x])}/>
@@ -10520,7 +10535,7 @@ function DealDetailPage({goTo,nav}){
             </div>
           </div>
         </div>
-        {editOpen&&<RecordEditDrawer object="deal" title={'Edit '+dealName} Icon={I.Target} groups={editGroups} record={drec} onSave={onEditSave} onClose={()=>setEditOpen(false)}/>}
+        {editOpen&&<RecordEditDrawer object="deal" title={'Edit '+dealName} Icon={I.Target} groups={editGroups} record={drec} onSave={(p)=>privOwnerGuard('deal',d,p&&p.owner,()=>onEditSave(p),openConfirm)} onClose={()=>setEditOpen(false)}/>}
         {emailOpen&&(()=>{const _pc=((crm&&crm.contacts)||[]).find(x=>x.id===d.primaryContactId&&!x.deleted);return <EmailComposeModal defaultTo={(_pc&&_pc.email)||''} recipientCtx={{contactId:_pc?_pc.id:null,dealId:d.id}} close={()=>setEmailOpen(false)} onSent={()=>{window.__nrturToast&&window.__nrturToast('Email sent','success');}}/>;})()}
         {taskOpen&&<TaskFormModal initial={{type:'task',allDay:true,priority:'Medium',assignee:'AM',company:d.company,dealId:d.id}} onClose={()=>setTaskOpen(false)} onSave={(t)=>{addTaskItem(t);setTaskOpen(false);setExtra(x=>[mkAct('task',{ts:0,by:d.owner||'AM',title:'Task created',body:t.title}),...x]);window.__nrturToast&&window.__nrturToast('Task created','success');}}/>}
         {confirmNode}
@@ -10861,8 +10876,11 @@ function CompanyDetailPage({goTo,nav}){
   const {props:_propsCtx}=React.useContext(PropertiesContext);
   const co=companies.find(x=>x.id===nav)||companies[0];
   const actCtx={contacts:crm.contacts,companies:crm.companies,deals:allDeals(),leads:crm.leads};
-  const people=contactsForCompany(co);
-  const dl=dealsForCompany(co);
+  usePrivacy();
+  // PROPOSED: companies are always shared; private contacts and deals the viewer can't see are left out, with a "N private records hidden" line.
+  const _peopleAll=contactsForCompany(co);const people=_peopleAll.filter(p=>privCanSee('contact',p));const _peopleHidden=_peopleAll.length-people.length;
+  const _dlAll=dealsForCompany(co);const _dlVis=_dlAll.list.filter(d=>privCanSee('deal',d));const _dealsHidden=_dlAll.list.length-_dlVis.length;
+  const dl=_dealsHidden?privDealSummary(_dlVis):_dlAll;
   const [showAllPeople,setShowAllPeople]=React.useState(false); // volume: panels show 6, expandable
   const [showAllCoDeals,setShowAllCoDeals]=React.useState(false);
   const [peopleOpen,setPeopleOpen]=React.useState(false); // panels collapsed by default — header counts tell the story
@@ -10919,7 +10937,7 @@ function CompanyDetailPage({goTo,nav}){
               </div>
               <RecordProperties record={co} primary={_coLay.primary} secondary={_coLay.secondary} onChange={(k,v)=>{if(k==='type'){onCoType(v);return;}updateCompany(co.id,k==='owner'?{owner:v,ownerColor:arOwnerColor(v)}:{[k]:v});}} goTo={goTo} readOnly={!effCanObject('Companies','edit')}/>
               <div id="co-deals-panel" className="rounded-2xl bg-white/[0.03] border border-white/[0.06] backdrop-blur-md scroll-mt-4">
-                <div className={['px-5 py-4 flex items-center justify-between',coDealsOpen?'border-b border-white/[0.05]':''].join(' ')}><button onClick={()=>setCoDealsOpen(o=>!o)} className="flex items-center gap-2 text-left flex-1 min-w-0"><I.ChevronDown size={14} className="text-white/35 shrink-0" style={{transform:coDealsOpen?'none':'rotate(-90deg)',transition:'transform .15s'}}/><div><p className="text-white font-medium">Deals</p><p className="text-[11px] text-white/45 mt-0.5">{dl.list.length} total · {fmtK(dl.openValue)} open</p></div></button>{effCanObject('Deals','create')&&<button onClick={()=>window.__nrturQuickAdd?window.__nrturQuickAdd('deal','single',{company:co.name}):goTo('add-deal')} className="text-[11px] text-white/45 hover:text-brand-300 flex items-center gap-1"><I.Plus size={10} stroke={2.4}/>New deal</button>}</div>
+                <div className={['px-5 py-4 flex items-center justify-between',coDealsOpen?'border-b border-white/[0.05]':''].join(' ')}><button onClick={()=>setCoDealsOpen(o=>!o)} className="flex items-center gap-2 text-left flex-1 min-w-0"><I.ChevronDown size={14} className="text-white/35 shrink-0" style={{transform:coDealsOpen?'none':'rotate(-90deg)',transition:'transform .15s'}}/><div><p className="text-white font-medium">Deals</p><p className="text-[11px] text-white/45 mt-0.5">{dl.list.length} total · {fmtK(dl.openValue)} open</p>{_dealsHidden>0&&<p className="text-[11px] text-white/40 mt-0.5 flex items-center gap-1"><I.Lock size={9}/>{_dealsHidden} private record{_dealsHidden===1?'':'s'} hidden</p>}</div></button>{effCanObject('Deals','create')&&<button onClick={()=>window.__nrturQuickAdd?window.__nrturQuickAdd('deal','single',{company:co.name}):goTo('add-deal')} className="text-[11px] text-white/45 hover:text-brand-300 flex items-center gap-1"><I.Plus size={10} stroke={2.4}/>New deal</button>}</div>
                 {coDealsOpen&&<div className="p-4 grid grid-cols-1 gap-2.5">
                   {dl.list.length===0?(<p className="text-[12px] text-white/40 px-2 py-6 text-center col-span-full">No deals for this company yet.</p>):(showAllCoDeals?dl.list:dl.list.slice(0,6)).map(d=>(
                     <button key={d.id} onClick={()=>goTo('deal-detail',d.id)} className="rounded-xl bg-white/[0.025] border border-white/[0.05] p-3.5 hover:border-white/[0.12] hover:bg-white/[0.04] transition-all text-left"><div className="flex justify-between mb-1.5"><p className="text-[13px] font-medium text-white truncate">{d.name||d.company}</p><span className="text-[14px] font-semibold text-white tabular-nums">{d.value}</span></div><div className="flex items-center gap-2"><span className="w-1.5 h-1.5 rounded-full" style={{background:d.stageColor}}/><span className="text-[11px] text-white/55">{d.stageName}</span></div></button>
@@ -10930,7 +10948,7 @@ function CompanyDetailPage({goTo,nav}){
             </div>
                         <div className="flex flex-col gap-5">
               <div id="co-people-panel" className="rounded-2xl bg-white/[0.03] border border-white/[0.06] backdrop-blur-md scroll-mt-4">
-                <div className={['px-5 py-4 flex items-center justify-between',peopleOpen?'border-b border-white/[0.05]':''].join(' ')}><button onClick={()=>setPeopleOpen(o=>!o)} className="flex items-center gap-2 text-left flex-1 min-w-0"><I.ChevronDown size={14} className="text-white/35 shrink-0" style={{transform:peopleOpen?'none':'rotate(-90deg)',transition:'transform .15s'}}/><div><p className="text-white font-medium">People at {co.name}</p><p className="text-[11px] text-white/45 mt-0.5">{people.length} contact{people.length!==1?'s':''}</p></div></button>{effCanObject('Contacts','create')&&<button onClick={()=>window.__nrturQuickAdd?window.__nrturQuickAdd('contact','single',{company:co.name}):goTo('add-contact')} className="text-[11px] text-white/45 hover:text-brand-300 flex items-center gap-1"><I.Plus size={10} stroke={2.4}/>Add contact</button>}</div>
+                <div className={['px-5 py-4 flex items-center justify-between',peopleOpen?'border-b border-white/[0.05]':''].join(' ')}><button onClick={()=>setPeopleOpen(o=>!o)} className="flex items-center gap-2 text-left flex-1 min-w-0"><I.ChevronDown size={14} className="text-white/35 shrink-0" style={{transform:peopleOpen?'none':'rotate(-90deg)',transition:'transform .15s'}}/><div><p className="text-white font-medium">People at {co.name}</p><p className="text-[11px] text-white/45 mt-0.5">{people.length} contact{people.length!==1?'s':''}</p>{_peopleHidden>0&&<p className="text-[11px] text-white/40 mt-0.5 flex items-center gap-1"><I.Lock size={9}/>{_peopleHidden} private record{_peopleHidden===1?'':'s'} hidden</p>}</div></button>{effCanObject('Contacts','create')&&<button onClick={()=>window.__nrturQuickAdd?window.__nrturQuickAdd('contact','single',{company:co.name}):goTo('add-contact')} className="text-[11px] text-white/45 hover:text-brand-300 flex items-center gap-1"><I.Plus size={10} stroke={2.4}/>Add contact</button>}</div>
                 {peopleOpen&&<div className="p-3">
                   {people.length===0?(<p className="text-[12px] text-white/40 px-2 py-6 text-center">No contacts linked to this company yet.</p>):(showAllPeople?people:people.slice(0,6)).map(p=>(
                     <button key={p.id} onClick={()=>goTo('contact-detail',p.id)} className="w-full flex items-center gap-3 px-2.5 py-2.5 rounded-xl hover:bg-white/[0.04] transition-colors text-left"><div className="w-9 h-9 rounded-full flex items-center justify-center text-[11px] font-semibold text-white shrink-0" style={{background:p.color}}>{p.avatar}</div><div className="min-w-0 flex-1"><p className="text-[13px] font-medium text-white truncate">{p.name}</p><p className="text-[11px] text-white/45 truncate">{p.email}</p></div><span className={['inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium ring-1 shrink-0',CSTATUS_CHIP[p.cstatus]].join(' ')}>{p.cstatus}</span><I.ArrowRight size={12} className="text-white/20 shrink-0"/></button>
@@ -11153,7 +11171,7 @@ function ConvertLeadModal({lead,close,onConfirm}){
 }
 // Read-only row shown in the Leads -> Converted tab.
 const LEAD_COLS=[
-  {key:'name',label:'Lead',w:'1.7fr',def:true,cell:(l,x)=>(<button onClick={()=>x.goTo('lead-detail',l.id)} className="flex items-center gap-3 min-w-0 text-left w-full"><div className="w-9 h-9 rounded-full flex items-center justify-center text-[11px] font-semibold text-white shrink-0" style={{background:l.color}}>{l.avatar}</div><div className="min-w-0"><p className="text-[13px] font-medium text-white leading-tight truncate">{l.name}</p><p className="text-[11px] text-white/45 truncate mt-0.5">{l.email}</p></div></button>)},
+  {key:'name',label:'Lead',w:'1.7fr',def:true,cell:(l,x)=>(<button onClick={()=>x.goTo('lead-detail',l.id)} className="flex items-center gap-3 min-w-0 text-left w-full"><div className="w-9 h-9 rounded-full flex items-center justify-center text-[11px] font-semibold text-white shrink-0" style={{background:l.color}}>{l.avatar}</div><div className="min-w-0"><div className="flex items-center gap-1.5 min-w-0"><p className="text-[13px] font-medium text-white leading-tight truncate">{l.name}</p>{privIsPrivate('lead',l)&&<PrivLock size={10}/>}</div><p className="text-[11px] text-white/45 truncate mt-0.5">{l.email}</p></div></button>)},
   {key:'company',label:'Company',w:'1.3fr',def:true,cell:(l)=>(<div className="min-w-0"><p className="text-[13px] text-white/75 truncate">{l.company}</p><p className="text-[11px] text-white/40 truncate">{l.title}</p></div>)},
   {key:'source',label:'Source',w:'100px',def:true,cell:(l)=>(<p className="text-[12px] text-white/55 truncate">{l.source||'—'}</p>)},
   {key:'status',label:'Status',w:'130px',def:true,cell:(l,x)=>(<LeadStatusDropdown value={l.status} onChange={s=>x.onStatus(l.id,s)} disabled={x.readOnly||!!l.converted||!!l.archived}/>)},
@@ -11186,7 +11204,9 @@ function LeadsPage({goTo,nav}){
   const [search,setSearch]=React.useState('');
   const [importModal,setImportModal]=React.useState(false);
   const [selected,setSelected]=React.useState([]);
-  const {leads:rows,setLeads:setRows,setContacts,setCompanies,setDeals}=React.useContext(CrmDataContext);
+  const {leads:_rowsAll,setLeads:setRows,setContacts,setCompanies,setDeals}=React.useContext(CrmDataContext);
+  usePrivacy();const [privVisF,setPrivVisF]=React.useState('all'); // PROPOSED private records: others' private leads are absent; Visibility filter
+  const rows=privFilter('lead',_rowsAll,privVisF);
   const [views,setViews]=React.useState(ldSeedViews);
   const [activeKey,setActiveKey]=React.useState('all');
   const DEFCOLS=omDefaultCols(LEAD_COLS,'Leads',_propsCtx);
@@ -11271,7 +11291,7 @@ function LeadsPage({goTo,nav}){
           {activeKey==='duplicates'?(<div className="flex-1 overflow-y-auto scroll-area"><div className="px-7 py-6"><DuplicatesView object='lead' showToolbar/></div></div>):(<React.Fragment>
             <div className="shrink-0 border-b border-white/[0.05] px-7 py-2.5 flex items-center gap-3 flex-wrap" style={{background:'var(--s900)'}}>
               <div className="flex items-center gap-2 bg-white/[0.04] border border-white/[0.08] rounded-xl px-3 py-1.5 focus-within:border-brand-500/40 transition-all"><I.Search size={12} className="text-white/40"/><input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search leads..." className="bg-transparent outline-none text-[12px] text-white placeholder:text-white/30 w-44"/></div>
-              {<div className="ml-auto flex items-center gap-2"><OmFiltersButton object='lead' fields={fields.filter(f=>['source','status','owner','tags'].indexOf(f.key)>=0||String(f.key).indexOf('np_')===0)} model={workFilter} onChange={setWorkFilter} andOnly/><ColumnsControl allCols={allLeadCols} object='lead' shown={cols} onChange={setCols} noCreate/><ObjectToolsMenu object='lead' goTo={goTo} onDuplicates={()=>selectView('duplicates')}/></div>}
+              {<div className="ml-auto flex items-center gap-2"><PrivVisFilter value={privVisF} onChange={setPrivVisF}/><OmFiltersButton object='lead' fields={fields.filter(f=>['source','status','owner','tags'].indexOf(f.key)>=0||String(f.key).indexOf('np_')===0)} model={workFilter} onChange={setWorkFilter} andOnly/><ColumnsControl allCols={allLeadCols} object='lead' shown={cols} onChange={setCols} noCreate/><ObjectToolsMenu object='lead' goTo={goTo} onDuplicates={()=>selectView('duplicates')}/></div>}
             </div>
             {anyChips&&(<div className="shrink-0 flex items-center gap-2 flex-wrap px-7 py-2 border-b border-white/[0.04]" style={{background:'var(--s900)'}}>
               <span className="text-[11px] text-white/50">Active:</span>
@@ -11317,6 +11337,7 @@ function LeadDetailPage({goTo,nav}){
   const {leads,updateLead,setContacts,setCompanies,setDeals}=crm;
   const {props:_propsCtx}=React.useContext(PropertiesContext);
   const l=leads.find(x=>x.id===nav)||leads[0];
+  usePrivRecordGate('lead',l,goTo,'leads'); // PROPOSED: someone who can't see a private lead gets the 404
   const actCtx={contacts:crm.contacts,companies:crm.companies,deals:allDeals(),leads:crm.leads};
   const [status,setStatusState]=React.useState(l.status);
   // Resync per-lead local state on an IN-PLACE record switch (RecordSwitcher prev/next / arrow keys) — the page is
@@ -11347,7 +11368,7 @@ function LeadDetailPage({goTo,nav}){
   const _ldLay=omLayoutSplit(leadPrimary,leadSecondary,'Leads',_propsCtx);
   const leadMeta=[{key:'createdBy',label:'Created by',type:'user'},{key:'createdAt',label:'Created at',type:'datetime'}];
   const onLeadStatus=(s)=>{const _old=l.status;if(String(_old==null?'':_old)===String(s==null?'':s))return;setStatusState(s);updateLead(l.id,{status:s});if(window.__nrturToast)window.__nrturToast('Status set to '+s,'success',{label:'Undo',onClick:()=>{setStatusState(_old);updateLead(l.id,{status:_old});window.__nrturToast('Status reverted to '+(_old||'—'),'success');}});};
-  const onLeadField=(k,v)=>{if(k==='status'){onLeadStatus(v);return;}if(k==='owner'){updateLead(l.id,{owner:v,ownerColor:arOwnerColor(v)});return;}updateLead(l.id,{[k]:v});};
+  const onLeadField=(k,v)=>{if(k==='status'){onLeadStatus(v);return;}if(k==='owner'){privOwnerGuard('lead',l,v,()=>updateLead(l.id,{owner:v,ownerColor:arOwnerColor(v)}),openConfirm);return;}updateLead(l.id,{[k]:v});};
   const doDelete=()=>openConfirm({title:`Delete ${l.name}?`,confirmLabel:'Delete lead',danger:true,onConfirm:()=>{crm.setLeads(a=>a.map(x=>x.id===l.id?{...x,deleted:true,deletedAt:Date.now(),deletedBy:'Alex Morgan'}:x));window.__nrturToast&&window.__nrturToast(`${l.name} deleted`,'success');goTo('leads');}});
   const doConvert=(payload)=>{const {contact,company,deal,companyId:coId,contactReused}=buildConvertRecords(l,payload);setContacts(a=>contactReused?a.map(x=>x.id===contact.id?contact:x):[contact,...a]);if(company)setCompanies(a=>[company,...a]);if(deal)setDeals(a=>[deal,...a]);updateLead(l.id,{converted:true,convertedAt:'Just now',convertedToContactId:contact.id,convertedToCompanyId:coId,convertedToDealId:deal?deal.id:null,convContact:contact.name,convCompany:company?company.name:(l.company||''),convDeal:deal?(deal.company+' · '+deal.value):''});setConvertOpen(false);setConvToast(contactReused?('Lead converted — linked to existing contact'+(deal?' · deal created':'')):('Lead converted — Contact'+(company?', Company':'')+(deal?' (and Deal)':'')+' created.'));setTimeout(()=>{if(deal)goTo('deal-detail',deal.id);else goTo('contact-detail',contact.id);},1100);};
   return(
@@ -11381,13 +11402,14 @@ function LeadDetailPage({goTo,nav}){
               <div className="relative p-6 pb-5" style={{background:`radial-gradient(circle at top,${b.c}1a,transparent 70%)`}}>
                 <div className="flex items-center gap-4 mb-4">
                   <div className="w-16 h-16 rounded-full flex items-center justify-center text-white text-[20px] font-semibold ring-2 ring-white/[0.06]" style={{background:l.color}}>{l.avatar}</div>
-                  <div><div className="flex items-center gap-2 flex-wrap"><h2 className="text-white text-[20px] font-semibold">{l.name}</h2></div>
+                  <div><div className="flex items-center gap-2 flex-wrap"><h2 className="text-white text-[20px] font-semibold">{l.name}</h2>{privIsPrivate('lead',l)&&<PrivLock size={15}/>}</div>
                   <p className="text-[13px] text-white/55 mt-1">{l.title} · {l.company}</p><div className="mt-2"><LeadStatusDropdown value={status} onChange={onLeadStatus} disabled={!canEditLead}/></div></div>
                 </div>
                 <div className="rounded-xl bg-white/[0.03] border border-white/[0.06] p-3.5 flex items-center justify-between"><div><p className="text-[10px] font-medium text-white/40 uppercase tracking-[0.14em]">Lead score</p><p className="text-[12px] mt-0.5" style={{color:b.c}}>{b.l} · {b.k==='hot'?'likely to convert':b.k==='warm'?'moderate chance to convert':'unlikely to convert'}</p></div><div className="flex items-center gap-2"><div className="w-20 h-2 rounded-full bg-white/[0.08] overflow-hidden"><div className="h-full rounded-full" style={{width:l.score+'%',background:b.c}}/></div><span className="text-[18px] font-bold tabular-nums" style={{color:b.c}}>{l.score}</span></div></div>
               </div>
               </div>
               <RecordProperties record={l} primary={_ldLay.primary} secondary={_ldLay.secondary} onChange={onLeadField} goTo={goTo} readOnly={!canEditLead}/>
+              <RecordVisibilityCard kind="lead" rec={l} goTo={goTo} onSet={v=>updateLead(l.id,{visibility:v})}/>
             </div>
                         <div className="flex flex-col gap-5">
               {b.k==='hot'&&!l.converted&&!l.archived&&<div className="rounded-2xl border border-emerald-500/25 bg-emerald-500/[0.06] p-5">
@@ -11410,7 +11432,7 @@ function LeadDetailPage({goTo,nav}){
         </div>
         <AppFooter/>{confirmNode}
       </div>
-      {editOpen&&<RecordEditDrawer object="lead" title={'Edit '+l.name} Icon={I.Sparkles} groups={editGroups} record={l} onSave={onEditSave} onClose={()=>setEditOpen(false)}/>}
+      {editOpen&&<RecordEditDrawer object="lead" title={'Edit '+l.name} Icon={I.Sparkles} groups={editGroups} record={l} onSave={(p)=>privOwnerGuard('lead',l,p&&p.owner,()=>onEditSave(p),openConfirm)} onClose={()=>setEditOpen(false)}/>}
       {convertOpen&&<ConvertLeadModal lead={l} close={()=>setConvertOpen(false)} onConfirm={doConvert}/>}
       {convToast&&(<div className="fixed bottom-20 left-1/2 -translate-x-1/2 z-[160] inline-flex items-center gap-2.5 px-4 py-2.5 rounded-xl text-[13px] font-medium bg-emerald-500/12 text-emerald-200 border border-emerald-500/25 shadow-[0_8px_40px_rgba(0,0,0,0.5)]"><I.Check size={14} stroke={2.4}/>{convToast}</div>)}
       {dialPhone&&<SoftphoneDock name={l.name} phone={dialPhone} onClose={()=>setDialPhone(null)} onEnded={()=>{}}/>}
@@ -11477,7 +11499,7 @@ function ProviderBadge({provider}){
 }
 function MailboxConnectModal({close,onConnected}){
   const ma=React.useContext(MailAccountsContext);
-  const _held=((ma&&ma.accounts)||[]).length;
+  const _held=((ma&&(ma.all||ma.accounts))||[]).length; // private and shared mailboxes count the same
   // The cap is the plan's mailbox allowance (min of the hold and included + purchased; Team/Pro/Business include 1 per
   // accepted user) — the same number Billing › Plan usage prints. BE inbox CheckConnectCap refuses only at that cap.
   const _bcMb=React.useContext(BillingContext);const _crmMb=React.useContext(CrmDataContext)||{};
@@ -11486,12 +11508,13 @@ function MailboxConnectModal({close,onConnected}){
   const [step,setStep]=React.useState(_held>=_mbCap.limit?'limit':'provider');   // provider|redirect|sync|done|error|limit
   const [prov,setProv]=React.useState(null);
   const [acct,setAcct]=React.useState(null);
+  const [mbxVis,setMbxVis]=React.useState('private'); // PROPOSED: Private is the default; only an owner/admin can pick Shared
   useEscKey(close);
   React.useEffect(()=>{if(step!=='sync')return;const t=setTimeout(()=>setStep('done'),1600);return()=>clearTimeout(t);},[step]);
   const P=prov?PROVIDERS[prov]:null;
   const isOwner=(typeof effectiveRole==='function')&&effectiveRole()==='Owner';
   const chooseProvider=(k)=>{setProv(k);setStep('redirect');};
-  const returned=()=>{const addr=MAILBOX_DEMO_ADDR[prov]||'alex@bloomcreative.com';setAcct({addr,initials:addr.slice(0,2).toUpperCase(),color:P.color,provider:prov});setStep('sync');};
+  const returned=()=>{const addr=MAILBOX_DEMO_ADDR[prov]||'alex@bloomcreative.com';const _v=privAdmin()?mbxVis:'private';_privMbxSet(addr,{vis:_v,by:PRIV_ME,timeline:true});setAcct({addr,initials:addr.slice(0,2).toUpperCase(),color:P.color,provider:prov});setStep('sync');};
   const Mark=({pkey,size=9})=>{const pp=PROVIDERS[pkey]||PROVIDERS.other;return(<div className={'rounded-xl flex items-center justify-center font-bold '+(size>9?'w-9 h-9 text-[15px]':'w-8 h-8 text-[13px]')} style={{background:pp.color+'18',color:pp.color,border:'1px solid '+pp.color+'33'}}>{pp.mark}</div>);};
   const BTN2='flex-1 py-2.5 rounded-xl text-[13px] font-medium text-white/65 bg-white/[0.04] border border-white/[0.08] hover:bg-white/[0.07] transition-all';
   const BTN1='flex-1 py-2.5 rounded-xl text-[13px] font-semibold text-white bg-brand-500 hover:bg-brand-400 shadow-brand transition-all';
@@ -11502,6 +11525,7 @@ function MailboxConnectModal({close,onConnected}){
       <div style={{width:480,maxWidth:'100%',background:'var(--s900)'}} className="h-full flex flex-col border-l border-white/[0.10] animate-[arIn_.22s_ease]" onClick={e=>e.stopPropagation()}>
         <div className="flex items-center justify-between px-5 py-4 border-b border-white/[0.07] shrink-0" style={{background:'var(--s850)'}}><div className="flex items-center gap-3">{prov?<Mark pkey={prov} size={12}/>:<div className="w-9 h-9 rounded-xl bg-brand-500/12 ring-1 ring-brand-500/25 text-brand-300 flex items-center justify-center"><I.Mail size={16}/></div>}<div><p className="text-white text-[15px] font-semibold">{headTitle}</p><p className="text-white/45 text-[12px]">{headSub}</p></div></div><button onClick={close} className="text-white/40 hover:text-white"><I.X size={16}/></button></div>
         <div className="flex-1 overflow-y-auto scroll-area px-5 py-5" style={{background:'var(--s850)'}}>
+          {step==='provider'&&<MailboxVisibilityChoice value={privAdmin()?mbxVis:'private'} onChange={setMbxVis}/>}
           {step==='provider'&&(<div className="grid grid-cols-2 gap-2.5">{PROVIDER_ORDER.map(k=>{const pp=PROVIDERS[k];return(
             <button key={k} onClick={()=>chooseProvider(k)} className="flex items-center gap-2.5 px-3 py-3 rounded-xl bg-white/[0.04] border border-white/[0.08] hover:border-brand-500/40 hover:bg-white/[0.06] transition-all text-left"><Mark pkey={k}/><span className="min-w-0"><span className="block text-[13px] font-medium text-white leading-tight">{pp.short==='IMAP'&&k!=='imap'?pp.label:pp.short}</span><span className="block text-[10px] text-white/45 leading-tight mt-0.5">{pp.label}</span></span></button>);})}</div>)}
           {step==='redirect'&&(<div className="py-6 text-center">
@@ -11518,6 +11542,7 @@ function MailboxConnectModal({close,onConnected}){
             <div className="w-12 h-12 rounded-2xl bg-emerald-500/12 ring-1 ring-emerald-500/25 text-emerald-300 flex items-center justify-center mx-auto mb-4"><I.Check size={22} stroke={2.6}/></div>
             <p className="text-[14px] font-medium text-white">{P?P.short:'Mailbox'} connected</p>
             <p className="text-[12px] text-white/45 mt-1"><span className="text-white/70">{acct&&acct.addr}</span> is syncing in the background.</p>
+            {acct&&<p className="text-[12px] text-white/45 mt-2 inline-flex items-center gap-1.5"><MbxBadge vis={mbxMeta(acct.addr).vis}/>{mbxMeta(acct.addr).vis==='shared'?'Everyone in the workspace can read it.':'Only you can read it.'}</p>}
           </div>)}
           {step==='error'&&(<div className="py-6 text-center">
             <div className="w-12 h-12 rounded-2xl bg-red-500/12 ring-1 ring-red-500/25 text-red-300 flex items-center justify-center mx-auto mb-4"><I.AlertTriangle size={20}/></div>
@@ -11571,6 +11596,7 @@ function EmailFolderRail({active,setActive,goTo,onToast,emails,acctStatus}){
   const [connectOpen,setConnectOpen]=React.useState(false);
   const [labelDlg,setLabelDlg]=React.useState(null);
   const [,bump]=React.useReducer(x=>x+1,0);
+  usePrivacy();const [mbxSettings,setMbxSettings]=React.useState(null); // PROPOSED private mailboxes
   const _isAdm=settingsIsAdmin();
   return(
     <aside className="w-[224px] shrink-0 border-r border-white/[0.05] flex flex-col crm-pane-hide-mobile" style={{background:'var(--s900)'}}>
@@ -11591,9 +11617,10 @@ function EmailFolderRail({active,setActive,goTo,onToast,emails,acctStatus}){
       <div className="mt-auto p-4 border-t border-white/[0.05]">
         <p className="text-[10px] font-medium text-white/50 uppercase tracking-[0.14em] mb-3">Connected accounts</p>
         <div className="flex flex-col gap-2.5">{ma.accounts.map(a=>(
-          <div key={a.addr} className="flex items-center gap-2.5 group"><div className="w-6 h-6 rounded-full flex items-center justify-center text-[9px] font-semibold text-white shrink-0" style={{background:a.color}}>{a.initials}</div><div className="min-w-0 flex-1"><p className="text-[11px] text-white/85 truncate">{a.addr}</p><div className="flex items-center gap-1.5 mt-0.5">{a.provider&&<ProviderBadge provider={a.provider}/>}{(()=>{const st=MAIL_ACCT_STATUS[(acctStatus&&acctStatus(a))||'synced']||MAIL_ACCT_STATUS.synced;return(<span className={'text-[10px] inline-flex items-center gap-1 '+st.t}><span className={'w-1 h-1 rounded-full '+st.d}/> {st.l}</span>);})()}</div></div>{_isAdm&&<button onClick={()=>setDisc(a)} title="Disconnect mailbox" aria-label={'Disconnect '+a.addr} className="w-6 h-6 rounded-md text-white/30 hover:text-red-300 hover:bg-red-500/10 flex items-center justify-center shrink-0 opacity-0 group-hover:opacity-100 transition-all"><I.Trash size={12}/></button>}</div>
+          <div key={a.addr} className="flex items-center gap-2.5 group"><div className="w-6 h-6 rounded-full flex items-center justify-center text-[9px] font-semibold text-white shrink-0" style={{background:a.color}}>{a.initials}</div><div className="min-w-0 flex-1"><p className="text-[11px] text-white/85 truncate">{a.addr}</p><div className="flex items-center gap-1.5 mt-0.5 flex-wrap">{a.provider&&<ProviderBadge provider={a.provider}/>}<MbxBadge vis={mbxMeta(a.addr).vis}/>{(()=>{const st=MAIL_ACCT_STATUS[(acctStatus&&acctStatus(a))||'synced']||MAIL_ACCT_STATUS.synced;return(<span className={'text-[10px] inline-flex items-center gap-1 '+st.t}><span className={'w-1 h-1 rounded-full '+st.d}/> {st.l}</span>);})()}</div></div>{mbxMeta(a.addr).by===PRIV_ME&&<button onClick={()=>setMbxSettings(a.addr)} title="Mailbox settings" aria-label={'Mailbox settings for '+a.addr} className="w-6 h-6 rounded-md text-white/30 hover:text-white hover:bg-white/[0.06] flex items-center justify-center shrink-0"><I.Settings size={11}/></button>}{_isAdm&&privAdmin()&&<button onClick={()=>setDisc(a)} title="Disconnect mailbox" aria-label={'Disconnect '+a.addr} className="w-6 h-6 rounded-md text-white/30 hover:text-red-300 hover:bg-red-500/10 flex items-center justify-center shrink-0 opacity-0 group-hover:opacity-100 transition-all"><I.Trash size={12}/></button>}</div>
         ))}{ma.accounts.length===0&&<p className="text-[11px] text-white/50">No mailboxes connected yet.</p>}<button onClick={()=>setConnectOpen(true)} className="text-[11px] text-brand-300 hover:text-brand-200 inline-flex items-center gap-1 mt-1"><I.Plus size={11} stroke={2.4}/> Connect account</button></div>
       </div>
+      {mbxSettings&&<MailboxSettingsDialog addr={mbxSettings} close={()=>setMbxSettings(null)}/>}
       {connectOpen&&<MailboxConnectModal close={()=>setConnectOpen(false)} onConnected={(acct)=>{ma.connect(acct);onToast&&onToast('Mailbox connected · '+acct.addr);}}/>}
       {disc&&<ConfirmModal title={'Disconnect '+disc.addr+'?'} body="This permanently removes the mailbox and deletes every synced email and conversation for it. This can’t be undone. You can reconnect the account later, but its mail will need to sync again from scratch." confirmLabel="Disconnect mailbox" onCancel={()=>setDisc(null)} onConfirm={()=>{ma.disconnect(disc.addr);onToast&&onToast('Disconnected '+disc.addr);setDisc(null);}}/>}
       {labelDlg&&<MailLabelDialog label={labelDlg.key?labelDlg:null} close={()=>setLabelDlg(null)} onSave={(d)=>{if(labelDlg.key){Object.assign(labelDlg,d);onToast&&onToast('Label updated');}else{MAIL_LABELS.push({key:'lbl_'+Date.now(),...d});onToast&&onToast('Label created');}setLabelDlg(null);bump();}}/>}
@@ -11601,12 +11628,13 @@ function EmailFolderRail({active,setActive,goTo,onToast,emails,acctStatus}){
   );
 }
 function EmailListItem({email,selected,onClick}){
+  usePrivacy();
   const _lbls=MAIL_LABELS.filter(l=>(email.labelKeys||(email.labelKey?[email.labelKey]:[])).includes(l.key));
   return(
     <button onClick={onClick} className={['w-full text-left px-4 py-3 border-b border-white/[0.03] transition-colors flex gap-3',selected?'bg-brand-500/[0.08] border-l-2 border-l-brand-400':'hover:bg-white/[0.025] border-l-2 border-l-transparent'].join(' ')}>
       <div className="relative shrink-0"><div className="w-9 h-9 rounded-full flex items-center justify-center text-[11px] font-semibold text-white" style={{background:email.color}}>{email.avatar}</div>{email.unread&&<span className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-brand-400 ring-2 ring-[#131311]"/>}</div>
       <div className="flex-1 min-w-0">
-        <div className="flex items-center justify-between gap-2 mb-1"><div className="flex items-center gap-1.5 min-w-0"><p className={['text-[13px] truncate',email.unread?'text-white font-semibold':'text-white/70 font-medium'].join(' ')}>{email.fromShort}</p>{email.starred&&<I.Star size={10} stroke={0} fill="#E9B968" className="text-amber-400 shrink-0"/>}</div><span className="text-[11px] text-white/40 shrink-0">{email.time}</span></div>
+        <div className="flex items-center justify-between gap-2 mb-1"><div className="flex items-center gap-1.5 min-w-0"><p className={['text-[13px] truncate',email.unread?'text-white font-semibold':'text-white/70 font-medium'].join(' ')}>{email.fromShort}</p>{email.starred&&<I.Star size={10} stroke={0} fill="#E9B968" className="text-amber-400 shrink-0"/>}{threadIsPrivate(email)&&<PrivLock size={10}/>}</div><span className="text-[11px] text-white/40 shrink-0">{email.time}</span></div>
         <p className={['text-[12.5px] truncate mb-1',email.unread?'text-white/85 font-medium':'text-white/55'].join(' ')}>{email.subject}</p>
         <p className="text-[11.5px] text-white/40 truncate leading-snug">{email.preview}</p>
         <div className="flex items-center gap-2 mt-2 flex-wrap">
@@ -11734,6 +11762,7 @@ function EmailDetailPane({email,goTo,onArchive,onDelete,onStar,onTag,onToast,onS
   const [replyTarget,setReplyTarget]=React.useState(null);
   const tagRef=React.useRef(null);
   const _ma=React.useContext(MailAccountsContext);
+  usePrivacy();
   React.useEffect(()=>{const fn=(e)=>{if(tagRef.current&&!tagRef.current.contains(e.target))setTagOpen(false);};document.addEventListener('mousedown',fn);return()=>document.removeEventListener('mousedown',fn);},[]);
   React.useEffect(()=>{setReplyTarget(null);},[email&&email.id]);
   if(!email)return(<section className="flex-1 min-w-0 flex items-center justify-center" style={{background:'var(--s900)'}}><div className="text-center max-w-xs"><div className="w-12 h-12 mx-auto rounded-2xl bg-white/[0.04] border border-white/[0.06] flex items-center justify-center text-white/40 mb-3"><I.Mail size={20}/></div><p className="text-[14px] text-white/55">Pick an email to read.</p></div></section>);
@@ -11766,6 +11795,7 @@ function EmailDetailPane({email,goTo,onArchive,onDelete,onStar,onTag,onToast,onS
           {effCanCreateAny()&&<span className="inline-flex" title={canReplyAll?'Reply all':'Reply all — No other recipients to reply to'}><button disabled={!canReplyAll} onClick={()=>openComposer('reply-all',topMsg)} aria-label={canReplyAll?'Reply all':'Reply all — No other recipients to reply to'} className={['w-8 h-8 rounded-lg flex items-center justify-center transition-all',!canReplyAll?'text-white/20 cursor-not-allowed':replyTarget&&replyTarget.mode==='reply-all'?'text-brand-300 bg-brand-500/12 ring-1 ring-brand-500/25':'text-white/55 hover:text-white hover:bg-white/[0.06]'].join(' ')}><I.ReplyAll size={15}/></button></span>}
           {effCanCreateAny()&&<button onClick={()=>openComposer('forward',topMsg)} title="Forward latest message" className={['w-8 h-8 rounded-lg flex items-center justify-center transition-all',replyTarget&&replyTarget.mode==='forward'?'text-brand-300 bg-brand-500/12 ring-1 ring-brand-500/25':'text-white/55 hover:text-white hover:bg-white/[0.06]'].join(' ')}><I.Forward size={15}/></button>}
         </div>
+        {(()=>{const _tm=mbxMeta(threadMbx(email));if(_tm.vis!=='private'||_tm.by!==PRIV_ME)return null;const _on=threadIsPrivate(email);/* PROPOSED: the mailbox owner's per-thread Private switch (private mailboxes only) */return(<div className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-white/[0.03] ring-1 ring-white/[0.08] min-w-0"><I.Lock size={12} className={_on?'text-brand-300 shrink-0':'text-white/40 shrink-0'}/><span className="text-[12px] font-medium text-white/85 shrink-0">Private</span><span className="text-[11px] text-white/45 truncate">{_on?'Hidden from timelines':'Shown on customer timelines'}</span><PrivSwitch on={_on} label="Private" onClick={()=>{_privSet({threadPriv:{..._privStore.threadPriv,[email.id]:!_on}});onToast&&onToast(_on?'Thread shows on customer timelines':'Thread is private, hidden from timelines');}}/></div>);})()}
       </div>
       {email.contact&&(
         <div className="shrink-0 mx-6 mt-4 rounded-2xl border border-brand-500/20 bg-brand-500/[0.06] backdrop-blur-md p-3.5 flex items-center gap-4">
@@ -11776,7 +11806,7 @@ function EmailDetailPane({email,goTo,onArchive,onDelete,onStar,onTag,onToast,onS
       )}
       <div className="flex-1 overflow-y-auto scroll-area px-6 pt-6 pb-6"><div className="max-w-3xl">
         <h2 className="text-white text-[22px] font-semibold tracking-tight leading-tight">{email.subject}</h2>
-        <div className="mt-2 flex items-center gap-3 text-[11px] text-white/45 flex-wrap"><span className="inline-flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-sm bg-emerald-400"/>Inbox</span><span className="text-white/25">·</span><span>{hasThread?email.thread.length:1} message{hasThread&&email.thread.length>1?'s':''}</span><span className="text-white/25">·</span><span>Last activity {email.time}</span></div>
+        <div className="mt-2 flex items-center gap-3 text-[11px] text-white/45 flex-wrap"><span className="inline-flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-sm bg-emerald-400"/>Inbox</span><span className="text-white/25">·</span><span className="inline-flex items-center gap-1.5">{threadMbx(email)}<MbxBadge vis={mbxMeta(threadMbx(email)).vis}/></span><span className="text-white/25">·</span><span>{hasThread?email.thread.length:1} message{hasThread&&email.thread.length>1?'s':''}</span><span className="text-white/25">·</span><span>Last activity {email.time}</span></div>
         <div className="mt-6 flex flex-col gap-4">{hasThread?email.thread.map((m,i)=><EmailMessage key={i} m={m} expanded={i===0} onReply={(mm)=>openComposer('reply',mm)} onForward={(mm)=>openComposer('forward',mm)}/>):<EmailMessage m={fallback} expanded onReply={(mm)=>openComposer('reply',mm)} onForward={(mm)=>openComposer('forward',mm)}/>}</div>
       </div></div>
       {replyTarget&&<EmailReplyComposer target={replyTarget} canReplyAll={othersFor(replyTarget.msg).length>0} onSwitchMode={(m)=>openComposer(m,replyTarget.msg)} onClose={()=>setReplyTarget(null)} onToast={onToast} onSend={onSendReply} onSaveDraft={onSaveDraft}/>}
@@ -11811,6 +11841,106 @@ function ConnectEmptyState({Icon,accent='#2FA877',eyebrow,title,desc,providers=[
       </div>
     </div>
   );
+}
+// ── Privacy ── PROPOSED: proposals/2026-11-private-mailboxes-and-records.md (not built) ──
+// Private mailboxes (only the person who connected it) and private leads, contacts and deals (owner + owners/admins).
+// Demo: the Privacy preview toggle switches who is looking (window.__nrturPrivacy('admin'|'member-own'|'member-other'|'plan-without')).
+// 'member-own' = you (Alex Morgan) as a Member, so your private records show and others' don't;
+// 'member-other' = a Member who owns none of the private records, so every private record is absent.
+const PRIV_VIEWS=[{k:'admin',l:'Owner / admin view'},{k:'member-own',l:'Member (record owner)'},{k:'member-other',l:'Member (someone else’s)'},{k:'plan-without',l:'Plan without private records (Solo/Team)'}];
+const PRIV_SEED={lead:[120,7],contact:[6,8],deal:[9406,5]}; // seeded private records (owners AM, SC, MR)
+const PRIV_ME='AM';
+const PRIV_THREAD_MBX={2:'sales@bloom.co',5:'sales@bloom.co'}; // demo: which mailbox each seeded thread came from (the rest: alex@bloom.co)
+const _privStore={view:'admin',mbx:{'alex@bloom.co':{vis:'private',by:'AM',timeline:true},'sales@bloom.co':{vis:'shared',by:'AM',timeline:true},'sarah@bloom.co':{vis:'private',by:'SC',timeline:true}},threadPriv:{6:true},subs:new Set()};
+function _privSet(p){Object.assign(_privStore,p);_privStore.subs.forEach(f=>f());}
+function _privMbxSet(addr,p){_privSet({mbx:{..._privStore.mbx,[addr]:{...mbxMeta(addr),...p}}});}
+try{window.__nrturPrivacy=(view)=>_privSet({view});}catch(e){}
+function usePrivacy(){const [,b]=React.useReducer(x=>x+1,0);React.useEffect(()=>{_privStore.subs.add(b);return()=>{_privStore.subs.delete(b);};},[]);return _privStore;}
+function privAdmin(){const v=_privStore.view;return v==='admin'||v==='plan-without';}
+function privViewer(){return _privStore.view==='member-other'?null:PRIV_ME;}
+function privHasFeature(){return _privStore.view!=='plan-without';}
+function recVis(kind,r){if(!r)return'shared';if(r.visibility)return r.visibility;return (PRIV_SEED[kind]||[]).includes(r.id)?'private':'shared';}
+function privIsPrivate(kind,r){return recVis(kind,r)==='private';}
+function privCanSee(kind,r){if(!r||!privIsPrivate(kind,r)||privAdmin())return true;return !!r.owner&&r.owner===privViewer();}
+function privCanEdit(kind,r){return privAdmin()||(!!r&&!!r.owner&&r.owner===privViewer());}
+function privFilter(kind,rows,visF){return (rows||[]).filter(r=>privCanSee(kind,r)&&(!visF||visF==='all'||recVis(kind,r)===visF));}
+function privMemberName(code){const m=(typeof TEAM_MEMBERS!=='undefined'?TEAM_MEMBERS:[]).find(x=>x.avatar===code);return m?m.name:'removed member';}
+function privDupMessage(kind,email){const e=String(email||'').trim().toLowerCase();if(!e)return null;const src=kind==='lead'?(_liveLeads||LEADS_DATA):(_liveContacts||CONTACTS_DATA);const hit=src.find(r=>r&&!r.deleted&&String(r.email||'').trim().toLowerCase()===e&&privIsPrivate(kind,r)&&!privCanSee(kind,r));if(!hit)return null;return 'A private '+kind+' with this email already exists, owned by '+privMemberName(hit.owner)+'. Ask them or an admin to share or reassign it.';}
+// Changing the owner of a private record keeps it private: confirm first.
+function privOwnerGuard(kind,rec,newOwner,apply,openConfirm){if(!rec||newOwner==null||newOwner===rec.owner||!privIsPrivate(kind,rec)||!openConfirm){apply();return;}openConfirm({title:'Change the owner?',body:'It stays private: '+privMemberName(newOwner)+' will see it and '+privMemberName(rec.owner)+' won’t.',confirmLabel:'Change owner',danger:false,onConfirm:apply});}
+function privDealSummary(list){const open=list.filter(d=>d.stageKey!=='won'&&d.stageKey!=='lost');return {list,open:open.length,openValue:open.reduce((a,d)=>a+parseMoney(d.value),0),total:list.reduce((a,d)=>a+parseMoney(d.value),0)};}
+function mbxMeta(addr){return _privStore.mbx[addr]||{vis:'private',by:PRIV_ME,timeline:true};}
+function mbxCanOpen(addr){const m=mbxMeta(addr);return m.vis==='shared'||m.by===PRIV_ME;}
+function threadMbx(e){return (e&&(e.mailbox||PRIV_THREAD_MBX[e.id]))||'alex@bloom.co';}
+function threadIsPrivate(e){if(!e)return false;const m=mbxMeta(threadMbx(e));if(m.vis!=='private')return false;const t=_privStore.threadPriv[e.id];return t!=null?t:!m.timeline;}
+const PRIV_TOGGLE_LEVEL={inbox:1,'settings-integrations':3,leads:0,'lead-detail':0,'add-lead':0,contacts:1,'contact-detail':0,'add-contact':0,pipeline:1,'deal-detail':0,'add-deal':0,'company-detail':0}; // stacked above each page's own preview toggle
+function PrivacyToggle({level}){const st=usePrivacy();const el=(<PreviewStateToggle label="Privacy" options={PRIV_VIEWS} value={st.view} onChange={k=>_privSet({view:k})}/>);if(!level)return el;return(<div className="fixed left-0 right-0 h-0 z-[80]" style={{bottom:52*level,transform:'translateZ(0)'}}>{el}</div>);}
+function PrivLock({size=11,className=''}){return(<span title="Private" aria-label="Private" className={'inline-flex shrink-0 text-white/45 '+className}><I.Lock size={size}/></span>);}
+function MbxBadge({vis}){const p=vis==='shared';return(<span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-medium text-white/65 bg-white/[0.04] ring-1 ring-white/[0.08] shrink-0">{p?<I.Users size={9}/>:<I.Lock size={9}/>}{p?'Shared':'Private'}</span>);}
+function PrivSwitch({on,onClick,disabled,label}){return(<button type="button" role="switch" aria-checked={!!on} aria-label={label} disabled={disabled} onClick={onClick} className={['relative w-8 h-[18px] rounded-full transition-colors shrink-0 disabled:opacity-40 disabled:cursor-not-allowed',on?'bg-brand-500':'bg-white/[0.14]'].join(' ')}><span className={['absolute top-[2px] w-[14px] h-[14px] rounded-full bg-white transition-all',on?'left-[16px]':'left-[2px]'].join(' ')}/></button>);}
+function PrivSeg({value,onChange,disabled,opts}){const o=opts||[['shared','Shared',I.Users],['private','Private',I.Lock]];return(<div className="inline-flex items-center gap-0.5 p-0.5 rounded-xl bg-white/[0.04] border border-white/[0.08]">{o.map(([k,l,Ic])=>(<button key={k} type="button" disabled={disabled} onClick={()=>onChange&&onChange(k)} aria-pressed={value===k} className={['inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[12px] font-medium transition-all disabled:cursor-not-allowed',value===k?'bg-brand-500/20 text-brand-200 ring-1 ring-brand-500/30':'text-white/55 hover:text-white disabled:hover:text-white/55'].join(' ')}>{Ic&&<Ic size={12}/>}{l}</button>))}</div>);}
+// Lists: Visibility: All / Shared / Private
+function PrivVisFilter({value,onChange}){usePrivacy();return(<div className="inline-flex items-center gap-2"><span className="text-[11px] text-white/45">Visibility</span><PrivSeg value={value} onChange={onChange} opts={[['all','All'],['shared','Shared'],['private','Private',I.Lock]]}/></div>);}
+// Add forms (lead, contact, deal). Hidden on a plan without private records.
+function PrivVisibilityField({value,onChange,className=''}){usePrivacy();if(!privHasFeature())return null;return(<div className={className}><label className="text-[11px] font-medium text-white/45 uppercase tracking-[0.14em] block mb-1.5">Visibility</label><PrivSeg value={value||'shared'} onChange={onChange}/><p className="text-[11px] text-white/45 mt-1.5">Private: only you, owners and admins can see it.</p></div>);}
+// Detail pages: Visibility card in the left column.
+function RecordVisibilityCard({kind,rec,onSet,goTo}){
+  usePrivacy();
+  if(!rec)return null;
+  const vis=recVis(kind,rec);const can=privCanEdit(kind,rec);const feat=privHasFeature();
+  const cap=kind.charAt(0).toUpperCase()+kind.slice(1);
+  const set=(v)=>{if(v===vis)return;onSet&&onSet(v);window.__nrturToast&&window.__nrturToast(cap+' is now '+v,'success');};
+  return(<div className="rounded-2xl bg-white/[0.03] border border-white/[0.06] px-5 py-4" data-privacy-card>
+    <div className="flex items-center justify-between gap-3">
+      <p className="text-[12px] font-semibold text-white uppercase tracking-[0.12em]">Visibility</p>
+      {feat&&can?<PrivSeg value={vis} onChange={set}/>
+        :<span className="inline-flex items-center gap-1.5 text-[12.5px] text-white/70">{vis==='private'?<I.Lock size={12} className="text-white/45"/>:<I.Users size={12} className="text-white/45"/>}{vis==='private'?'Private':'Shared'}</span>}
+    </div>
+    {feat&&<p className="text-[11.5px] text-white/45 mt-2">{vis==='private'?'Private: only '+privMemberName(rec.owner)+', owners and admins can see it.':'Shared: everyone in the workspace can see it.'}</p>}
+    {feat&&!can&&<p className="text-[11px] text-white/45 mt-1.5 flex items-center gap-1.5"><I.Lock size={10} className="text-white/30"/>Only the record owner, an owner or an admin can change this.</p>}
+    {!feat&&<>
+      {vis==='private'&&can&&<button onClick={()=>set('shared')} className="mt-2 text-[12px] font-medium text-brand-300 hover:text-brand-200">Make shared</button>}
+      <div role="note" className="mt-2.5 rounded-xl border border-white/[0.08] bg-white/[0.03] px-3 py-2 flex items-center gap-2 text-[11.5px] text-white/65"><I.Lock size={12} className="text-white/45 shrink-0"/><span className="flex-1">Private records are on Pro and Business.</span>{privAdmin()&&goTo&&<button onClick={()=>goTo('settings-billing')} className="font-medium text-brand-300 hover:text-brand-200 shrink-0">See plans</button>}</div>
+    </>}
+  </div>);
+}
+// Detail pages: someone who can't see a private record gets the 404 (it doesn't exist for them).
+function usePrivRecordGate(kind,rec,goTo,back){const st=usePrivacy();React.useEffect(()=>{if(rec&&!privCanSee(kind,rec)){window.__nrturToast&&window.__nrturToast('That '+kind+' isn’t available','warning');goTo&&goTo(back);}},[rec&&rec.id,st.view]);}
+// Mailbox settings: owner of the mailbox only.
+function MailboxSettingsDialog({addr,close}){
+  usePrivacy();useEscKey(close);
+  const {confirmNode,openConfirm}=useConfirm();
+  const m=mbxMeta(addr);const priv=m.vis==='private';
+  const toPrivateOk=privAdmin();
+  const choose=(v)=>{if(v===m.vis)return;
+    if(v==='shared'){openConfirm({title:'Make this mailbox shared?',body:'Everyone in the workspace will be able to read every email in this mailbox.',confirmLabel:'Make shared',danger:false,onConfirm:()=>{_privMbxSet(addr,{vis:'shared'});window.__nrturToast&&window.__nrturToast(addr+' is now shared','success');}});return;}
+    if(!toPrivateOk)return;
+    _privMbxSet(addr,{vis:'private'});window.__nrturToast&&window.__nrturToast(addr+' is now private','success');};
+  const Opt=({k,title,sub,Ic,disabled,reason})=>{const on=m.vis===k;return(<button type="button" disabled={disabled} onClick={()=>choose(k)} title={disabled?reason:undefined} className={['flex-1 text-left rounded-xl px-3 py-2.5 border transition-all disabled:opacity-50 disabled:cursor-not-allowed',on?'bg-brand-500/10 border-brand-500/35':'bg-white/[0.03] border-white/[0.08] hover:border-white/[0.16]'].join(' ')}><span className="flex items-center gap-1.5 text-[12.5px] font-medium text-white"><Ic size={12} className={on?'text-brand-300':'text-white/50'}/>{title}</span><span className="block text-[11px] text-white/45 mt-0.5">{sub}</span></button>);};
+  return(<div className="fixed inset-0 z-[160] bg-black/70 backdrop-blur-sm flex items-center justify-center p-4" onClick={close}>
+    <div onClick={e=>e.stopPropagation()} role="dialog" aria-label="Mailbox settings" className="w-full max-w-[420px] rounded-2xl border border-white/[0.10] overflow-hidden" style={{background:'var(--s850)'}}>
+      <div className="px-5 py-4 border-b border-white/[0.07] flex items-center justify-between"><div className="min-w-0"><p className="text-[15px] font-semibold text-white">Mailbox settings</p><p className="text-[12px] text-white/45 truncate">{addr}</p></div><button onClick={close} aria-label="Close" className="text-white/40 hover:text-white"><I.X size={16}/></button></div>
+      <div className="p-5 flex flex-col gap-5">
+        <div><label className="text-[11px] font-medium text-white/45 uppercase tracking-[0.14em] block mb-1.5">Visibility</label>
+          <div className="flex gap-2"><Opt k="private" title="Private" sub="Only me" Ic={I.Lock} disabled={!priv&&!toPrivateOk} reason="Only an owner or admin can make a shared mailbox private"/><Opt k="shared" title="Shared" sub="Whole team" Ic={I.Users}/></div>
+          {!priv&&!toPrivateOk&&<p className="text-[11px] text-white/45 mt-1.5">Only an owner or admin can make a shared mailbox private.</p>}
+        </div>
+        {priv?(<div className="flex items-start justify-between gap-3"><div className="min-w-0"><p className="text-[13px] text-white/85">Show matched customer emails on timelines</p><p className="text-[11.5px] text-white/45 mt-0.5">{m.timeline?'Emails that match a contact or lead show on its timeline. Other emails stay private.':'Every thread stays private unless you share it from the thread.'}</p></div><PrivSwitch on={m.timeline} label="Show matched customer emails on timelines" onClick={()=>{_privMbxSet(addr,{timeline:!m.timeline});}}/></div>)
+          :(<p className="text-[11.5px] text-white/45">Shared mailboxes always show matched customer emails on timelines.</p>)}
+      </div>
+      <div className="px-5 py-3.5 border-t border-white/[0.07] flex justify-end"><button onClick={close} className="px-4 py-2 rounded-xl text-[13px] font-medium text-white bg-brand-500 hover:bg-brand-400">Done</button></div>
+    </div>
+    {confirmNode}
+  </div>);
+}
+// Connect dialog: Private (default) / Shared choice. Only an owner or admin can pick Shared.
+function MailboxVisibilityChoice({value,onChange}){
+  usePrivacy();const adm=privAdmin();
+  const Opt=({k,title,sub,Ic,disabled})=>{const on=value===k;return(<button type="button" disabled={disabled} onClick={()=>onChange(k)} className={['flex-1 text-left rounded-xl px-3 py-2.5 border transition-all disabled:opacity-50 disabled:cursor-not-allowed',on?'bg-brand-500/10 border-brand-500/35':'bg-white/[0.03] border-white/[0.08] hover:border-white/[0.16]'].join(' ')}><span className="flex items-center gap-1.5 text-[12.5px] font-medium text-white"><Ic size={12} className={on?'text-brand-300':'text-white/50'}/>{title}</span><span className="block text-[11px] text-white/45 mt-0.5">{sub}</span></button>);};
+  return(<div className="mb-5"><label className="text-[11px] font-medium text-white/45 uppercase tracking-[0.14em] block mb-1.5">Who can read it</label>
+    <div className="flex gap-2"><Opt k="private" title="Private: only me" sub="For your own work email" Ic={I.Lock}/><Opt k="shared" title="Shared: whole team" sub="For team addresses like sales@" Ic={I.Users} disabled={!adm}/></div>
+    {!adm&&<p className="text-[11px] text-white/45 mt-1.5 flex items-center gap-1.5"><I.Lock size={10} className="text-white/30"/>Only an owner or admin can connect a shared mailbox.</p>}
+  </div>);
 }
 // ── PreviewStateToggle ── floating control to preview connected / empty states ──
 function PreviewStateToggle({label,options,value,onChange}){
@@ -12283,7 +12413,7 @@ function InboxPage({goTo,nav}){
   const ma=React.useContext(MailAccountsContext);
   const mailShort=(()=>{const a=ma.accounts;if(a.length===0)return'No mailbox';const provs=new Set(a.map(x=>x.provider).filter(Boolean));return a.length===1?((PROVIDERS[a[0].provider]||{}).short||'Email'):(provs.size===1?((PROVIDERS[a[0].provider]||{}).short||'Email'):'Mail');})();
   const mailSynced=ma.accounts.length>0;
-  const connectMailbox=(prov)=>{ma.connect({addr:'sarah@bloom.co',initials:'SC',color:'#ea4335',provider:'gmail'});};
+  const connectMailbox=(prov)=>{ma.connect({addr:'alex@bloom.co',initials:'AM',color:'#ea4335',provider:'gmail'});};
   const disconnectAll=()=>{ma.accounts.forEach(a=>ma.disconnect(a.addr));};
   const inboxConnect=(<ConnectEmptyState Icon={I.Inbox} accent="#2FA877" eyebrow="Inbox" title="Sync your inbox" desc="Connect Gmail to send, receive, and track email right inside nrtur — every message auto-logs to the right contact and deal, and your replies sync back instantly." providers={[{name:'Connect Gmail',c:'#ea4335',Icon:I.Mail,onClick:()=>connectMailbox('gmail')}]} benefits={[{Icon:I.History,l:'Live two-way sync'},{Icon:I.UserPlus,l:'Auto-log to contacts'},{Icon:I.Layers,l:'Templates & sequences'}]} footnote={<>Manage connected mailboxes in <button onClick={()=>goTo&&goTo('settings-integrations')} className="font-medium text-white/75 underline decoration-white/25 underline-offset-2 hover:text-white">Settings → Integrations</button>.</>}/>);
   const _allUnread=emails.filter(e=>emailInFolder(e,'inbox')&&e.unread).length+smsConvos.filter(c=>c.unread).length;
@@ -13819,7 +13949,7 @@ function BillingUsageSection({tier,users,seatLimit,addons,resetLabel,sendsUsed,r
     {l:'Contacts',used:live(crm.contacts),cap:caps.records},{l:'Leads',used:live(crm.leads),cap:caps.records},
     {l:'Companies',used:live(crm.companies),cap:caps.records},{l:'Deals',used:live(crm.deals),cap:caps.records},
     {l:'Seats',used:accepted,cap:seatCap,sub:leftToInvite},{l:'Pending invitations',used:pending,cap:caps.invites},
-    {l:'Connected mailboxes',used:(ma.accounts||[]).length,cap:caps.mailboxes},{l:'Phone numbers',used:nums,cap:caps.lines},
+    {l:'Connected mailboxes',used:(ma.all||ma.accounts||[]).length,cap:caps.mailboxes},{l:'Phone numbers',used:nums,cap:caps.lines},
     {l:'Attachment storage',used:1.2,cap:caps.gb*Math.max(1,accepted),unit:' GB'},{l:'Pipelines',used:pipes.length,cap:caps.pipelines},
     {l:'Pipeline stages',used:pipes.reduce((s,p)=>s+((p.stages||[]).length),0),cap:Infinity},{l:'Custom fields',used:4,cap:caps.fields,note:'per record type'},
     {l:'Active automations',used:3,cap:caps.automations},{l:'Active sequences',used:tier==='pro'||tier==='business'?2:0,cap:caps.sequences},
@@ -15699,11 +15829,15 @@ function FacebookLeadAdsCard({goTo,stackLevel}){
 function SettingsIntegrationsPage({goTo}){
   const ma=React.useContext(MailAccountsContext);
   const [mailboxModal,setMailboxModal]=React.useState(false);
+  usePrivacy();const [mbxSettings,setMbxSettings]=React.useState(null); // PROPOSED private mailboxes
   const {confirmNode,openConfirm}=useConfirm();
   const SYNC={synced:{label:'Synced',cls:'text-emerald-400',dot:'bg-emerald-400'},syncing:{label:'Syncing…',cls:'text-white/50',dot:'bg-white/40'},error:{label:'Sync error',cls:'text-red-300',dot:'bg-red-400'},reconnect:{label:'Reconnect needed',cls:'text-amber-300',dot:'bg-amber-400'},disconnected:{label:'Disconnected',cls:'text-white/50',dot:'bg-white/40'}};
-  const has=ma.accounts.length>0;
+  // PROPOSED: owners/admins see every mailbox (someone else's private one: address, who, status, Disconnect, but no way to open it); members see shared ones and their own.
+  const _mbxRows=privAdmin()?(ma.all||ma.accounts):ma.accounts;
+  const has=_mbxRows.length>0;
   // Connect, Reconnect and Disconnect are owner/admin actions (the backend 403s a member); members see the list only, with no notice.
-  const canManage=settingsIsAdmin();
+  const canManage=settingsIsAdmin()&&privAdmin();
+  const canConnect=canManage||!privAdmin(); // PROPOSED: a member can connect their own (private) mailbox
   // Demo: the first mailbox's sync state (Reconnect shows only on a needs-reconnect row).
   const [firstState,setFirstState]=React.useState('synced');
   const [reconnecting,setReconnecting]=React.useState(false);
@@ -15716,13 +15850,14 @@ function SettingsIntegrationsPage({goTo}){
           <div className="w-10 h-10 rounded-xl bg-brand-500/12 ring-1 ring-brand-500/25 text-brand-300 flex items-center justify-center shrink-0"><I.Mail size={17}/></div>
           <div className="min-w-0 flex-1"><p className="text-[14px] font-semibold text-white">Email accounts</p><p className="text-[12px] text-white/50 mt-0.5">Gmail mailboxes that sync email to the CRM.</p></div>
         </div>
-        {has&&<div className="flex flex-col gap-1.5 mb-4">{ma.accounts.map((acc,i)=>{const st=SYNC[stateOf(acc,i)]||SYNC.synced;return(
-          <div key={acc.addr} className="flex items-center gap-2.5 px-3 py-2 rounded-lg bg-white/[0.03] border border-white/[0.06]"><span className="w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-semibold text-white shrink-0" style={{background:acc.color}}>{acc.initials}</span><span className="min-w-0 flex-1"><span className="block text-[12.5px] text-white/85 truncate">{acc.addr}</span><span className={'text-[10.5px] inline-flex items-center gap-1 '+st.cls}><span className={'w-1 h-1 rounded-full '+st.dot}/>{st.label}</span></span>{acc.provider&&<ProviderBadge provider={acc.provider}/>}{canManage&&stateOf(acc,i)==='reconnect'&&<button onClick={reconnect} disabled={reconnecting} className="inline-flex shrink-0 items-center gap-1 rounded-md border border-amber-500/25 bg-amber-500/10 px-2 py-1 text-[11px] font-medium text-amber-200 hover:bg-amber-500/15 disabled:opacity-50 transition-all"><I.History size={11}/>{reconnecting?'Reconnecting…':'Reconnect'}</button>}{canManage&&<button onClick={()=>openConfirm({title:'Disconnect '+acc.addr+'?',body:'This permanently removes the mailbox and deletes every synced email and conversation for it. This can’t be undone. You can reconnect the account later, but its mail will need to sync again from scratch.',confirmLabel:'Disconnect mailbox',danger:true,onConfirm:()=>{ma.disconnect(acc.addr);custToast(acc.addr+' disconnected');}})} className="text-[11.5px] font-medium text-red-300 hover:text-red-200 shrink-0">Disconnect</button>}</div>);})}</div>}
-        {canManage&&<button onClick={()=>setMailboxModal(true)} className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-[12px] font-semibold text-brand-300 bg-brand-500/10 border border-brand-500/25 hover:bg-brand-500/15 transition-all"><I.Plus size={12} stroke={2.4}/>{has?'Add another account':'Connect account'}</button>}
+        {has&&<div className="flex flex-col gap-1.5 mb-4">{_mbxRows.map((acc,i)=>{const st=SYNC[stateOf(acc,i)]||SYNC.synced;const _mm=mbxMeta(acc.addr);const _mine=_mm.by===PRIV_ME;return(
+          <div key={acc.addr} className="flex items-center gap-2.5 px-3 py-2 rounded-lg bg-white/[0.03] border border-white/[0.06]"><span className="w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-semibold text-white shrink-0" style={{background:acc.color}}>{acc.initials}</span><span className="min-w-0 flex-1"><span className="block text-[12.5px] text-white/85 truncate">{acc.addr}</span><span className="flex items-center gap-1.5 flex-wrap"><span className={'text-[10.5px] inline-flex items-center gap-1 '+st.cls}><span className={'w-1 h-1 rounded-full '+st.dot}/>{st.label}</span><span className="text-[10.5px] text-white/45">· Connected by {privMemberName(_mm.by)}</span></span></span><MbxBadge vis={_mm.vis}/>{acc.provider&&<ProviderBadge provider={acc.provider}/>}{mbxCanOpen(acc.addr)&&<button onClick={()=>goTo&&goTo('inbox')} className="text-[11.5px] font-medium text-white/60 hover:text-white shrink-0">Open</button>}{_mine&&<button onClick={()=>setMbxSettings(acc.addr)} title="Mailbox settings" aria-label={'Mailbox settings for '+acc.addr} className="w-6 h-6 rounded-md text-white/45 hover:text-white hover:bg-white/[0.06] flex items-center justify-center shrink-0"><I.Settings size={12}/></button>}{canManage&&stateOf(acc,i)==='reconnect'&&<button onClick={reconnect} disabled={reconnecting} className="inline-flex shrink-0 items-center gap-1 rounded-md border border-amber-500/25 bg-amber-500/10 px-2 py-1 text-[11px] font-medium text-amber-200 hover:bg-amber-500/15 disabled:opacity-50 transition-all"><I.History size={11}/>{reconnecting?'Reconnecting…':'Reconnect'}</button>}{canManage&&<button onClick={()=>openConfirm({title:'Disconnect '+acc.addr+'?',body:'This permanently removes the mailbox and deletes every synced email and conversation for it. This can’t be undone. You can reconnect the account later, but its mail will need to sync again from scratch.',confirmLabel:'Disconnect mailbox',danger:true,onConfirm:()=>{ma.disconnect(acc.addr);custToast(acc.addr+' disconnected');}})} className="text-[11.5px] font-medium text-red-300 hover:text-red-200 shrink-0">Disconnect</button>}</div>);})}</div>}
+        {canConnect&&<button onClick={()=>setMailboxModal(true)} className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-[12px] font-semibold text-brand-300 bg-brand-500/10 border border-brand-500/25 hover:bg-brand-500/15 transition-all"><I.Plus size={12} stroke={2.4}/>{has?'Add another account':'Connect account'}</button>}
       </div>
       <LeadApiCard goTo={goTo} stackToggle={has}/>
       <FacebookLeadAdsCard goTo={goTo} stackLevel={has?2:1}/>
       {mailboxModal&&<MailboxConnectModal close={()=>setMailboxModal(false)} onConnected={(acct)=>ma.connect(acct)}/>}
+      {mbxSettings&&<MailboxSettingsDialog addr={mbxSettings} close={()=>setMbxSettings(null)}/>}
       {confirmNode}
       {has&&<PreviewStateToggle label="Mailbox" options={[{k:'synced',l:'Synced'},{k:'syncing',l:'Syncing'},{k:'reconnect',l:'Reconnect needed'},{k:'error',l:'Sync error'},{k:'disconnected',l:'Disconnected'}]} value={firstState} onChange={setFirstState}/>}
     </SettingsShell>
@@ -18310,7 +18445,8 @@ function App(){
   const [trial,setTrial]=React.useState({daysLeft:16,endLabel:'June 11'});
   const [billingSub,setBillingSub]=React.useState(BILLING_SUB_SEED);
   React.useEffect(()=>{window.__nrturBillingState=setBillingState;return()=>{delete window.__nrturBillingState;};},[]); // QA hook: no UI switcher
-  const [mailAccounts,setMailAccounts]=React.useState([{addr:'sarah@bloom.co',initials:'SC',color:'#ea4335',provider:'gmail'},{addr:'alex@bloom.co',initials:'AM',color:'#ea4335',provider:'gmail'}]);
+  const [mailAccounts,setMailAccounts]=React.useState([{addr:'alex@bloom.co',initials:'AM',color:'#ea4335',provider:'gmail'},{addr:'sales@bloom.co',initials:'SA',color:'#ea4335',provider:'gmail'},{addr:'sarah@bloom.co',initials:'SC',color:'#ea4335',provider:'gmail'}]);
+  const _privApp=usePrivacy(); // PROPOSED private mailboxes: someone else's private mailbox is never in the Inbox or From (Settings › Integrations reads `all`)
   _liveMailAccounts=mailAccounts;
   // Deal won → exit the deal's enrollments (per-enrollment switch honoured).
   const _wonRef=React.useRef(null);
@@ -18348,7 +18484,7 @@ function App(){
     <RoleProvider>
     <NavConfigProvider>
     <BillingContext.Provider value={{billingState,setBillingState,trial,setTrial,sub:billingSub,setSub:setBillingSub}}>{(()=>{if(_autoRt)_autoRt.billingState=billingState;return null;})()}
-     <MailAccountsContext.Provider value={{accounts:mailAccounts,connect:connectMail,disconnect:disconnectMail}}>
+     <MailAccountsContext.Provider value={{accounts:mailAccounts.filter(a=>mbxCanOpen(a.addr)),all:mailAccounts,connect:connectMail,disconnect:disconnectMail}}>
      <CrmDataContext.Provider value={crm}>
      <PropertiesContext.Provider value={propsCtx}>
      <IntegrationsContext.Provider value={integCtx}>
@@ -18403,6 +18539,7 @@ function App(){
       {page==='settings-tags' && <SettingsTagsPage {...p}/>}
       {page==='settings-statuses' && <SettingsStatusesPage {...p}/>}
       {page==='profile'           && <ProfilePage {...p}/>}
+      {PRIV_TOGGLE_LEVEL[page]!=null && <PrivacyToggle level={page==='settings-integrations'?(mailAccounts.length?3:2):PRIV_TOGGLE_LEVEL[page]}/>}
       {searchOpen&&<GlobalSearchOverlay close={()=>setSearchOpen(false)} goTo={(pg,payload)=>{goTo(pg,payload);setSearchOpen(false);}}/>}
       {addRecord&&<AddRecordDrawer object={addRecord.object} initialMode={addRecord.initialMode} prefill={addRecord.prefill} close={()=>setAddRecord(null)} onToast={appToastFn} goTo={goTo}/>}
       {appToast&&(<div className="fixed bottom-20 left-1/2 -translate-x-1/2 z-[210] inline-flex items-center gap-2.5 px-4 py-2.5 rounded-xl text-[13px] font-medium bg-emerald-500/12 text-emerald-200 border border-emerald-500/25 shadow-[0_12px_40px_rgba(0,0,0,0.5)] backdrop-blur-md"><I.Check size={15}/>{appToast}</div>)}
