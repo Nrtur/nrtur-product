@@ -1,10 +1,10 @@
 ---
 title: Private mailboxes and private records
-status: proposed        # proposed | approved | in-progress | built | dropped
+status: approved        # proposed | approved | in-progress | built | dropped
 owner: Qamar Ul Islam
 area: docs/areas/inbox.md, docs/areas/leads.md, docs/areas/contacts.md, docs/areas/deals-and-pipeline.md, docs/areas/companies.md, docs/areas/workspace-settings.md (Integrations, Team), docs/permissions.md, pricing/pricing.md
 screens: [inbox, settings-integrations, leads, lead-detail, add-lead, contacts, contact-detail, add-contact, pipeline, deal-detail, add-deal, company-detail]
-tickets: []             # filled in after approval
+tickets: [7 tickets created 2026-11-11, Jira label `privacy`: Phase 1 BE + FE; Phase 2 BE 1-3 + FE 1-2]
 created: 2026-11-11
 ---
 
