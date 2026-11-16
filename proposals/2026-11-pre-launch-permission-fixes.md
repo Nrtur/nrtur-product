@@ -1,10 +1,10 @@
 ---
 title: Pre-launch permission fixes
-status: proposed        # proposed | approved | in-progress | built | dropped
+status: approved        # proposed | approved | in-progress | built | dropped
 owner: Qamar Ul Islam
 area: docs/permissions.md, docs/areas/tasks.md, docs/areas/leads.md, docs/areas/workspace-settings.md, docs/areas/billing.md
 screens: []             # no new screens; members just stop seeing buttons they can't use
-tickets: []             # filled in after approval
+tickets: [Jira label `pre-launch`; keys to be added]
 created: 2026-11-16
 ---
 
@@ -64,5 +64,5 @@ None.
 - Record-level visibility. That is covered by `proposals/2026-11-private-mailboxes-and-records.md`.
 - The legacy `manager` role.
 
-## Open questions
-- **Tag create:** should members be able to create new tags? *Recommendation: yes (see Rules). Choose "no" if you want a fixed tag list per workspace.*
+## Decisions (owner, 2026-11-16)
+1. Members can still create tags; only delete is owner and admin.

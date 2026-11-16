@@ -1,10 +1,10 @@
 ---
 title: New lead flow (automations, owner alerts, Lead API extras)
-status: proposed        # proposed | approved | in-progress | built | dropped
+status: approved        # proposed | approved | in-progress | built | dropped
 owner: Qamar Ul Islam
 area: docs/areas/leads.md, docs/areas/automations.md, docs/areas/notifications.md, proposals/2026-10-lead-api.md, proposals/2026-10-facebook-lead-ads.md
 screens: [automations, lead-detail, settings-integrations]
-tickets: []             # filled in after approval
+tickets: [Jira label `pre-launch`; keys to be added]
 created: 2026-11-16
 ---
 
@@ -99,5 +99,6 @@ No change.
 - UTM capture for manual or Facebook leads, UTM filters, and carrying UTM over to the contact on conversion.
 - Turning on any of the other "Coming soon" triggers (Lead qualified, Score reached, Source is, Converted, and so on).
 
-## Open questions
-- **The new source values:** are Google Ads, TikTok Ads, Website and Other the right ones? *Recommendation: yes; more can be added later without a breaking change.*
+## Decisions (owner, 2026-11-16)
+1. CSV imports never start automations.
+2. The new source values are Google Ads, TikTok Ads, Website and Other.
