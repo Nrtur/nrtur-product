@@ -123,6 +123,7 @@ Leads are unqualified prospects that a team works before turning them into conta
 - Bulk Enroll in sequence (enrol is per lead from the lead page).
 
 ## Known gaps
+- **No automation fires on a new lead.** `lead.created` and `lead.ad_received` are not live triggers (`automations/triggers.go`), and creating a lead writes no assignment activity, so `lead.assigned` automations such as the Speed-to-lead template never run on a new lead from any source. A new lead from the Lead API, CSV import or manual create notifies nobody. Proposed fix: [`proposals/2026-11-new-lead-flow.md`](../../proposals/2026-11-new-lead-flow.md).
 - The Hot Score, This Week and No Owner views narrow only the current page of 25, not the whole list. The headline count is hidden for them (unless the page is the whole list), and a notice gives the page numbers instead. Export is disabled for them.
 - Inline Status stays editable in the Converted view, and every change there fails with 409 `LEAD_STATUS_LOCKED`; it should be locked like the bulk Change status.
 - Engagement and Behavior scoring weights are editable but have no effect until a producer writes those activity types.
