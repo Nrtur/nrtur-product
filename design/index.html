@@ -11007,7 +11007,7 @@ function AddCompanyPage({goTo}){
 const LEAD_STATUSES=['New','Working','Nurturing','Qualified','Unqualified'];
 const LEAD_STATUS_CHIP={New:'bg-blue-500/12 text-blue-300 ring-blue-500/25',Working:'bg-amber-500/12 text-amber-300 ring-amber-500/25',Nurturing:'bg-violet-500/12 text-violet-300 ring-violet-500/25','Qualified':'bg-emerald-500/12 text-emerald-300 ring-emerald-500/25','Unqualified':'bg-white/[0.06] text-white/50 ring-white/[0.10]'};
 const LEAD_STATUS_DOT={New:'#8FB4EA',Working:'#E9B968',Nurturing:'#B69EEA','Qualified':'#5FD09B','Unqualified':'#87837A'};
-const LEAD_SOURCES=['Web form','Referral','Cold outreach','Event','Ad','LinkedIn','Import','API','Facebook']; // 'API': the Lead API's default source (proposals/2026-10-lead-api.md). 'Facebook': fixed source of Facebook Lead Ads leads (PROPOSED: proposals/2026-10-facebook-lead-ads.md)
+const LEAD_SOURCES=['Web form','Referral','Cold outreach','Event','Ad','LinkedIn','Import','API','Facebook','Google Ads','TikTok Ads','Website','Other']; // PROPOSED (proposals/2026-11-new-lead-flow.md): Google Ads, TikTok Ads, Website, Other // 'API': the Lead API's default source (proposals/2026-10-lead-api.md). 'Facebook': fixed source of Facebook Lead Ads leads (PROPOSED: proposals/2026-10-facebook-lead-ads.md)
 function leadScoreBucket(score){const b=(typeof leadScoringRulesLive==='function'?leadScoringRulesLive().bands:null)||{warm_min:34,hot_min:67};if(score>=(b.hot_min!=null?b.hot_min:67))return{k:'hot',c:'#F0947F',l:'Hot'};if(score>=(b.warm_min!=null?b.warm_min:34))return{k:'warm',c:'#E9B968',l:'Warm'};return{k:'cold',c:'#8FB4EA',l:'Cold'};} // cutoffs come from the workspace rules (score_band), never hardcoded
 const LEADS_DATA=[
   {signals:{email_opened:1,link_clicked:0,page_visit:0,demo_request:0},industry:'Retail',employeesSize:120,id:120,name:'Greg Mason',avatar:'GM',color:'#9D6C20',email:'greg@northpeak.io',phone:'+1 555-770-3321',company:'Northpeak Co',title:'Operations Lead',source:'Cold outreach',status:'Unqualified',score:28,estValue:'$4k',owner:'AM',ownerColor:'#5E92D8',created:'4 weeks ago',days:26,loc:'Boise, ID',tags:['cold'],archived:false,converted:false,deleted:true,deletedAt:Date.now()-26*864e5,deletedBy:'Alex Morgan',estValueNum:4000},
@@ -11410,6 +11410,7 @@ function LeadDetailPage({goTo,nav}){
               </div>
               <RecordProperties record={l} primary={_ldLay.primary} secondary={_ldLay.secondary} onChange={onLeadField} goTo={goTo} readOnly={!canEditLead}/>
               <RecordVisibilityCard kind="lead" rec={l} goTo={goTo} onSet={v=>updateLead(l.id,{visibility:v})}/>
+               <LeadTrackingCard lead={l}/>
             </div>
                         <div className="flex flex-col gap-5">
               {b.k==='hot'&&!l.converted&&!l.archived&&<div className="rounded-2xl border border-emerald-500/25 bg-emerald-500/[0.06] p-5">
@@ -11441,6 +11442,17 @@ function LeadDetailPage({goTo,nav}){
       {seqEnrollOpen&&<SequenceEnrollModal recipients={[{id:l.id,name:l.name,email:l.email,phone:l.phone,timezone:l.timezone,company:l.company||'',type:'lead'}]} onClose={()=>setSeqEnrollOpen(false)}/>}
     </div>
   );
+}
+// PROPOSED (proposals/2026-11-new-lead-flow.md): UTM values sent through the Lead API. Read-only; hidden when the lead has none.
+const LEAD_UTM_SEED={103:{utm_source:'google',utm_medium:'cpc',utm_campaign:'spring-promo',utm_term:'crm for agencies'}};
+function LeadTrackingCard({lead}){
+  const u=(lead&&(lead.utm||LEAD_UTM_SEED[lead.id]))||null;
+  const rows=u?[['Source','utm_source'],['Medium','utm_medium'],['Campaign','utm_campaign'],['Term','utm_term'],['Content','utm_content']].filter(([,k])=>u[k]):[];
+  if(!rows.length)return null;
+  return(<div className="rounded-2xl bg-white/[0.03] border border-white/[0.06] p-5">
+    <div className="flex items-center gap-2 mb-3"><I.Target size={13} className="text-white/45"/><p className="text-[10px] font-medium text-white/50 uppercase tracking-[0.14em]">Tracking</p><span className="ml-auto text-[10px] text-white/35">From the Lead API</span></div>
+    <div className="flex flex-col gap-2">{rows.map(([l,k])=>(<div key={k} className="flex items-baseline justify-between gap-3"><span className="text-[12px] text-white/45">{l}</span><span className="text-[12.5px] text-white/85 font-mono truncate">{u[k]}</span></div>))}</div>
+  </div>);
 }
 // The app has no standalone "new lead" route: a lead is always created in the LeadFormSheet over the Leads list.
 // This fallback route therefore shows the Leads page with the same New Lead drawer (same fields as the app's sheet).
@@ -12813,8 +12825,10 @@ const TRIGGER_CATS=[
     {name:'Contact updated',hint:'any field on a contact changes'},
     {name:'Status changed',hint:'lead → prospect → customer, etc.'}]},
   {cat:'Lead',Icon:I.Target,color:'#5FD09B',triggers:[
+    {name:'Lead created',hint:'a new lead is added (manual, Lead API or Facebook; never a CSV import)'}, // PROPOSED: proposals/2026-11-new-lead-flow.md
+    {name:'New ad lead received',hint:'a lead arrives from Facebook Lead Ads'}, // PROPOSED: proposals/2026-11-new-lead-flow.md
     {name:'Lead status changed',hint:'New → Contacted → Sales-Ready, etc.'},
-    {name:'Lead assigned',hint:'a lead is routed to an owner'}]},
+    {name:'Lead assigned',hint:'a lead is routed to an owner, including a new lead created with one'}]},
   {cat:'Deal',Icon:I.GitBranch,color:'#855ED7',triggers:[
     {name:'Deal stage changed',hint:'a deal moves between stages'},
     {name:'Deal moved to <stage>',hint:'a deal reaches a chosen stage'}]},
@@ -15009,7 +15023,7 @@ const LEAD_API_CURL=['curl -X POST '+LEAD_API_ENDPOINT+' \\','  -H "Authorizatio
 const LEAD_API_FETCH=["const res = await fetch('"+LEAD_API_ENDPOINT+"', {","  method: 'POST',","  headers: {","    'Authorization': 'Bearer ' + process.env.NRTUR_LEAD_API_KEY,","    'Content-Type': 'application/json',","  },","  body: JSON.stringify({","    name: 'Jordan Lee',","    email: 'jordan@example.com',","    source: 'Web form',","    estimated_value: '5000.00',","  }),","});","if (res.status === 201) {","  const lead = await res.json(); // the new lead's id and its link in nrtur","}"].join('\n');
 const LEAD_API_MAX_KEYS=10;
 const LEAD_API_NAME_MAX=50;
-const LEAD_API_SOURCES=['Web form','Referral','Event','Cold outreach','Ad','LinkedIn','Import','API'];
+const LEAD_API_SOURCES=['Web form','Referral','Event','Cold outreach','Ad','LinkedIn','Import','API','Google Ads','TikTok Ads','Website','Other'];
 // Prototype seed: "Default key" is the v1 key after the migration (same value, still working). Its creator owns the seeded API lead (Priya Desai, id 103).
 const LEAD_API_SEED_KEYS=[
   {id:'k1',name:'Default key',prefix:'nrtur_live_7Kd2',createdBy:'Alex Morgan',createdOn:'Oct 2, 2026',lastUsed:'1h ago'},
@@ -15129,16 +15143,24 @@ const LEAD_API_FIELDS=[
   {f:'phone',type:'string',req:'No',notes:'7–15 digits after removing spaces, dashes, dots and brackets, with an optional leading +. Checked for duplicates.',ex:'"+1 (415) 555-0123"'},
   {f:'company_name',type:'string',req:'No',notes:'The company, as text.',ex:'"Example Co"'},
   {f:'job_title',type:'string',req:'No',notes:'The lead’s job title.',ex:'"Operations Manager"'},
-  {f:'source',type:'string',req:'No',notes:'One of '+LEAD_API_SOURCES.join(', ')+' (case-insensitive). Defaults to “API” when missing or blank. Anything else is refused.',ex:'"Web form"'},
+  {f:'source',type:'string',req:'No',notes:'One of '+LEAD_API_SOURCES.join(', ')+' (case-insensitive). Defaults to “API” when missing or blank. Anything else is saved as “Other”, the value you sent is kept on the timeline, and the response carries a warning.',ex:'"Google Ads"'},
   {f:'estimated_value',type:'string (decimal)',req:'No',notes:'A decimal string, not a number.',ex:'"5000.00"'},
   {f:'notes',type:'string',req:'No',notes:'Becomes the first note on the lead’s timeline.',ex:'"Asked for a demo"'},
+  {f:'custom_fields',type:'object',req:'No',notes:'Lead custom fields by key (Settings › Custom fields). Values are checked against the field type. Unknown keys are ignored and listed in warnings.',ex:'{ "budget": "5000" }'}, // PROPOSED: proposals/2026-11-new-lead-flow.md
+  {f:'utm_source',type:'string',req:'No',notes:'Up to 255 characters. Shown in the lead’s Tracking card. The same goes for utm_medium, utm_campaign, utm_term and utm_content.',ex:'"google"'},
+  {f:'utm_medium',type:'string',req:'No',notes:'Up to 255 characters.',ex:'"cpc"'},
+  {f:'utm_campaign',type:'string',req:'No',notes:'Up to 255 characters.',ex:'"spring-promo"'},
+  {f:'utm_term',type:'string',req:'No',notes:'Up to 255 characters.',ex:'"crm for agencies"'},
+  {f:'utm_content',type:'string',req:'No',notes:'Up to 255 characters.',ex:'"ad-variant-b"'},
 ];
 const LEAD_API_RESPONSES=[ // Matches nrtur-backend api/openapi.yaml (publicCreateLead). Every error uses the standard {error:{code,message,details}} envelope.
-  {s:'201',code:'—',when:'The lead was created.',body:'{ "id": "<lead id>", "url": "https://app.nrtur.io/leads/<lead id>" }'},
+  {s:'201',code:'—',when:'The lead was created. warnings is present only when a source was saved as Other or a custom field key was unknown.',body:'{ "id": "<lead id>", "url": "https://app.nrtur.io/leads/<lead id>", "warnings": [ { "field": "source", "code": "UNKNOWN_SOURCE_SAVED_AS_OTHER" } ] }'},
   {s:'400',code:'BAD_REQUEST',when:'The body is not a JSON object.',body:'{ "error": { "code": "BAD_REQUEST", "message": "…" } }'},
   {s:'401',code:'UNAUTHORIZED',when:'The key is missing, malformed, wrong, revoked or replaced. No detail is given, by design.',body:'{ "error": { "code": "UNAUTHORIZED", "message": "…" } }'},
   {s:'409',code:'DUPLICATE_LEAD',when:'“Allow duplicate leads” is off and an active lead has the same email or phone. The existing lead’s name is never returned.',body:'{ "error": { "code": "DUPLICATE_LEAD", "message": "…", "details": [ { "existing_lead_id": "<id>", "matched_on": "email" } ] } }'},
   {s:'409',code:'LEAD_EMAIL_IS_CONTACT',when:'The email belongs to an existing contact. Refused whatever the duplicates setting.',body:'{ "error": { "code": "LEAD_EMAIL_IS_CONTACT", "message": "…", "details": [ { "contact_id": "<id>" } ] } }'},
+  {s:'409',code:'IDEMPOTENCY_KEY_REUSED',when:'The Idempotency-Key was already used in the last 24 hours with a different body.',body:'{ "error": { "code": "IDEMPOTENCY_KEY_REUSED", "message": "…" } }'}, // PROPOSED: proposals/2026-11-new-lead-flow.md
+  {s:'409',code:'IDEMPOTENCY_IN_FLIGHT',when:'A request with the same Idempotency-Key is still being processed. Retry shortly.',body:'{ "error": { "code": "IDEMPOTENCY_IN_FLIGHT", "message": "…" } }'},
   {s:'413',code:'PAYLOAD_TOO_LARGE',when:'The body is over 64 KB.',body:'{ "error": { "code": "PAYLOAD_TOO_LARGE", "message": "…" } }'},
   {s:'415',code:'UNSUPPORTED_MEDIA_TYPE',when:'The body is not application/json.',body:'{ "error": { "code": "UNSUPPORTED_MEDIA_TYPE", "message": "…" } }'},
   {s:'422',code:'VALIDATION_ERROR',when:'One entry per failing field. code is REQUIRED (neither name nor email), INVALID (bad email, phone, estimated_value or source), TOO_LONG or PATTERN (phone shape).',body:'{ "error": { "code": "VALIDATION_ERROR", "message": "…", "details": [ { "field": "phone", "code": "PATTERN", "message": "…" } ] } }'},
@@ -15180,6 +15202,7 @@ function LeadApiDocsDrawer({allowDup,onClose}){
           </div>
           <div><p className={H}>Authentication</p><p className={P}>Send one of your workspace’s keys in a header on every request: <span className={MONO}>Authorization: Bearer &lt;key&gt;</span>. A missing or wrong key gets <span className={MONO}>401</span> with no detail.</p></div>
           <div><p className={H}>Request body</p><p className={P}>JSON, with <span className={MONO}>Content-Type: application/json</span>. Name or email is required. See Fields for the rest.</p></div>
+          <div><p className={H}>Retries</p><p className={P}>Send an <span className={MONO}>Idempotency-Key</span> header (any unique string, up to 255 characters) so a retry never creates the lead twice. For 24 hours the same key and body return the first response again; the same key with a different body gets <span className={MONO}>409 IDEMPOTENCY_KEY_REUSED</span>.</p></div>
           <div><p className={H}>What it does</p><p className={P}>Creates a lead. Nothing else: the API can’t read, edit or delete anything. The new lead gets the workspace’s default lead status, is owned by the member who created the key, and its timeline says “Created via Lead API”.</p></div>
           <div><p className={H}>Rate limit</p><p className={P}>60 requests per minute per workspace, shared by all its keys. Above that the API returns <span className={MONO}>429</span> with a <span className={MONO}>Retry-After</span> header (seconds).</p></div>
           <div><p className={H}>Duplicates</p><p className={P}>“Allow duplicate leads” is <span className="text-white/85 font-medium">{allowDup?'on':'off'}</span> for this workspace. When it’s off, a lead whose email or phone matches an active lead is refused with <span className={MONO}>409 DUPLICATE_LEAD</span>. When it’s on, the lead is created anyway. An email that belongs to a contact is always refused with <span className={MONO}>409 LEAD_EMAIL_IS_CONTACT</span>.</p></div>
