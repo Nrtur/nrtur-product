@@ -6550,21 +6550,19 @@ function DupDemoToggle(){const st=useDupStore();const v=st.many?'many':st.scan;r
 // is the thing you are really allocating. Anything above 100 is unreachable, anything below leaves the top
 // of the scale dead — both are shown, never enforced (the API accepts either; inventing a rule would lie).
 const LEAD_INDUSTRY_OPTS=['Software','Finance','Healthcare','Retail','Manufacturing','Education','Real Estate','Other'];
-// App LeadScoringSettings NOT_SCORING_YET — shown on the Engagement and Behavior groups (nothing writes those activities yet).
-const SCORE_NOT_SCORING_YET='No email or web-tracking pipeline writes these activities yet, so this group adds 0 to every score today. The weights are saved and apply automatically once tracking ships.';
-const SCORE_GRP=[{k:'profile_fit',label:'Profile fit',c:'#54CD95'},{k:'engagement',label:'Engagement',c:'#2FA877'},{k:'behavior',label:'Behavior',c:'#2FA877'}];
+// Engagement and Behavior are hidden until something produces those events (SCRUM-1377). They always
+// score 0 today, so only Profile fit is shown and counted. Bring the two groups back here when tracking ships.
+const SCORE_GRP=[{k:'profile_fit',label:'Profile fit',c:'#54CD95'}];
 const _sInt=(x)=>Math.max(0,parseInt(x,10)||0);
 // Max reachable per group — mirrors the engine exactly. Only ONE size tier can ever match (first match wins),
 // so tiers contribute max(points), never the sum.
 function scoreMaxes(R){
-  const pf=R.profile_fit||{},en=R.engagement||{},bh=R.behavior||{};
+  const pf=R.profile_fit||{};
   const tierMax=(pf.company_size_tiers||[]).reduce((a,t)=>Math.max(a,_sInt(t.points)),0);
   const fit=_sInt(pf.has_company_points)+_sInt(pf.has_phone_points)
     +((pf.preferred_industries||[]).length?_sInt(pf.industry_match_points):0)
     +((pf.senior_title_keywords||[]).length?_sInt(pf.senior_title_points):0)+tierMax;
-  const eng=_sInt(en.email_opened_cap)+_sInt(en.link_clicked_cap);
-  const beh=_sInt(bh.page_visit_cap)+_sInt(bh.demo_request_cap);
-  return {profile_fit:fit,engagement:eng,behavior:beh,total:fit+eng+beh,tierMax};
+  return {profile_fit:fit,total:fit,tierMax};
 }
 // The minimal group combinations that already reach 100 — names which groups become decorative on overflow.
 function scoreMinimalHits(M){
@@ -6639,7 +6637,7 @@ function SettingsScoringPage({goTo}){
   React.useEffect(()=>{setD(JSON.parse(JSON.stringify(saved)));},[saved]);
   const dirty=JSON.stringify(d)!==JSON.stringify(saved);
   const set=(path,val)=>setD(p=>{const n=JSON.parse(JSON.stringify(p));let o=n;for(let i=0;i<path.length-1;i++)o=o[path[i]];o[path[path.length-1]]=val;return n;});
-  const pf=d.profile_fit||{},en=d.engagement||{},bh=d.behavior||{},bands=d.bands||{};
+  const pf=d.profile_fit||{},bands=d.bands||{};
   const num=_sInt;
   // Spec invariant: 0 <= warm_min <= hot_min <= 100 — enforced as you type, not just validated on save.
   const setWarm=(v)=>setD(p=>({...p,bands:{...p.bands,warm_min:Math.min(num(v),num(p.bands.hot_min))}}));
@@ -6681,10 +6679,8 @@ function SettingsScoringPage({goTo}){
     return _sInt(t.points)===M.tierMax&&M.tierMax>0?{k:'best',t:'Best case'}:null;};
   const gapAfter=(i)=>{const t=tiers[i],n=tiers[i+1];if(!n)return null;const mx=_sInt(t.max_employees);if(mx===0)return null;const nmn=_sInt(n.min_employees);return nmn>mx+1?(mx+1)+'–'+(nmn-1):null;};
   const grpAccent=(k)=>(SCORE_GRP.find(g=>g.k===k)||{}).c;
-  const NotScoringNotice=()=>(<div role="note" className="-mt-2 flex items-start gap-2 px-3 py-2 rounded-xl bg-white/[0.03] border border-white/[0.07] text-[12px] text-white/60 leading-relaxed"><I.Info size={13} className="shrink-0 mt-0.5 text-white/40"/><span>{SCORE_NOT_SCORING_YET}</span></div>);
-  const GroupHead=({k,title,notScoring})=>{const mx=M[k];return(<div className="flex items-center gap-2 mt-1">
+  const GroupHead=({k,title})=>{const mx=M[k];return(<div className="flex items-center gap-2 mt-1">
     <SectionHead title={title} className="flex-1"/>
-    {notScoring&&<span className="inline-flex items-center px-2 py-1 rounded-lg text-[11px] font-medium text-white/55 bg-white/[0.06] shrink-0">Not scoring yet</span>}
     <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-lg text-[11px] font-medium text-white/60 bg-white/[0.05] border border-white/[0.08] shrink-0" title="The most this group can add to any lead">
       <span className="w-1.5 h-1.5 rounded-full" style={{background:grpAccent(k)}}/>max +{mx}</span>
   </div>);};
@@ -6802,28 +6798,6 @@ function SettingsScoringPage({goTo}){
             {tiers.length===0&&<p className="text-[12px] text-white/40">No tiers — company size adds nothing.</p>}
           </div>
         </div>
-      </div>
-
-      <GroupHead k="engagement" title="Engagement · marketing touches" notScoring/>
-      <NotScoringNotice/>
-      <div className="flex flex-col gap-2 -mt-2">
-        <ScoreSignalEdit label="Opened an email" detail="Counted per open, then capped" unit="open" points={en.email_opened_points} cap={en.email_opened_cap}
-          onPoints={v=>set(['engagement','email_opened_points'],v)} onCap={v=>set(['engagement','email_opened_cap'],v)} disabled={!canEdit} accent={grpAccent('engagement')}
-          rowMax={num(en.email_opened_cap)} groupMax={M.engagement} dead={num(en.email_opened_cap)===0} deadWhy="Cap is 0 — this signal contributes nothing."/>
-        <ScoreSignalEdit label="Clicked a tracked link" detail="Counted per click, then capped" unit="click" points={en.link_clicked_points} cap={en.link_clicked_cap}
-          onPoints={v=>set(['engagement','link_clicked_points'],v)} onCap={v=>set(['engagement','link_clicked_cap'],v)} disabled={!canEdit} accent={grpAccent('engagement')}
-          rowMax={num(en.link_clicked_cap)} groupMax={M.engagement} dead={num(en.link_clicked_cap)===0} deadWhy="Cap is 0 — this signal contributes nothing."/>
-      </div>
-
-      <GroupHead k="behavior" title="Behavior · buying intent" notScoring/>
-      <NotScoringNotice/>
-      <div className="flex flex-col gap-2 -mt-2">
-        <ScoreSignalEdit label="Visited a page" detail="Pricing / product page visits, then capped" unit="visit" points={bh.page_visit_points} cap={bh.page_visit_cap}
-          onPoints={v=>set(['behavior','page_visit_points'],v)} onCap={v=>set(['behavior','page_visit_cap'],v)} disabled={!canEdit} accent={grpAccent('behavior')}
-          rowMax={num(bh.page_visit_cap)} groupMax={M.behavior} dead={num(bh.page_visit_cap)===0} deadWhy="Cap is 0 — this signal contributes nothing."/>
-        <ScoreSignalEdit label="Requested a demo" detail="Highest-intent signal, then capped" unit="request" points={bh.demo_request_points} cap={bh.demo_request_cap}
-          onPoints={v=>set(['behavior','demo_request_points'],v)} onCap={v=>set(['behavior','demo_request_cap'],v)} disabled={!canEdit} accent={grpAccent('behavior')}
-          rowMax={num(bh.demo_request_cap)} groupMax={M.behavior} dead={num(bh.demo_request_cap)===0} deadWhy="Cap is 0 — this signal contributes nothing."/>
       </div>
       </React.Fragment>}
 
