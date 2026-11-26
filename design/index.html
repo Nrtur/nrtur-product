@@ -6654,7 +6654,7 @@ function SettingsScoringPage({goTo}){
   // Population impact: what saving would actually do to the workspace (computed, not guessed).
   const impact=withD(()=>{const rows=leads.map(l=>({l,now:l.score||0,next:recomputeScore('lead',l)}));
     const dist={Cold:0,Warm:0,Hot:0};rows.forEach(r=>{dist[bandOf(r.next).l]++;});
-    return {rows,dist,changed:rows.filter(r=>r.next!==r.now).length,rebanded:rows.filter(r=>bandOf(r.next).l!==leadScoreBucket(r.now).l).length,noSignals:rows.filter(r=>{const s=r.l.signals||{};return !((s.email_opened||0)+(s.link_clicked||0)+(s.page_visit||0)+(s.demo_request||0));}).length,atClamp:rows.filter(r=>r.next===100).length};});
+    return {rows,dist,changed:rows.filter(r=>r.next!==r.now).length,rebanded:rows.filter(r=>bandOf(r.next).l!==leadScoreBucket(r.now).l).length,atClamp:rows.filter(r=>r.next===100).length};});
   const [toast,setToast]=React.useState('');
   const showScoreToast=(m)=>{setToast(m);setTimeout(()=>setToast(''),3000);};
   const {openConfirm,confirmNode}=useConfirm();
@@ -16822,16 +16822,16 @@ function scoreProfileFit(rec,pf){if(!pf)return 0;let s=0;
   if(!isNaN(emp)&&emp>0){const t=(pf.company_size_tiers||[]).find(t=>{const mn=parseInt(t.min_employees,10)||0;const mx=parseInt(t.max_employees,10)||0;return emp>=mn&&(mx===0||emp<=mx);}); // max=0 = no upper bound; first match wins
     if(t)s+=(parseInt(t.points,10)||0);}
   return s;}
+// Unused while only Profile fit is scored (SCRUM-1377); kept for Engagement/Behavior when tracking ships.
 function scoreCapped(rec,key,points,cap){const n=leadSignal(rec,key);const p=parseInt(points,10)||0;const cp=parseInt(cap,10)||0;return Math.min(n*p,cp);}
 function recomputeScore(object,record){
   if(!record)return 0;
   if(object!=='lead')return 0; // only leads are scored (backend: lead_score on LeadResponse)
-  const R=leadScoringRulesLive();const en=R.engagement||{},bh=R.behavior||{};
-  let s=scoreProfileFit(record,R.profile_fit);
-  s+=scoreCapped(record,'email_opened',en.email_opened_points,en.email_opened_cap);
-  s+=scoreCapped(record,'link_clicked',en.link_clicked_points,en.link_clicked_cap);
-  s+=scoreCapped(record,'page_visit',bh.page_visit_points,bh.page_visit_cap);
-  s+=scoreCapped(record,'demo_request',bh.demo_request_points,bh.demo_request_cap);
+  const R=leadScoringRulesLive();
+  // Engagement and Behavior are not scored until something produces those events (SCRUM-1377). They always
+  // score 0 today, so only Profile fit is added, matching SCORE_GRP and the backend. Bring back the
+  // scoreCapped(...) lines for email_opened, link_clicked, page_visit and demo_request when tracking ships.
+  const s=scoreProfileFit(record,R.profile_fit);
   return Math.max(0,Math.min(100,s));
 }
 // P4: run the object's validation rules against a record — returns the first matching rule's error message (blocks the save), or null.

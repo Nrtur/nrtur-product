@@ -78,7 +78,7 @@ Leads are unqualified prospects that a team works before turning them into conta
   - Profile fit: has company 5, has phone 5, preferred industry 15, senior title keyword 15, company-size tiers 5 / 15 / 20 (first matching tier wins).
   - Engagement: email opened, link clicked.
   - Behavior: page visit, demo request.
-  - Engagement and Behavior always score 0 today (nothing produces those events), so the app hides them: the rules screen and the score breakdown show Profile fit only (SCRUM-1377). Their saved weights are kept, and the two groups come back when tracking ships.
+  - Engagement and Behavior always score 0 today (nothing produces those events), so the app hides them: the rules screen and the score breakdown show Profile fit only (decided 2026-11-25; app change pending SCRUM-1377). Their saved weights are kept, and the two groups come back when tracking ships.
 - Bands: Cold < 34, Warm 34–66, Hot ≥ 67, tunable via `warm_min` / `hot_min`. Hot wins ties.
 - Editor rules: points and caps 0–100 (a cap of 0 disables a signal); `max_employees` 0 means no upper bound; `warm_min` ≤ `hot_min`. PUT is a full replacement, and there is no "reset to defaults".
 - The rules screen is a plan feature (`lead_scoring`: Trial, Pro, Business; not Solo or Team). The score itself is computed on every plan.
