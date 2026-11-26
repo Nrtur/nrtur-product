@@ -37,7 +37,7 @@ The full price and limit table is in [`pricing/pricing.md`](../../pricing/pricin
   - If 1 + additional users is fewer than the current members, checkout returns `409 SEATS_BELOW_MEMBERS`, and the dialog pre-fills the minimum.
 - Texting is withdrawn from sale.
   - Checkout refuses it with `409 TEXTING_NOT_AVAILABLE`.
-  - In the app, `TEXTING_PURCHASABLE = false` (`lib/textingSale.ts`), so the dialog shows "Texting — coming soon" instead.
+  - In the app, `TEXTING_PURCHASABLE = false` (`lib/textingSale.ts`). In production the checkout dialog and plan cards show no texting line at all, and no "coming soon" text, until texting is purchasable (decided 2026-11-25; app change pending SCRUM-1375). Staging still shows "Texting — coming soon" for testing.
 - **Welcome credit.** Wallet credit of $15 on Team, $40 on Pro and $75 on Business. It is granted by the webhook once per workspace, on the first paid plan invoice (`service/welcome_credit.go`). Solo grants nothing and does not use up the credit, so Solo → Team/Pro/Business earns it on the first full paid invoice (proration invoices are skipped). The plan cards only promise it while the tier is `trial`.
 
 **The two-subscriptions model**
